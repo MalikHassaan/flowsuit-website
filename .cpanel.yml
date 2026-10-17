@@ -1,0 +1,10 @@
+# Tells cPanel's "Git Version Control" what to do when you click "Deploy HEAD Commit".
+# public/ goes into the web root; app/ goes next to it, where browsers cannot reach it.
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=$HOME/public_html/
+    - export APPPATH=$HOME/flowsuit-app/
+    - /bin/mkdir -p $APPPATH
+    - /bin/cp -R app/. $APPPATH
+    - /bin/cp -R public/. $DEPLOYPATH

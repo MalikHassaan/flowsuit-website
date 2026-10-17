@@ -1,0 +1,71 @@
+{
+  "_comment": "PLACEHOLDER PRODUCTS. Replace these with your real products. Each product gets a page at /software/<slug> and an entry in sitemap.xml automatically. status: live | beta | coming-soon. app_url: where the 'Open app' button goes (null hides it).",
+  "products": [
+    {
+      "slug": "crm",
+      "name": "FlowSuit CRM",
+      "category": "Sales",
+      "status": "coming-soon",
+      "summary": "Track leads, deals and customer conversations in one place.",
+      "description": "FlowSuit CRM helps small teams keep every lead, deal and customer conversation in one shared place, so nothing falls through the cracks.",
+      "features": [
+        "Contact and company records",
+        "Visual deal pipeline",
+        "Follow-up reminders",
+        "Import from a spreadsheet"
+      ],
+      "use_cases": [
+        "Freelancers tracking client work",
+        "Small sales teams sharing one pipeline"
+      ],
+      "alternatives": ["HubSpot CRM", "Pipedrive"],
+      "schema_category": "BusinessApplication",
+      "operating_system": "Web browser",
+      "app_url": null
+    },
+    {
+      "slug": "invoicing",
+      "name": "FlowSuit Invoicing",
+      "category": "Finance",
+      "status": "coming-soon",
+      "summary": "Create invoices, send them by email and see who has paid.",
+      "description": "FlowSuit Invoicing lets you create professional invoices in minutes, email them to clients and track which ones are paid and overdue.",
+      "features": [
+        "Invoice templates with your logo",
+        "Recurring invoices",
+        "Overdue reminders",
+        "Export to PDF"
+      ],
+      "use_cases": [
+        "Agencies billing monthly retainers",
+        "Consultants sending one-off invoices"
+      ],
+      "alternatives": ["FreshBooks", "Zoho Invoice"],
+      "schema_category": "FinanceApplication",
+      "operating_system": "Web browser",
+      "app_url": null
+    },
+    {
+      "slug": "tasks",
+      "name": "FlowSuit Tasks",
+      "category": "Productivity",
+      "status": "coming-soon",
+      "summary": "Plan projects and share to-do lists with your team.",
+      "description": "FlowSuit Tasks gives your team simple boards and lists to plan projects, assign work and see what is due this week.",
+      "features": [
+        "Boards and lists",
+        "Assignees and due dates",
+        "Comments on tasks",
+        "Weekly summary email"
+      ],
+      "use_cases": [
+        "Small teams planning a launch",
+        "Personal task tracking"
+      ],
+      "alternatives": ["Trello", "Asana"],
+      "schema_category": "BusinessApplication",
+      "operating_system": "Web browser",
+      "app_url": null
+    }
+  ]
+}
