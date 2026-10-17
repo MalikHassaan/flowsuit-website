@@ -17,15 +17,17 @@ app/                 -> copied to ~/flowsuit-app (outside the web root)
 .cpanel.yml          deploy instructions for cPanel Git Version Control
 ```
 
-Pages: `/`, `/software`, `/software/{slug}`, `/pricing`, `/contact`, `/sitemap.xml`, `/robots.txt`.
+Pages: `/`, `/software` (modules), `/software/{slug}`, `/services`, `/services/{slug}`, `/pricing`, `/contact`, `/sitemap.xml`, `/robots.txt`.
 
-## Adding or editing a product
+## Adding or editing a module or service
 
-Edit `app/data/products.json`. Each product gets its own page at `/software/<slug>`, a card in the catalog,
-an entry in `sitemap.xml` and `SoftwareApplication` schema automatically. Add `"price_monthly": 9` and
+Edit `app/data/products.json`. Items with `"type": "module"` get a page at `/software/<slug>` with
+`SoftwareApplication` schema; items with `"type": "service"` get a page at `/services/<slug>` with `Service`
+schema. Both get a card, a footer link and a `sitemap.xml` entry automatically. `icon` is a name from
+`app/views/icons.php`. Add `"price_monthly": 9` and
 `"currency": "USD"` to a product to include a price in its schema.
 
-The products in the file now are **placeholders**. While `indexable` is `false` in `app/config.php`, every
+Review the copy before going public. While `indexable` is `false` in `app/config.php`, every
 page tells search engines not to index it. Set it to `true` only once the real products are in.
 
 ## Run it on your computer

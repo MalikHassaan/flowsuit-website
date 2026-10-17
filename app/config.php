@@ -4,7 +4,7 @@
 
 return [
     'site_name'   => 'FlowSuit',
-    'tagline'     => 'Simple business software that works together.',
+    'tagline'     => 'Turn your workbooks into business software.',
     'base_url'    => 'https://flowsuit.net',   // no trailing slash
     'contact_email' => 'hello@flowsuit.net',   // create this mailbox in GoDaddy first
 

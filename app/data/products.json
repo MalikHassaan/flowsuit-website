@@ -1,70 +1,160 @@
 {
-  "_comment": "PLACEHOLDER PRODUCTS. Replace these with your real products. Each product gets a page at /software/<slug> and an entry in sitemap.xml automatically. status: live | beta | coming-soon. app_url: where the 'Open app' button goes (null hides it).",
+  "_comment": "Every item gets its own page and a sitemap entry automatically. type: module (software, page at /software/<slug>) or service (done-for-you work, page at /services/<slug>). status: live | beta | coming-soon | available. app_url: where the 'Open app' button goes (null hides it). icon: one of the names in app/views/icons.php.",
   "products": [
     {
-      "slug": "crm",
-      "name": "FlowSuit CRM",
-      "category": "Sales",
+      "type": "module",
+      "slug": "inventory",
+      "name": "FlowSuit Inventory",
+      "icon": "boxes",
+      "category": "Operations",
       "status": "coming-soon",
-      "summary": "Track leads, deals and customer conversations in one place.",
-      "description": "FlowSuit CRM helps small teams keep every lead, deal and customer conversation in one shared place, so nothing falls through the cracks.",
+      "summary": "Replace your stock spreadsheet with live inventory your whole team can update.",
+      "description": "FlowSuit Inventory turns the stock register you keep in Excel or a notebook into a shared system: every item, quantity and movement in one place, updated from a phone or a desk.",
       "features": [
-        "Contact and company records",
-        "Visual deal pipeline",
-        "Follow-up reminders",
-        "Import from a spreadsheet"
+        "Item list with SKU, cost, price and stock level",
+        "Stock in, stock out and transfers between locations",
+        "Low-stock alerts",
+        "Import your existing Excel or Google Sheets file"
       ],
       "use_cases": [
-        "Freelancers tracking client work",
-        "Small sales teams sharing one pipeline"
+        "Shops and wholesalers counting stock by hand",
+        "Warehouses tracking goods across locations"
       ],
-      "alternatives": ["HubSpot CRM", "Pipedrive"],
+      "alternatives": ["Inventory spreadsheets", "Zoho Inventory"],
       "schema_category": "BusinessApplication",
-      "operating_system": "Web browser",
+      "operating_system": "Web browser, Android, iOS",
       "app_url": null
     },
     {
-      "slug": "invoicing",
-      "name": "FlowSuit Invoicing",
-      "category": "Finance",
+      "type": "module",
+      "slug": "finance",
+      "name": "FlowSuit Finance",
+      "icon": "ledger",
+      "category": "Finance & Accounting",
       "status": "coming-soon",
-      "summary": "Create invoices, send them by email and see who has paid.",
-      "description": "FlowSuit Invoicing lets you create professional invoices in minutes, email them to clients and track which ones are paid and overdue.",
+      "summary": "Digitize your ledger, expenses and invoices so the numbers add up on their own.",
+      "description": "FlowSuit Finance replaces the accounts workbook with proper bookkeeping: income, expenses, receivables and payables recorded once and turned into reports automatically.",
       "features": [
-        "Invoice templates with your logo",
-        "Recurring invoices",
-        "Overdue reminders",
-        "Export to PDF"
+        "Income and expense tracking by category",
+        "Invoices and payment tracking",
+        "Customer and supplier balances",
+        "Profit and loss and cash flow reports"
       ],
       "use_cases": [
-        "Agencies billing monthly retainers",
-        "Consultants sending one-off invoices"
+        "Small businesses keeping accounts in Excel",
+        "Owners who want monthly numbers without waiting for the accountant"
       ],
-      "alternatives": ["FreshBooks", "Zoho Invoice"],
+      "alternatives": ["Accounting spreadsheets", "QuickBooks"],
       "schema_category": "FinanceApplication",
       "operating_system": "Web browser",
       "app_url": null
     },
     {
-      "slug": "tasks",
-      "name": "FlowSuit Tasks",
-      "category": "Productivity",
+      "type": "module",
+      "slug": "store",
+      "name": "FlowSuit Store",
+      "icon": "store",
+      "category": "Sales",
       "status": "coming-soon",
-      "summary": "Plan projects and share to-do lists with your team.",
-      "description": "FlowSuit Tasks gives your team simple boards and lists to plan projects, assign work and see what is due this week.",
+      "summary": "Record sales, print receipts and keep stock in sync at the counter or online.",
+      "description": "FlowSuit Store is a simple point of sale and order book that updates your inventory and accounts with every sale, so you stop copying the day's sales into a workbook at night.",
       "features": [
-        "Boards and lists",
-        "Assignees and due dates",
-        "Comments on tasks",
-        "Weekly summary email"
+        "Fast checkout with receipts",
+        "Daily sales summary",
+        "Connects to FlowSuit Inventory and Finance",
+        "Works on a tablet or laptop"
       ],
       "use_cases": [
-        "Small teams planning a launch",
-        "Personal task tracking"
+        "Retail shops and pharmacies",
+        "Businesses taking orders by phone or WhatsApp"
       ],
-      "alternatives": ["Trello", "Asana"],
+      "alternatives": ["Sales register books", "Generic POS apps"],
       "schema_category": "BusinessApplication",
       "operating_system": "Web browser",
+      "app_url": null
+    },
+    {
+      "type": "service",
+      "slug": "workbook-digitization",
+      "name": "Workbook digitization",
+      "icon": "sheet",
+      "category": "Services",
+      "status": "available",
+      "summary": "Send us your Excel workbook or paper register. We turn it into a web app your team can use.",
+      "description": "We take the spreadsheets and registers your business already runs on and rebuild them as a secure web app with logins, forms, validation and reports, keeping the way you already work.",
+      "features": [
+        "Review of your current workbook and process",
+        "Forms instead of raw cells, so data is entered correctly",
+        "User logins and permissions",
+        "Your existing data migrated in"
+      ],
+      "use_cases": [
+        "A workbook that only one person understands",
+        "Several copies of the same file going around by email"
+      ],
+      "app_url": null
+    },
+    {
+      "type": "service",
+      "slug": "google-apps-script",
+      "name": "Google Sheets automation",
+      "icon": "bolt",
+      "category": "Services",
+      "status": "available",
+      "summary": "Google Apps Script that automates the copy-paste work in your Google Sheets.",
+      "description": "We write Google Apps Script to automate Sheets, Forms, Gmail, Drive and Calendar: scheduled reports, automatic emails, data pulled between sheets and custom menus for your team.",
+      "features": [
+        "Automated reports and email alerts",
+        "Google Forms connected to Sheets",
+        "Custom buttons and menus inside Sheets",
+        "Scheduled jobs that run without you"
+      ],
+      "use_cases": [
+        "Teams already living in Google Workspace",
+        "Manual daily or weekly reporting"
+      ],
+      "app_url": null
+    },
+    {
+      "type": "service",
+      "slug": "mobile-apps",
+      "name": "Mobile app development",
+      "icon": "phone",
+      "category": "Services",
+      "status": "available",
+      "summary": "Android and iPhone apps for your staff and customers, built on your business data.",
+      "description": "We build mobile apps that connect to your FlowSuit modules or existing data, so field staff, sales teams and customers can work from their phones.",
+      "features": [
+        "Android and iPhone apps",
+        "Works with your existing data",
+        "Barcode scanning and photos",
+        "Offline-friendly forms"
+      ],
+      "use_cases": [
+        "Sales and delivery staff on the road",
+        "Stock counts on the warehouse floor"
+      ],
+      "app_url": null
+    },
+    {
+      "type": "service",
+      "slug": "websites-seo",
+      "name": "Websites and SEO",
+      "icon": "search",
+      "category": "Services",
+      "status": "available",
+      "summary": "Fast business websites that are built to be found on Google.",
+      "description": "We build and optimize business websites: clear pages for each product or service, technical SEO, Google Business Profile setup and content that brings in customers.",
+      "features": [
+        "Business websites and landing pages",
+        "Technical SEO and site speed",
+        "Google Business Profile setup",
+        "Keyword research and content plan"
+      ],
+      "use_cases": [
+        "Businesses with no website or an outdated one",
+        "Sites that do not show up on Google"
+      ],
       "app_url": null
     }
   ]
