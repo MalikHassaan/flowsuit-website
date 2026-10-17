@@ -57,11 +57,9 @@ Use cPanel's **Git Version Control**. Do not use GoDaddy's Node.js deploy screen
 
 ### Automatic deploys
 
-`deploy.sh` pulls `main` and copies it into place whenever there is a new commit. Add it once in
-cPanel -> Cron Jobs (every 5 minutes):
+`.github/workflows/deploy.yml` uploads `app/` to `~/flowsuit-app` and `public/` to `~/public_html` over FTP
+every time `main` changes, usually within a minute or two. It needs three repository secrets
+(GitHub -> Settings -> Secrets and variables -> Actions): `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`.
+Until they are set the workflow does nothing.
 
-```
-/bin/bash $HOME/repositories/flowsuit-website/deploy.sh >/dev/null 2>&1
-```
-
-Each deploy is logged to `~/flowsuit-deploy.log`.
+`deploy.sh` is a manual fallback that pulls `main` in the cPanel Git checkout and copies it into place.
