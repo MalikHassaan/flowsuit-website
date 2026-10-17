@@ -1,13 +1,40 @@
 {
-  "_comment": "Every item gets its own page and a sitemap entry automatically. type: product (our software, page at /products/<slug>) or service (done-for-you work, page at /services/<slug>). status: live | beta | coming-soon | available. app_url: where the 'Open app' button goes (null hides it). icon: one of the names in app/views/icons.php.",
+  "_comment": "Every item gets its own page and a sitemap entry automatically. type: product (our software, page at /products/<slug>) or service (done-for-you work, page at /services/<slug>). app_url: where the 'Open app' button goes (null hides it). icon: one of the names in app/views/icons.php.",
   "products": [
+    {
+      "type": "product",
+      "slug": "erp",
+      "name": "FlowSuit ERP",
+      "icon": "erp",
+      "category": "All-in-one",
+      "summary": "Inventory, finance and sales in one system, built from the workbooks you already use.",
+      "description": "FlowSuit ERP brings your stock, accounts and sales together in one login. Every sale updates inventory and the books at the same time, and owners see the whole business on one dashboard instead of five spreadsheets.",
+      "features": [
+        "Inventory, Finance and Store in one system",
+        "Live dashboard for sales, stock and cash",
+        "Roles and permissions for every staff member",
+        "Multiple branches and warehouses",
+        "Your existing workbooks imported on day one"
+      ],
+      "use_cases": [
+        "Growing businesses that have outgrown spreadsheets",
+        "Owners running more than one branch or warehouse"
+      ],
+      "alternatives": [
+        "Spreadsheet-based ERP",
+        "Odoo",
+        "Zoho One"
+      ],
+      "schema_category": "BusinessApplication",
+      "operating_system": "Web browser, Android, iOS",
+      "app_url": null
+    },
     {
       "type": "product",
       "slug": "inventory",
       "name": "FlowSuit Inventory",
       "icon": "boxes",
       "category": "Operations",
-      "status": "coming-soon",
       "summary": "Replace your stock spreadsheet with live inventory your whole team can update.",
       "description": "FlowSuit Inventory turns the stock register you keep in Excel or a notebook into a shared system: every item, quantity and movement in one place, updated from a phone or a desk.",
       "features": [
@@ -20,7 +47,10 @@
         "Shops and wholesalers counting stock by hand",
         "Warehouses tracking goods across locations"
       ],
-      "alternatives": ["Inventory spreadsheets", "Zoho Inventory"],
+      "alternatives": [
+        "Inventory spreadsheets",
+        "Zoho Inventory"
+      ],
       "schema_category": "BusinessApplication",
       "operating_system": "Web browser, Android, iOS",
       "app_url": null
@@ -31,7 +61,6 @@
       "name": "FlowSuit Finance",
       "icon": "ledger",
       "category": "Finance & Accounting",
-      "status": "coming-soon",
       "summary": "Digitize your ledger, expenses and invoices so the numbers add up on their own.",
       "description": "FlowSuit Finance replaces the accounts workbook with proper bookkeeping: income, expenses, receivables and payables recorded once and turned into reports automatically.",
       "features": [
@@ -44,7 +73,10 @@
         "Small businesses keeping accounts in Excel",
         "Owners who want monthly numbers without waiting for the accountant"
       ],
-      "alternatives": ["Accounting spreadsheets", "QuickBooks"],
+      "alternatives": [
+        "Accounting spreadsheets",
+        "QuickBooks"
+      ],
       "schema_category": "FinanceApplication",
       "operating_system": "Web browser",
       "app_url": null
@@ -55,7 +87,6 @@
       "name": "FlowSuit Store",
       "icon": "store",
       "category": "Sales",
-      "status": "coming-soon",
       "summary": "Record sales, print receipts and keep stock in sync at the counter or online.",
       "description": "FlowSuit Store is a simple point of sale and order book that updates your inventory and accounts with every sale, so you stop copying the day's sales into a workbook at night.",
       "features": [
@@ -68,7 +99,10 @@
         "Retail shops and pharmacies",
         "Businesses taking orders by phone or WhatsApp"
       ],
-      "alternatives": ["Sales register books", "Generic POS apps"],
+      "alternatives": [
+        "Sales register books",
+        "Generic POS apps"
+      ],
       "schema_category": "BusinessApplication",
       "operating_system": "Web browser",
       "app_url": null
@@ -79,7 +113,6 @@
       "name": "Workbook digitization",
       "icon": "sheet",
       "category": "Services",
-      "status": "available",
       "summary": "Send us your Excel workbook or paper register. We turn it into a web app your team can use.",
       "description": "We take the spreadsheets and registers your business already runs on and rebuild them as a secure web app with logins, forms, validation and reports, keeping the way you already work.",
       "features": [
@@ -100,7 +133,6 @@
       "name": "Google Sheets automation",
       "icon": "bolt",
       "category": "Services",
-      "status": "available",
       "summary": "Google Apps Script that automates the copy-paste work in your Google Sheets.",
       "description": "We write Google Apps Script to automate Sheets, Forms, Gmail, Drive and Calendar: scheduled reports, automatic emails, data pulled between sheets and custom menus for your team.",
       "features": [
@@ -121,7 +153,6 @@
       "name": "Mobile app development",
       "icon": "phone",
       "category": "Services",
-      "status": "available",
       "summary": "Android and iPhone apps for your staff and customers, built on your business data.",
       "description": "We build mobile apps that connect to your FlowSuit modules or existing data, so field staff, sales teams and customers can work from their phones.",
       "features": [
@@ -142,7 +173,6 @@
       "name": "Websites and SEO",
       "icon": "search",
       "category": "Services",
-      "status": "available",
       "summary": "Fast business websites that are built to be found on Google.",
       "description": "We build and optimize business websites: clear pages for each product or service, technical SEO, Google Business Profile setup and content that brings in customers.",
       "features": [

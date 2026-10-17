@@ -53,4 +53,15 @@ Use cPanel's **Git Version Control**. Do not use GoDaddy's Node.js deploy screen
 2. Open Manage -> Pull or Deploy -> Update from Remote, then Deploy HEAD Commit.
    `.cpanel.yml` copies `public/` into `public_html` and `app/` into `~/flowsuit-app`.
 3. In File Manager, delete GoDaddy's default `index.html` / `default.html` from `public_html` if present.
-4. After every change merged to `main`: Update from Remote, then Deploy HEAD Commit.
+4. After every change merged to `main`: Update from Remote, then Deploy HEAD Commit, or let the cron job below do it.
+
+### Automatic deploys
+
+`deploy.sh` pulls `main` and copies it into place whenever there is a new commit. Add it once in
+cPanel -> Cron Jobs (every 5 minutes):
+
+```
+/bin/bash $HOME/repositories/flowsuit-website/deploy.sh >/dev/null 2>&1
+```
+
+Each deploy is logged to `~/flowsuit-deploy.log`.
