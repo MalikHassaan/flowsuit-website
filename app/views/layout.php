@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,6 +18,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="/assets/css/style.css">
+  <script src="/assets/js/main.js" defer></script>
 <?php if (!empty($page['schema'])): ?>
   <script type="application/ld+json"><?= json_encode($page['schema'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?></script>
 <?php endif; ?>
@@ -25,7 +26,7 @@
 <body>
   <header class="site-header">
     <div class="wrap">
-      <a class="logo" href="/"><span class="logo-mark"><?= icon('sheet') ?></span><?= e(config('site_name')) ?></a>
+      <a class="logo" href="/"><img src="/assets/logo/flowsuit-logo.svg" alt="<?= e(config('site_name')) ?>" width="152" height="36"></a>
       <nav>
         <a href="/products">Products</a>
         <a href="/services">Services</a>
@@ -43,7 +44,7 @@
   <footer class="site-footer">
     <div class="wrap footer-grid">
       <div>
-        <a class="logo" href="/"><span class="logo-mark"><?= icon('sheet') ?></span><?= e(config('site_name')) ?></a>
+        <a class="logo" href="/"><img src="/assets/logo/flowsuit-logo-white.svg" alt="<?= e(config('site_name')) ?>" width="152" height="36"></a>
         <p><?= e(config('tagline')) ?></p>
       </div>
       <div>

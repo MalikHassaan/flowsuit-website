@@ -1,43 +1,59 @@
 <?php
 $isService = $product['type'] === 'service';
-$subject = ($isService ? 'Quote: ' : 'Notify me: ') . $product['name'];
+$mail = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode(($isService ? 'Quote: ' : 'Demo: ') . $product['name']);
 ?>
-<section class="section">
-  <div class="wrap narrow">
-    <p class="crumbs"><a href="<?= $isService ? '/services' : '/products' ?>"><?= $isService ? 'Services' : 'Products' ?></a> / <?= e($product['category']) ?></p>
-    <span class="card-icon card-icon-large"><?= icon($product['icon']) ?></span>
-    <h1><?= e($product['name']) ?></h1>
-    <p class="lead"><?= e($product['description']) ?></p>
-    <p><span class="badge badge-<?= e($product['status']) ?>"><?= e(status_label($product['status'])) ?></span></p>
-    <div class="actions">
+<section class="page-head">
+  <div class="wrap product-hero">
+    <div>
+      <p class="crumbs reveal"><a href="<?= $isService ? '/services' : '/products' ?>"><?= $isService ? 'Services' : 'Products' ?></a> / <?= e($product['category']) ?></p>
+      <span class="card-icon card-icon-large reveal"><?= icon($product['icon']) ?></span>
+      <h1 class="reveal"><?= e($product['name']) ?></h1>
+      <p class="lead reveal"><?= e($product['description']) ?></p>
+      <div class="actions reveal">
 <?php if (!empty($product['app_url'])): ?>
-      <a class="button" href="<?= e($product['app_url']) ?>">Open <?= e($product['name']) ?></a>
-<?php elseif ($isService): ?>
-      <a class="button" href="mailto:<?= e(config('contact_email')) ?>?subject=<?= rawurlencode($subject) ?>">Get a free quote</a>
-<?php else: ?>
-      <a class="button" href="mailto:<?= e(config('contact_email')) ?>?subject=<?= rawurlencode($subject) ?>">Get early access</a>
+        <a class="button" href="<?= e($product['app_url']) ?>">Open <?= e($product['name']) ?></a>
 <?php endif; ?>
+        <a class="button<?= !empty($product['app_url']) ? ' button-ghost' : '' ?>" href="<?= e($mail) ?>"><?= $isService ? 'Get a free quote' : 'Request a demo' ?></a>
+      </div>
     </div>
+<?php if (!$isService): ?>
+    <div class="reveal"><?php $mockTitle = $product['name']; require __DIR__ . '/dashboard-mock.php'; ?></div>
+<?php endif; ?>
+  </div>
+</section>
 
-    <h2>What you get</h2>
-    <ul class="ticks">
+<section class="section section-tight">
+  <div class="wrap with-sidebar">
+<?php require __DIR__ . '/sidebar.php'; ?>
+    <div>
+      <h2>What you get</h2>
+      <div class="feature-grid">
 <?php foreach ($product['features'] as $feature): ?>
-      <li><?= icon('check') ?><?= e($feature) ?></li>
+        <div class="feature reveal"><?= icon('check') ?><span><?= e($feature) ?></span></div>
 <?php endforeach; ?>
-    </ul>
+      </div>
 
 <?php if (!empty($product['use_cases'])): ?>
-    <h2>Who it is for</h2>
-    <ul class="ticks">
+      <h2>Who it is for</h2>
+      <ul class="ticks">
 <?php foreach ($product['use_cases'] as $useCase): ?>
-      <li><?= icon('check') ?><?= e($useCase) ?></li>
+        <li class="reveal"><?= icon('check') ?><?= e($useCase) ?></li>
 <?php endforeach; ?>
-    </ul>
+      </ul>
 <?php endif; ?>
 
 <?php if (!empty($product['alternatives'])): ?>
-    <h2>Replaces</h2>
-    <p><?= e(implode(', ', $product['alternatives'])) ?></p>
+      <h2>Replaces</h2>
+      <p class="reveal"><?= e(implode(', ', $product['alternatives'])) ?></p>
 <?php endif; ?>
+
+      <div class="inline-cta reveal">
+        <div>
+          <strong><?= $isService ? 'Tell us what you need' : 'See ' . e($product['name']) . ' with your own data' ?></strong>
+          <span>Send us your workbook. We reply with a free review and next steps.</span>
+        </div>
+        <a class="button" href="<?= e($mail) ?>"><?= $isService ? 'Get a free quote' : 'Request a demo' ?></a>
+      </div>
+    </div>
   </div>
 </section>

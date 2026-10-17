@@ -53,16 +53,6 @@ function product_path(array $product): string
     return ($product['type'] === 'service' ? '/services/' : '/products/') . $product['slug'];
 }
 
-function status_label(string $status): string
-{
-    return [
-        'live'        => 'Available',
-        'beta'        => 'Beta',
-        'coming-soon' => 'Coming soon',
-        'available'   => 'Available now',
-    ][$status] ?? ucfirst($status);
-}
-
 // Render a view inside the shared layout.
 // $page: title, description, path (for the canonical tag), optional schema (array).
 function render(string $view, array $page, array $data = [], int $status = 200): void
