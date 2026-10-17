@@ -41,16 +41,16 @@ function product(string $slug, string $type): ?array
     return null;
 }
 
-// Software modules (type "module") or done-for-you services (type "service").
+// Our software products (type "product") or done-for-you services (type "service").
 function products_of_type(string $type): array
 {
     return array_values(array_filter(products(), fn($p) => $p['type'] === $type));
 }
 
-// Public path of a module or service page.
+// Public path of a product or service page.
 function product_path(array $product): string
 {
-    return ($product['type'] === 'service' ? '/services/' : '/software/') . $product['slug'];
+    return ($product['type'] === 'service' ? '/services/' : '/products/') . $product['slug'];
 }
 
 function status_label(string $status): string
@@ -75,7 +75,7 @@ function render(string $view, array $page, array $data = [], int $status = 200):
     require __DIR__ . '/views/layout.php';
 }
 
-// JSON-LD for a module (SoftwareApplication) or service (Service) page. Only real
+// JSON-LD for a product (SoftwareApplication) or service (Service) page. Only real
 // data goes in here: no invented ratings or reviews, which Google treats as spam.
 function product_schema(array $product): array
 {

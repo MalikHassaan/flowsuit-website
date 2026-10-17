@@ -17,6 +17,9 @@ RewriteRule ^ http://%1%{REQUEST_URI} [L,R=301]
 RewriteCond %{THE_REQUEST} \s/index\.php[\s?] [NC]
 RewriteRule ^ / [L,R=301]
 
+# /erp is reserved for the FlowSuit app (public_html/erp); never route it to this site.
+RewriteRule ^erp(/|$) - [L]
+
 # Real files (CSS, images) are served as-is; everything else goes to index.php.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.php [L]

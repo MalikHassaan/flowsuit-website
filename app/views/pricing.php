@@ -5,7 +5,7 @@
     <div class="grid-2">
       <div class="panel">
         <span class="card-icon"><?= icon('sheet') ?></span>
-        <h3>Modules</h3>
+        <h3>Products</h3>
         <p>Inventory, Finance and Store, set up with your data. Monthly pricing will be announced at launch. Join early access to be first in line.</p>
         <a class="button" href="mailto:<?= e(config('contact_email')) ?>?subject=<?= rawurlencode('Early access') ?>">Get early access</a>
       </div>

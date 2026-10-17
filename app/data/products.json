@@ -1,8 +1,8 @@
 {
-  "_comment": "Every item gets its own page and a sitemap entry automatically. type: module (software, page at /software/<slug>) or service (done-for-you work, page at /services/<slug>). status: live | beta | coming-soon | available. app_url: where the 'Open app' button goes (null hides it). icon: one of the names in app/views/icons.php.",
+  "_comment": "Every item gets its own page and a sitemap entry automatically. type: product (our software, page at /products/<slug>) or service (done-for-you work, page at /services/<slug>). status: live | beta | coming-soon | available. app_url: where the 'Open app' button goes (null hides it). icon: one of the names in app/views/icons.php.",
   "products": [
     {
-      "type": "module",
+      "type": "product",
       "slug": "inventory",
       "name": "FlowSuit Inventory",
       "icon": "boxes",
@@ -26,7 +26,7 @@
       "app_url": null
     },
     {
-      "type": "module",
+      "type": "product",
       "slug": "finance",
       "name": "FlowSuit Finance",
       "icon": "ledger",
@@ -50,7 +50,7 @@
       "app_url": null
     },
     {
-      "type": "module",
+      "type": "product",
       "slug": "store",
       "name": "FlowSuit Store",
       "icon": "store",

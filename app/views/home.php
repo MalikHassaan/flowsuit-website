@@ -7,7 +7,7 @@
       <p class="lead">Your business runs on Excel files, Google Sheets and paper registers. FlowSuit turns them into secure apps for inventory, finance and sales that your whole team can use from any device.</p>
       <div class="actions">
         <a class="button" href="<?= e($quote) ?>">Digitize my workbook</a>
-        <a class="button button-ghost" href="/software">See the modules</a>
+        <a class="button button-ghost" href="/products">See the products</a>
       </div>
       <p class="hero-note"><?= icon('check') ?> Free review of your current workbook</p>
     </div>
@@ -44,7 +44,7 @@
     <ol class="steps">
       <li><strong>Send us your workbook</strong><span>Excel, Google Sheets or photos of your register.</span></li>
       <li><strong>We map your process</strong><span>We learn how your team uses it today.</span></li>
-      <li><strong>We build your app</strong><span>Using FlowSuit modules or a custom build.</span></li>
+      <li><strong>We build your app</strong><span>Using FlowSuit products or a custom build.</span></li>
       <li><strong>Your team logs in</strong><span>Your data is moved over, and everyone works in one place.</span></li>
     </ol>
   </div>
@@ -52,10 +52,10 @@
 
 <section class="section">
   <div class="wrap">
-    <h2 class="section-title">Modules</h2>
+    <h2 class="section-title">Products</h2>
     <p class="section-lead">Ready-made building blocks for the workbooks most businesses keep.</p>
     <div class="grid-3">
-<?php foreach (products_of_type('module') as $p) { require __DIR__ . '/card.php'; } ?>
+<?php foreach (products_of_type('product') as $p) { require __DIR__ . '/card.php'; } ?>
     </div>
   </div>
 </section>

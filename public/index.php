@@ -14,7 +14,7 @@ if (PHP_SAPI === 'cli-server' && $path !== '/' && is_file(__DIR__ . $path)) {
     return false;
 }
 
-// One URL per page: /software/ redirects to /software.
+// One URL per page: /products/ redirects to /products.
 if ($path !== '/' && substr($path, -1) === '/') {
     header('Location: ' . rtrim($path, '/'), true, 301);
     exit;
@@ -37,15 +37,19 @@ if ($path === '/') {
             'email'    => config('contact_email'),
         ],
     ]);
-} elseif ($path === '/software') {
+} elseif ($path === '/software' || strpos($path, '/software/') === 0) {
+    // Old URLs from the first version of the site.
+    header('Location: ' . substr_replace($path, '/products', 0, strlen('/software')), true, 301);
+    exit;
+} elseif ($path === '/products') {
     render('catalog', [
-        'title'       => 'Modules: inventory, finance and store | ' . config('site_name'),
-        'description' => 'FlowSuit modules replace your inventory, accounting and sales workbooks with shared, secure software.',
-        'path'        => '/software',
+        'title'       => 'Products: inventory, finance and store | ' . config('site_name'),
+        'description' => 'FlowSuit products replace your inventory, accounting and sales workbooks with shared, secure software.',
+        'path'        => '/products',
     ], [
-        'heading' => 'Modules',
+        'heading' => 'Products',
         'intro'   => 'Ready-made software for the workbooks most businesses keep.',
-        'items'   => products_of_type('module'),
+        'items'   => products_of_type('product'),
     ]);
 } elseif ($path === '/services') {
     render('catalog', [
@@ -57,8 +61,8 @@ if ($path === '/') {
         'intro'   => 'Our team builds it for you, with a fixed quote up front.',
         'items'   => products_of_type('service'),
     ]);
-} elseif (preg_match('#^/(software|services)/([a-z0-9-]+)$#', $path, $m)
-    && ($product = product($m[2], $m[1] === 'services' ? 'service' : 'module'))) {
+} elseif (preg_match('#^/(products|services)/([a-z0-9-]+)$#', $path, $m)
+    && ($product = product($m[2], $m[1] === 'services' ? 'service' : 'product'))) {
     render('product', [
         'title'       => $product['name'] . ': ' . $product['summary'],
         'description' => $product['description'],
@@ -68,7 +72,7 @@ if ($path === '/') {
 } elseif ($path === '/pricing') {
     render('pricing', [
         'title'       => 'Pricing | ' . config('site_name'),
-        'description' => 'How FlowSuit pricing works for modules and services. Free workbook review.',
+        'description' => 'How FlowSuit pricing works for products and services. Free workbook review.',
         'path'        => '/pricing',
     ]);
 } elseif ($path === '/contact') {
@@ -79,7 +83,7 @@ if ($path === '/') {
     ]);
 } elseif ($path === '/sitemap.xml') {
     header('Content-Type: application/xml; charset=utf-8');
-    $paths = ['/', '/software', '/services', '/pricing', '/contact'];
+    $paths = ['/', '/products', '/services', '/pricing', '/contact'];
     foreach (products() as $p) {
         $paths[] = product_path($p);
     }

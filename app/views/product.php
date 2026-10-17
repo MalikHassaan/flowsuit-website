@@ -4,7 +4,7 @@ $subject = ($isService ? 'Quote: ' : 'Notify me: ') . $product['name'];
 ?>
 <section class="section">
   <div class="wrap narrow">
-    <p class="crumbs"><a href="<?= $isService ? '/services' : '/software' ?>"><?= $isService ? 'Services' : 'Modules' ?></a> / <?= e($product['category']) ?></p>
+    <p class="crumbs"><a href="<?= $isService ? '/services' : '/products' ?>"><?= $isService ? 'Services' : 'Products' ?></a> / <?= e($product['category']) ?></p>
     <span class="card-icon card-icon-large"><?= icon($product['icon']) ?></span>
     <h1><?= e($product['name']) ?></h1>
     <p class="lead"><?= e($product['description']) ?></p>

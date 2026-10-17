@@ -27,7 +27,7 @@
     <div class="wrap">
       <a class="logo" href="/"><span class="logo-mark"><?= icon('sheet') ?></span><?= e(config('site_name')) ?></a>
       <nav>
-        <a href="/software">Modules</a>
+        <a href="/products">Products</a>
         <a href="/services">Services</a>
         <a href="/pricing">Pricing</a>
         <a href="/contact">Contact</a>
@@ -47,8 +47,8 @@
         <p><?= e(config('tagline')) ?></p>
       </div>
       <div>
-        <h4>Modules</h4>
-<?php foreach (products_of_type('module') as $p): ?>
+        <h4>Products</h4>
+<?php foreach (products_of_type('product') as $p): ?>
         <a href="<?= e(product_path($p)) ?>"><?= e($p['name']) ?></a>
 <?php endforeach; ?>
       </div>
