@@ -8,8 +8,7 @@ return [
     'base_url'    => 'https://flowsuit.net',   // no trailing slash
     'contact_email' => 'hello@flowsuit.net',   // create this mailbox in GoDaddy first
 
-    // Keep this false while the products are placeholders. When false, every page
-    // sends "noindex" and robots.txt blocks crawlers, so Google does not index
-    // fake content. Set to true once the real products are in products.json.
-    'indexable'   => false,
+    // Lets search engines index the site. When false, every page sends "noindex"
+    // and robots.txt blocks crawlers. Turned on 2026-10-17 after the owner approved the copy.
+    'indexable'   => true,
 ];
