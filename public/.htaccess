@@ -20,6 +20,9 @@ RewriteRule ^ / [L,R=301]
 # /erp is reserved for the FlowSuit app (public_html/erp); never route it to this site.
 RewriteRule ^erp(/|$) - [L]
 
+# Hide the deploy tool's sync-state file.
+RewriteRule (^|/)\.ftp-deploy - [F]
+
 # Real files (CSS, images) are served as-is; everything else goes to index.php.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.php [L]
