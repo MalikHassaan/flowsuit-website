@@ -31,24 +31,26 @@ function products(): array
     return $products;
 }
 
-function product(string $slug): ?array
+function product(string $slug, string $type): ?array
 {
     foreach (products() as $product) {
-        if ($product['slug'] === $slug) {
+        if ($product['slug'] === $slug && $product['type'] === $type) {
             return $product;
         }
     }
     return null;
 }
 
-// Products grouped by category name, for the catalog page.
-function products_by_category(): array
+// Our software products (type "product") or done-for-you services (type "service").
+function products_of_type(string $type): array
 {
-    $groups = [];
-    foreach (products() as $product) {
-        $groups[$product['category']][] = $product;
-    }
-    return $groups;
+    return array_values(array_filter(products(), fn($p) => $p['type'] === $type));
+}
+
+// Public path of a product or service page.
+function product_path(array $product): string
+{
+    return ($product['type'] === 'service' ? '/services/' : '/products/') . $product['slug'];
 }
 
 function status_label(string $status): string
@@ -57,6 +59,7 @@ function status_label(string $status): string
         'live'        => 'Available',
         'beta'        => 'Beta',
         'coming-soon' => 'Coming soon',
+        'available'   => 'Available now',
     ][$status] ?? ucfirst($status);
 }
 
@@ -72,10 +75,21 @@ function render(string $view, array $page, array $data = [], int $status = 200):
     require __DIR__ . '/views/layout.php';
 }
 
-// SoftwareApplication JSON-LD for a product page. Only real data goes in here:
-// no invented ratings or reviews, which Google treats as spam.
+// JSON-LD for a product (SoftwareApplication) or service (Service) page. Only real
+// data goes in here: no invented ratings or reviews, which Google treats as spam.
 function product_schema(array $product): array
 {
+    $publisher = ['@type' => 'Organization', 'name' => config('site_name'), 'url' => url('/')];
+    if ($product['type'] === 'service') {
+        return [
+            '@context'    => 'https://schema.org',
+            '@type'       => 'Service',
+            'name'        => $product['name'],
+            'description' => $product['description'],
+            'url'         => url(product_path($product)),
+            'provider'    => $publisher,
+        ];
+    }
     $schema = [
         '@context'            => 'https://schema.org',
         '@type'               => 'SoftwareApplication',
@@ -83,8 +97,8 @@ function product_schema(array $product): array
         'description'         => $product['description'],
         'applicationCategory' => $product['schema_category'] ?? 'BusinessApplication',
         'operatingSystem'     => $product['operating_system'] ?? 'Web browser',
-        'url'                 => url('/software/' . $product['slug']),
-        'publisher'           => ['@type' => 'Organization', 'name' => config('site_name'), 'url' => url('/')],
+        'url'                 => url(product_path($product)),
+        'publisher'           => $publisher,
     ];
     if (isset($product['price_monthly'])) {
         $schema['offers'] = [
@@ -94,4 +108,12 @@ function product_schema(array $product): array
         ];
     }
     return $schema;
+}
+
+// Inline SVG icon by name (see views/icons.php).
+function icon(string $name): string
+{
+    static $icons = null;
+    $icons ??= require __DIR__ . '/views/icons.php';
+    return $icons[$name] ?? '';
 }

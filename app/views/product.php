@@ -1,40 +1,43 @@
-<p class="crumbs"><a href="/software">Software</a> / <?= e($product['category']) ?></p>
-<h1><?= e($product['name']) ?></h1>
-<p class="lead"><?= e($product['description']) ?></p>
-<p>
-  <span class="badge badge-<?= e($product['status']) ?>"><?= e(status_label($product['status'])) ?></span>
-</p>
-<p>
+<?php
+$isService = $product['type'] === 'service';
+$subject = ($isService ? 'Quote: ' : 'Notify me: ') . $product['name'];
+?>
+<section class="section">
+  <div class="wrap narrow">
+    <p class="crumbs"><a href="<?= $isService ? '/services' : '/products' ?>"><?= $isService ? 'Services' : 'Products' ?></a> / <?= e($product['category']) ?></p>
+    <span class="card-icon card-icon-large"><?= icon($product['icon']) ?></span>
+    <h1><?= e($product['name']) ?></h1>
+    <p class="lead"><?= e($product['description']) ?></p>
+    <p><span class="badge badge-<?= e($product['status']) ?>"><?= e(status_label($product['status'])) ?></span></p>
+    <div class="actions">
 <?php if (!empty($product['app_url'])): ?>
-  <a class="button" href="<?= e($product['app_url']) ?>">Open <?= e($product['name']) ?></a>
+      <a class="button" href="<?= e($product['app_url']) ?>">Open <?= e($product['name']) ?></a>
+<?php elseif ($isService): ?>
+      <a class="button" href="mailto:<?= e(config('contact_email')) ?>?subject=<?= rawurlencode($subject) ?>">Get a free quote</a>
 <?php else: ?>
-  <a class="button" href="mailto:<?= e(config('contact_email')) ?>?subject=<?= rawurlencode('Notify me: ' . $product['name']) ?>">Tell me when it launches</a>
+      <a class="button" href="mailto:<?= e(config('contact_email')) ?>?subject=<?= rawurlencode($subject) ?>">Get early access</a>
 <?php endif; ?>
-</p>
+    </div>
 
-<section>
-  <h2>Features</h2>
-  <ul>
+    <h2>What you get</h2>
+    <ul class="ticks">
 <?php foreach ($product['features'] as $feature): ?>
-    <li><?= e($feature) ?></li>
+      <li><?= icon('check') ?><?= e($feature) ?></li>
 <?php endforeach; ?>
-  </ul>
-</section>
+    </ul>
 
 <?php if (!empty($product['use_cases'])): ?>
-<section>
-  <h2>Who it is for</h2>
-  <ul>
+    <h2>Who it is for</h2>
+    <ul class="ticks">
 <?php foreach ($product['use_cases'] as $useCase): ?>
-    <li><?= e($useCase) ?></li>
+      <li><?= icon('check') ?><?= e($useCase) ?></li>
 <?php endforeach; ?>
-  </ul>
-</section>
+    </ul>
 <?php endif; ?>
 
 <?php if (!empty($product['alternatives'])): ?>
-<section>
-  <h2>A simpler alternative to</h2>
-  <p><?= e(implode(', ', $product['alternatives'])) ?></p>
-</section>
+    <h2>Replaces</h2>
+    <p><?= e(implode(', ', $product['alternatives'])) ?></p>
 <?php endif; ?>
+  </div>
+</section>
