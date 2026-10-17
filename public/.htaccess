@@ -1,0 +1,22 @@
+# Use index.php as the home page, ahead of any default index.html GoDaddy left behind.
+DirectoryIndex index.php
+
+Options -Indexes
+RewriteEngine On
+
+# Uncomment these two lines once https://flowsuit.net loads with a padlock
+# (GoDaddy SSL is active). Before that, they would break the site.
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Send www.flowsuit.net to flowsuit.net so Google sees one site.
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ http://%1%{REQUEST_URI} [L,R=301]
+
+# Old-style links like /index.php go to the clean URL.
+RewriteCond %{THE_REQUEST} \s/index\.php[\s?] [NC]
+RewriteRule ^ / [L,R=301]
+
+# Real files (CSS, images) are served as-is; everything else goes to index.php.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L]
