@@ -25,7 +25,10 @@ if (!config('indexable')) {
     header('X-Robots-Tag: noindex, nofollow');
 }
 
-if ($path === '/api/chat') {
+if ($path === '/erp' || strpos($path, '/erp/') === 0) {
+    // On Apache, public_html/erp/.htaccess handles these; this branch serves them locally.
+    require __DIR__ . '/erp/index.php';
+} elseif ($path === '/api/chat') {
     require $appDir . '/chat.php';
     chat_handle();
 } elseif ($path === '/') {
@@ -148,7 +151,7 @@ if ($path === '/api/chat') {
 } elseif ($path === '/robots.txt') {
     header('Content-Type: text/plain; charset=utf-8');
     echo "User-agent: *\n";
-    echo config('indexable') ? "Allow: /\nDisallow: /api/\n" : "Disallow: /\n";
+    echo config('indexable') ? "Allow: /\nDisallow: /api/\nDisallow: /erp\n" : "Disallow: /\n";
     echo 'Sitemap: ' . url('/sitemap.xml') . "\n";
 } else {
     render('404', [

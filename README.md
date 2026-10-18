@@ -79,3 +79,13 @@ return ['anthropic_api_key' => 'sk-ant-...'];
 
 Model and per-visitor hourly limit are in `app/config.php`. The deploy workflow runs
 `composer install` in `app/` so the Claude PHP SDK (`app/vendor/`) ships with each release.
+
+## FlowSuit ERP (flowsuit.net/erp)
+
+A signed-in area for customers. Code: `public/erp/` (entry point) and `app/erp/` (logic and views).
+
+- Data is stored in `~/flowsuit-data/erp.sqlite` on the server, outside the web root and outside this repository. Back it up from cPanel File Manager.
+- First run: add `'erp_setup_code' => 'a-long-secret',` to `~/flowsuit-secrets.php`, open `/erp`, and create the first admin with that code. The setup page closes once an admin exists.
+- Admins add users under **Users and access** and give each person "No access", "View only" or "View and upload" per module.
+- **TAJ Receivables** shows the TAJ dashboard file that an admin uploads inside the ERP. It is stored at `~/flowsuit-data/modules/taj-receivables.html` and is never committed here.
+- **Reports** accepts any `.xlsx` or `.csv` export and shows totals, aging and the biggest balances.

@@ -41,7 +41,7 @@
         <a href="/guides">Guides</a>
         <a href="/about">About</a>
         <a href="/contact">Contact</a>
-        <a class="button button-small" href="/contact">Get a free quote</a>
+        <a class="button button-small" href="/erp"><?= icon('lock') ?>ERP software</a>
       </nav>
     </div>
   </header>

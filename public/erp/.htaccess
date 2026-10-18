@@ -1,0 +1,9 @@
+# FlowSuit ERP: every /erp/... address goes to index.php here.
+DirectoryIndex index.php
+Options -Indexes
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L]
+<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex, nofollow"
+</IfModule>
