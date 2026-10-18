@@ -189,6 +189,34 @@ function erp_forbidden(?array $module = null): void
     exit;
 }
 
+// ---- Errors ----
+// Any crash is written to ~/flowsuit-data/erp-errors.log and shown as a short page instead of
+// the host's blank "500 Internal Server Error". Admins also see the error text, to send to support.
+
+function erp_catch_errors(): void
+{
+    ini_set('display_errors', '0');
+    $show = function (string $msg): void {
+        @file_put_contents(erp_data_dir() . '/erp-errors.log', '[' . date('Y-m-d H:i:s') . '] ' . ($_SERVER['REQUEST_URI'] ?? '') . ' ' . $msg . "\n", FILE_APPEND);
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: text/html; charset=utf-8');
+        }
+        $detail = !empty($_SESSION['admin']) ? '<pre style="white-space:pre-wrap;background:#f1f5f9;padding:12px;border-radius:8px">' . htmlspecialchars($msg) . '</pre>' : '';
+        echo '<div style="font:16px system-ui;max-width:640px;margin:60px auto;padding:0 16px"><h1>Something went wrong</h1>'
+            . '<p>The error was saved to <code>flowsuit-data/erp-errors.log</code> on the server.</p>' . $detail . '<p><a href="/erp">Back to the ERP</a></p></div>';
+    };
+    set_exception_handler(function (Throwable $ex) use ($show): void {
+        $show(get_class($ex) . ': ' . $ex->getMessage() . ' in ' . basename($ex->getFile()) . ':' . $ex->getLine());
+    });
+    register_shutdown_function(function () use ($show): void {
+        $err = error_get_last();
+        if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+            $show($err['message'] . ' in ' . basename($err['file']) . ':' . $err['line']);
+        }
+    });
+}
+
 // ---- Login throttling ----
 
 function erp_ip(): string
@@ -213,6 +241,7 @@ function erp_handle(string $path): void
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: same-origin');
     date_default_timezone_set('Asia/Karachi');
+    erp_catch_errors();
 
     if (!class_exists('PDO') || !in_array('sqlite', PDO::getAvailableDrivers(), true)) {
         http_response_code(500);
@@ -277,6 +306,7 @@ function erp_setup(bool $hasUsers, bool $post): void
                 ->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT), erp_now(), erp_now()]);
             session_regenerate_id(true);
             $_SESSION['uid'] = (int) erp_db()->lastInsertId();
+            $_SESSION['admin'] = true;
             erp_flash('Your admin account is ready. Add your team under Users.');
             erp_redirect('/erp');
         }
@@ -323,6 +353,7 @@ function erp_login(bool $post): void
             if ($row && password_verify((string) ($_POST['password'] ?? ''), $row['password_hash'])) {
                 session_regenerate_id(true);
                 $_SESSION['uid'] = (int) $row['id'];
+                $_SESSION['admin'] = (bool) $row['is_admin'];
                 erp_db()->prepare('UPDATE users SET last_login = ? WHERE id = ?')->execute([erp_now(), $row['id']]);
                 erp_redirect('/erp');
             }
@@ -506,11 +537,14 @@ function erp_dashboard_module(bool $raw, bool $post): void
         $html = file_get_contents($file);
         $skip = '<script>try{sessionStorage.setItem("taj-in",' . json_encode($me['name'], JSON_HEX_TAG | JSON_HEX_AMP) . ')}catch(e){}</script>';
         $pos = stripos($html, '</head>');
-        $html = $pos !== false ? substr_replace($html, $skip, $pos, 0) : $skip . $html;
         header('X-Frame-Options: SAMEORIGIN', true);
         header('Cache-Control: private, no-store');
         header('Content-Type: text/html; charset=utf-8');
-        echo $html;
+        echo $pos !== false ? substr($html, 0, $pos) . $skip : $skip;
+        $html = $pos !== false ? substr($html, $pos) : $html;
+        for ($i = 0, $n = strlen($html); $i < $n; $i += 262144) {
+            echo substr($html, $i, 262144);
+        }
         return;
     }
 
@@ -548,6 +582,9 @@ function erp_dashboard_html(string $path, string $name): string
 {
     $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     if ($ext === 'zip') {
+        if (!class_exists('ZipArchive')) {
+            throw new RuntimeException('This server cannot open .zip files. Unzip it on your computer and upload the index.html inside.');
+        }
         $zip = new ZipArchive();
         if ($zip->open($path) !== true) {
             throw new RuntimeException('This is not a valid .zip file.');
