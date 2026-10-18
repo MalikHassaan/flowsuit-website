@@ -4,6 +4,7 @@
 // Data lives in an SQLite file outside the web root (~/flowsuit-data), never in the repository.
 
 require_once __DIR__ . '/import.php';
+require_once __DIR__ . '/taj-store.php';
 
 const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
@@ -78,7 +79,8 @@ function erp_now(): string
 
 // ---- Sessions, CSRF, current user ----
 
-function erp_start_session(): void
+// $touch is false for the dashboard's background refresh, so an open tab does not keep an idle session alive.
+function erp_start_session(bool $touch = true): void
 {
     $https = ($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
     session_name('fs_erp');
@@ -88,7 +90,9 @@ function erp_start_session(): void
         $_SESSION = [];
         session_regenerate_id(true);
     }
-    $_SESSION['seen'] = time();
+    if ($touch || !isset($_SESSION['seen'])) {
+        $_SESSION['seen'] = time();
+    }
     if (empty($_SESSION['csrf'])) {
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
     }
@@ -101,7 +105,8 @@ function erp_csrf_field(): string
 
 function erp_check_csrf(): void
 {
-    if (!hash_equals($_SESSION['csrf'] ?? '', (string) ($_POST['csrf'] ?? ''))) {
+    $sent = (string) ($_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if (!hash_equals($_SESSION['csrf'] ?? '', $sent)) {
         http_response_code(400);
         exit('The form expired. Go back, refresh the page and try again.');
     }
@@ -248,8 +253,8 @@ function erp_handle(string $path): void
         exit('FlowSuit ERP needs the PHP "pdo_sqlite" extension. Turn it on in cPanel > Select PHP Version > Extensions.');
     }
 
-    erp_start_session();
     $sub = substr($path, strlen('/erp')) ?: '/';
+    erp_start_session($sub !== '/m/receivables/api/sync');
     $post = $_SERVER['REQUEST_METHOD'] === 'POST';
     if ($post) {
         erp_check_csrf();
@@ -270,6 +275,8 @@ function erp_handle(string $path): void
         erp_redirect('/erp/login');
     } elseif ($sub === '/') {
         erp_render('dashboard', ['me' => erp_require_user()]);
+    } elseif (str_starts_with($sub, '/m/receivables/api/')) {
+        taj_api(substr($sub, strlen('/m/receivables/api')));
     } elseif ($sub === '/m/receivables' || $sub === '/m/receivables/dashboard') {
         erp_dashboard_module($sub === '/m/receivables/dashboard', $post);
     } elseif (preg_match('#^/m/([a-z]+)$#', $sub, $m) && isset(erp_modules()[$m[1]])) {
@@ -533,9 +540,9 @@ function erp_dashboard_module(bool $raw, bool $post): void
             erp_render('notfound', [], 404);
             return;
         }
-        // The dashboard has its own sign-in screen; the ERP has already checked who this is, so skip it.
-        $html = file_get_contents($file);
-        $skip = '<script>try{sessionStorage.setItem("taj-in",' . json_encode($me['name'], JSON_HEX_TAG | JSON_HEX_AMP) . ')}catch(e){}</script>';
+        // The ERP has already checked who this is: skip the dashboard's own sign-in and connect shared storage.
+        $html = taj_wording(file_get_contents($file));
+        $skip = taj_inject($me);
         $pos = stripos($html, '</head>');
         $html = $pos !== false ? substr_replace($html, $skip, $pos, 0) : $skip . $html;
         if (isset($_GET['probe'])) {
