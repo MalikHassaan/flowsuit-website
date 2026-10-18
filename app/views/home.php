@@ -192,6 +192,8 @@
     </div>
   </div>
 </section>
+<?php require __DIR__ . '/home/demo.php'; ?>
+
 <?php $video = (string) config('video_id'); if (preg_match('/^[\w-]{6,20}$/', $video)): ?>
 
 <section class="section section-soft">
@@ -265,6 +267,8 @@
   </div>
 </section>
 
+<?php require __DIR__ . '/home/tables.php'; ?>
+
 <section class="section">
   <div class="wrap">
     <h2 class="section-title reveal">Workbook vs FlowSuit</h2>
@@ -280,6 +284,8 @@
     </div>
   </div>
 </section>
+
+<?php require __DIR__ . '/home/security.php'; ?>
 
 <section class="section">
   <div class="wrap">
