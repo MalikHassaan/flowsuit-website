@@ -78,5 +78,32 @@
     </div>
     <div class="wrap footer-bottom">&copy; <?= date('Y') ?> <?= e(config('site_name')) ?>. <a href="/sitemap.xml">Sitemap</a></div>
   </footer>
+
+  <div class="chat" data-chat>
+    <button class="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel" data-chat-toggle>
+      <?= icon('chat') ?><span>Chat with us</span>
+    </button>
+    <section class="chat-panel" id="chat-panel" role="dialog" aria-label="FlowSuit assistant" hidden>
+      <header class="chat-head">
+        <img src="/assets/logo/flowsuit-mark.svg" alt="" width="34" height="34">
+        <div><strong>FlowSuit assistant</strong><span><i></i> Online now</span></div>
+        <button type="button" class="chat-close" aria-label="Close chat" data-chat-toggle><?= icon('cross') ?></button>
+      </header>
+      <div class="chat-log" aria-live="polite" data-chat-log>
+        <p class="msg msg-bot">Hi! Ask me anything about FlowSuit, turning workbooks into software, or our services.</p>
+      </div>
+      <div class="chat-chips" data-chat-chips>
+        <button type="button">What is FlowSuit ERP?</button>
+        <button type="button">How much does it cost?</button>
+        <button type="button">Can you automate Google Sheets?</button>
+      </div>
+      <form class="chat-form" data-chat-form>
+        <label class="sr-only" for="chat-input">Your message</label>
+        <input id="chat-input" name="message" type="text" maxlength="1000" autocomplete="off" placeholder="Type your question..." required>
+        <button type="submit" aria-label="Send"><?= icon('send') ?></button>
+      </form>
+      <p class="chat-foot"><?= icon('mail') ?> Or email <a href="mailto:<?= e(config('contact_email')) ?>"><?= e(config('contact_email')) ?></a></p>
+    </section>
+  </div>
 </body>
 </html>

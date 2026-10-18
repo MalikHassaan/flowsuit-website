@@ -63,3 +63,19 @@ every time `main` changes, usually within a minute or two. It needs three reposi
 Until they are set the workflow does nothing.
 
 `deploy.sh` is a manual fallback that pulls `main` in the cPanel Git checkout and copies it into place.
+
+### Website chat assistant
+
+The chat bubble on every page posts to `/api/chat` (`app/chat.php`). It answers with Claude when an
+Anthropic API key is set on the server, and from the FAQ and product list when it is not.
+
+The key never goes in this repository. On the server, create `~/flowsuit-secrets.php` (next to
+`public_html`, not inside it) with:
+
+```php
+<?php
+return ['anthropic_api_key' => 'sk-ant-...'];
+```
+
+Model and per-visitor hourly limit are in `app/config.php`. The deploy workflow runs
+`composer install` in `app/` so the Claude PHP SDK (`app/vendor/`) ships with each release.

@@ -23,4 +23,7 @@ return [
     'check'  => $svg('<path d="M5 12l5 5 9-10"/>'),
     'cross'  => $svg('<path d="M6 6l12 12M18 6L6 18"/>'),
     'arrow'  => $svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+    'chat'   => $svg('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>'),
+    'send'   => $svg('<path d="M4 12l16-8-6 16-2.5-6.5L4 12z"/>'),
+    'mail'   => $svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'),
 ];

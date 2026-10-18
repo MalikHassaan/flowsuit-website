@@ -24,7 +24,10 @@ if (!config('indexable')) {
     header('X-Robots-Tag: noindex, nofollow');
 }
 
-if ($path === '/') {
+if ($path === '/api/chat') {
+    require $appDir . '/chat.php';
+    chat_handle();
+} elseif ($path === '/') {
     render('home', [
         'title'       => config('site_name') . ' | Workbook, inventory and accounting digitization',
         'description' => 'FlowSuit turns Excel workbooks, Google Sheets and paper registers into business software for inventory, finance and sales, plus Google Apps Script automation, mobile apps and SEO.',
@@ -137,7 +140,7 @@ if ($path === '/') {
 } elseif ($path === '/robots.txt') {
     header('Content-Type: text/plain; charset=utf-8');
     echo "User-agent: *\n";
-    echo config('indexable') ? "Allow: /\n" : "Disallow: /\n";
+    echo config('indexable') ? "Allow: /\nDisallow: /api/\n" : "Disallow: /\n";
     echo 'Sitemap: ' . url('/sitemap.xml') . "\n";
 } else {
     render('404', [
