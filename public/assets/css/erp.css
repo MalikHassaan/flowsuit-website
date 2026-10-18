@@ -162,3 +162,5 @@ table.data { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .frame-wrap { border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); background: var(--white); box-shadow: 0 14px 34px rgba(15, 23, 42, .06); animation: pop .5s ease both; }
 .frame-wrap iframe { display: block; width: 100%; height: calc(100vh - 150px); min-height: 560px; border: 0; }
 @media (max-width: 860px) { .frame-wrap iframe { height: 80vh; } }
+.backup-form { max-width: 420px; margin: 14px 0 20px; }
+.steps-list code { background: var(--soft, #f1f5f9); padding: 1px 5px; border-radius: 4px; word-break: break-all; }

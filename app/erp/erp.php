@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/import.php';
 require_once __DIR__ . '/taj-store.php';
+require_once __DIR__ . '/backup.php';
 
 const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
@@ -281,6 +282,10 @@ function erp_handle(string $path): void
         erp_dashboard_module($sub === '/m/receivables/dashboard', $post);
     } elseif (preg_match('#^/m/([a-z]+)$#', $sub, $m) && isset(erp_modules()[$m[1]])) {
         erp_module($m[1], $post);
+    } elseif ($sub === '/backup') {
+        erp_backup_download();
+    } elseif ($sub === '/backups') {
+        erp_backups_page($post);
     } elseif ($sub === '/users') {
         erp_users_list();
     } elseif ($sub === '/users/new' || preg_match('#^/users/(\d+)$#', $sub, $m)) {

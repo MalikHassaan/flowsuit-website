@@ -21,12 +21,11 @@
 <?php foreach (erp_modules() as $key => $mod): ?>
 <?php if (erp_can($user, $key)): ?>
       <a href="/erp/m/<?= e($key) ?>" class="<?= ($active ?? '') === $key ? 'is-on' : '' ?>"><?= icon($mod['icon']) ?><?= e($mod['name']) ?></a>
-<?php else: ?>
-      <span class="is-locked" title="No access"><?= icon('lock') ?><?= e($mod['name']) ?></span>
 <?php endif; ?>
 <?php endforeach; ?>
 <?php if ($user['is_admin']): ?>
       <a href="/erp/users" class="<?= ($active ?? '') === 'users' ? 'is-on' : '' ?>"><?= icon('users') ?>Users and access</a>
+      <a href="/erp/backups" class="<?= ($active ?? '') === 'backups' ? 'is-on' : '' ?>"><?= icon('cloud') ?>Backups</a>
 <?php endif; ?>
     </nav>
     <div class="erp-me">

@@ -1,16 +1,19 @@
 <?php $title = 'Dashboard | FlowSuit ERP'; $active = 'home'; ?>
 <header class="page-top">
-  <div><h1>Welcome, <?= e(strtok($me['name'], ' ')) ?></h1><p class="muted">These are the parts of FlowSuit ERP you can open. Locked ones need access from your admin.</p></div>
+  <div><h1>Welcome, <?= e(strtok($me['name'], ' ')) ?></h1><p class="muted">These are the parts of FlowSuit ERP you can open.</p></div>
 </header>
 <div class="mod-grid">
-<?php $i = 0; foreach (erp_modules() as $key => $mod): $can = erp_can($me, $key); ?>
-  <<?= $can ? 'a href="/erp/m/' . e($key) . '"' : 'div' ?> class="mod-card<?= $can ? '' : ' is-locked' ?>" style="--i:<?= $i++ ?>">
-    <span class="mod-icon"><?= icon($can ? $mod['icon'] : 'lock') ?></span>
+<?php $i = 0; foreach (erp_modules() as $key => $mod): if (!erp_can($me, $key)) continue; ?>
+  <a href="/erp/m/<?= e($key) ?>" class="mod-card" style="--i:<?= $i++ ?>">
+    <span class="mod-icon"><?= icon($mod['icon']) ?></span>
     <h2><?= e($mod['name']) ?></h2>
     <p><?= e($mod['about']) ?></p>
-    <span class="tag<?= $can ? ' tag-ok' : '' ?>"><?= $can ? ($me['is_admin'] ? 'Admin' : e(ERP_LEVELS[$me['access'][$key]])) : 'No access' ?><?= $can && !$mod['ready'] ? ' · not set up yet' : '' ?></span>
-  </<?= $can ? 'a' : 'div' ?>>
+    <span class="tag tag-ok"><?= $me['is_admin'] ? 'Admin' : e(ERP_LEVELS[$me['access'][$key]]) ?><?= !$mod['ready'] ? ' · not set up yet' : '' ?></span>
+  </a>
 <?php endforeach; ?>
+<?php if ($i === 0 && !$me['is_admin']): ?>
+  <div class="empty"><h2>Nothing to open yet</h2><p class="muted">Ask your admin to give you access to a part of the ERP.</p></div>
+<?php endif; ?>
 <?php if ($me['is_admin']): ?>
   <a href="/erp/users" class="mod-card mod-admin" style="--i:<?= $i ?>">
     <span class="mod-icon"><?= icon('users') ?></span>
