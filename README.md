@@ -87,5 +87,5 @@ A signed-in area for customers. Code: `public/erp/` (entry point) and `app/erp/`
 - Data is stored in `~/flowsuit-data/erp.sqlite` on the server, outside the web root and outside this repository. Back it up from cPanel File Manager.
 - First run: add `'erp_setup_code' => 'a-long-secret',` to `~/flowsuit-secrets.php`, open `/erp`, and create the first admin with that code. The setup page closes once an admin exists.
 - Admins add users under **Users and access** and give each person "No access", "View only" or "View and upload" per module.
-- **TAJ Receivables** shows the TAJ dashboard file that an admin uploads inside the ERP. It is stored at `~/flowsuit-data/modules/taj-receivables.html` and is never committed here.
+- **TAJ Receivables** shows the TAJ dashboard file that an admin uploads inside the ERP. It is stored at `~/flowsuit-data/modules/taj-receivables.html` and is never committed here. Inside it, admins and "View and upload" users can load new exports, "View only" users can read and export PDFs, and its sign-out button returns to the ERP. The file is built in the "BI reporting" project (`bi-reporting/source`, `node build-erp.js`) and contains real customer data, so it must never be added to this public repository.
 - **Reports** accepts any `.xlsx` or `.csv` export and shows totals, aging and the biggest balances.
