@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title><?= e($title ?? 'FlowSuit ERP') ?></title>
-  <meta name="theme-color" content="#714B67">
+  <meta name="theme-color" content="#1F6FB8">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/erp.css?v=3">
+  <link rel="stylesheet" href="/assets/css/erp.css?v=4">
 </head>
 <body class="<?= $user ? 'erp-app' : 'erp-auth' ?>">
 <?php if ($user): ?>

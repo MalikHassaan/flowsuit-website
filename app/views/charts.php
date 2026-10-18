@@ -21,8 +21,8 @@ $stock = [['Cooking oil 5L', 82, false], ['Rice 10kg', 64, false], ['Sugar 1kg',
     <svg class="chart-line" viewBox="0 0 320 140" role="img" aria-label="Line chart: cash balance rising over 12 weeks">
       <defs>
         <linearGradient id="cash-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#714B67" stop-opacity=".35"/>
-          <stop offset="1" stop-color="#714B67" stop-opacity="0"/>
+          <stop offset="0" stop-color="#1F6FB8" stop-opacity=".35"/>
+          <stop offset="1" stop-color="#1F6FB8" stop-opacity="0"/>
         </linearGradient>
       </defs>
       <g class="gridline"><line x1="10" y1="30" x2="310" y2="30"/><line x1="10" y1="63" x2="310" y2="63"/><line x1="10" y1="96" x2="310" y2="96"/><line x1="10" y1="130" x2="310" y2="130"/></g>

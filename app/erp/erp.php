@@ -299,9 +299,14 @@ function erp_handle(string $path): void
         erp_remember_clear();
         $_SESSION = [];
         session_regenerate_id(true);
-        erp_redirect('/erp/login');
+        erp_redirect('/erp');
     } elseif ($sub === '/') {
-        erp_render('dashboard', ['me' => erp_require_user()]);
+        // Signed out: the list of systems; each one leads to its own sign-in screen.
+        if (!erp_user()) {
+            erp_render('systems');
+        } else {
+            erp_render('dashboard', ['me' => erp_require_user()]);
+        }
     } elseif (str_starts_with($sub, '/m/receivables/api/')) {
         taj_api(substr($sub, strlen('/m/receivables/api')));
     } elseif ($sub === '/m/receivables' || $sub === '/m/receivables/dashboard') {

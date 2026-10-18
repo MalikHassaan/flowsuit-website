@@ -63,7 +63,7 @@ function taj_inject(array $me): string
         // Sign-out and user management happen in the ERP itself.
         . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
         . '.fs-erp-back{position:fixed;left:16px;bottom:44px;z-index:9999;display:flex;gap:6px;font:600 13px system-ui,sans-serif}'
-        . '.fs-erp-back a{background:#714B67;color:#fff;text-decoration:none;padding:8px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(15,23,42,.25)}'
+        . '.fs-erp-back a{background:#1F6FB8;color:#fff;text-decoration:none;padding:8px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(15,23,42,.25)}'
         . '.fs-erp-back a+a{background:#fff;color:#3730a3}</style>'
         // The dashboard opens full screen, so give a way back to the ERP (not needed inside a frame).
         . '<script>addEventListener("DOMContentLoaded",function(){if(window.top!==window)return;var d=document.createElement("div");d.className="fs-erp-back";'

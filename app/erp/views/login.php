@@ -14,5 +14,5 @@
     </div>
     <button class="btn btn-gold" type="submit"><span>Sign in</span></button>
   </form>
-  <p class="auth-foot">Untick "Remember me" on a shared computer. · Powered by <a href="/">FlowSuit</a></p>
+  <p class="auth-foot">Untick "Remember me" on a shared computer. · <a href="/erp">&larr; All systems</a></p>
 </div>

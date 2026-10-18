@@ -1,21 +1,46 @@
 <?php $quote = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode('Digitize my workbook'); ?>
-<section class="hero hero-center">
-  <div class="hero-bg" aria-hidden="true"><span class="blob blob-1"></span><span class="blob blob-2"></span></div>
-  <div class="wrap">
-    <h1 class="anim-up">All your <span class="hl">workbooks</span><br>in <span class="scribble">one platform.<svg viewBox="0 0 320 24" preserveAspectRatio="none" aria-hidden="true"><path d="M4 15 C 70 5, 170 4, 316 11"/><path d="M28 20 C 120 13, 220 13, 300 17"/></svg></span></h1>
-    <p class="lead anim-up d1">Simple, secure, <span class="underline">and affordable</span> software for inventory, finance, sales and accounting. Built from the Excel files and Google Sheets your business already runs on.</p>
-    <div class="actions anim-up d2">
-      <a class="button button-shine" href="<?= e($quote) ?>">Digitize my workbook <?= icon('arrow') ?></a>
-      <a class="button button-soft" href="/products/erp">Explore FlowSuit ERP</a>
+<section class="hero hero-pro">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow anim-up">ERP and business software</p>
+      <h1 class="anim-up d1">Run your business on <span>one secure platform.</span></h1>
+      <p class="lead anim-up d2">FlowSuit turns the Excel workbooks, Google Sheets and paper registers you rely on into one system for inventory, finance, sales and accounting, with a login for every member of your team.</p>
+      <div class="actions anim-up d3">
+        <a class="button" href="<?= e($quote) ?>">Get a free workbook review <?= icon('arrow') ?></a>
+        <a class="button button-outline" href="/products/erp">Explore FlowSuit ERP</a>
+      </div>
+      <ul class="hero-ticks anim-up d4">
+        <li><?= icon('check') ?>Built around how you work today</li>
+        <li><?= icon('check') ?>Per-user access and audit trail</li>
+        <li><?= icon('check') ?>Daily backups you keep</li>
+      </ul>
     </div>
-    <p class="hand-note anim-up d3"><svg viewBox="0 0 60 40" aria-hidden="true"><path d="M56 6 C 34 4, 14 12, 8 32 M8 32 L4 20 M8 32 L19 26"/></svg>Free review of your workbook!</p>
+    <div class="hero-shot anim-up d2"><?php $mockTitle = 'FlowSuit ERP'; require __DIR__ . '/dashboard-mock.php'; ?></div>
   </div>
+</section>
+
+<section class="section modules">
   <div class="wrap">
-    <ul class="app-grid">
-<?php foreach (array_merge(products_of_type('product'), products_of_type('service')) as $i => $p): ?>
-      <li class="pop" style="--i:<?= $i ?>"><a href="<?= e(product_path($p)) ?>"><span class="app-icon app-<?= e($p['slug']) ?>"><?= icon($p['icon']) ?></span><?= e(preg_replace('/^FlowSuit /', '', $p['name'])) ?></a></li>
+    <p class="eyebrow reveal center">Modules and services</p>
+    <h2 class="section-title reveal">Everything your business needs, in one place</h2>
+    <p class="section-lead reveal">Start with the module you need most and add the rest when you are ready. Every module shares the same data.</p>
+    <div class="module-grid">
+<?php foreach (array_merge(products_of_type('product'), products_of_type('service')) as $p): ?>
+      <a class="module reveal" href="<?= e(product_path($p)) ?>">
+        <span class="module-icon"><?= icon($p['icon']) ?></span>
+        <span><b><?= e($p['name']) ?></b><small><?= e($p['summary']) ?></small></span>
+      </a>
 <?php endforeach; ?>
-    </ul>
+    </div>
+  </div>
+</section>
+
+<section class="figures">
+  <div class="wrap figures-grid">
+    <div class="reveal"><b>4</b><span>business modules that share one database</span></div>
+    <div class="reveal"><b>1</b><span>login per person, with access set by module</span></div>
+    <div class="reveal"><b>30</b><span>days of automatic backups on your own computer</span></div>
+    <div class="reveal"><b>0</b><span>copy and paste between spreadsheets</span></div>
   </div>
 </section>
 
@@ -40,7 +65,7 @@
 <section class="section showcase">
   <div class="wrap">
     <p class="eyebrow reveal center">See it in action</p>
-    <h2 class="section-title reveal">From a messy sheet to a <span class="hl">live app.</span></h2>
+    <h2 class="section-title reveal">From a messy sheet to a live app</h2>
     <div class="slider reveal" data-slider>
       <div class="slider-tabs" role="tablist" aria-label="FlowSuit screens">
         <button type="button" role="tab" aria-selected="true"><span>Workbook to app</span><i></i></button>
@@ -153,7 +178,7 @@
             <div class="mock-app mock-pos" aria-hidden="true">
               <div class="mock-bar"><span></span><span></span><span></span> FlowSuit Store</div>
               <div class="pos-body">
-                <div class="pos-items"><i style="--c:#714B67">Tea</i><i style="--c:#017E84">Rice</i><i style="--c:#F59E0B">Oil</i><i style="--c:#E4578A">Sugar</i><i style="--c:#4F46E5">Flour</i><i style="--c:#10B981">Soap</i></div>
+                <div class="pos-items"><i style="--c:#1B3A5C">Tea</i><i style="--c:#1F6FB8">Rice</i><i style="--c:#0B8BD0">Oil</i><i style="--c:#38BDF8">Sugar</i><i style="--c:#334E6E">Flour</i><i style="--c:#F59E0B">Soap</i></div>
                 <div class="pos-cart"><p><span>Tea 950g x2</span><b>1,980</b></p><p><span>Rice 10kg</span><b>3,450</b></p><p><span>Oil 5L</span><b>2,900</b></p><p class="pos-total"><span>Total</span><b>8,330</b></p><span class="pos-pay">Pay</span></div>
               </div>
             </div>
@@ -240,16 +265,6 @@
   </div>
 </section>
 
-<section class="section section-soft">
-  <div class="wrap">
-    <h2 class="section-title reveal">Products</h2>
-    <p class="section-lead reveal">Start with one, or run the whole business on FlowSuit ERP.</p>
-    <div class="grid-4">
-<?php foreach (products_of_type('product') as $p) { require __DIR__ . '/card.php'; } ?>
-    </div>
-  </div>
-</section>
-
 <section class="section">
   <div class="wrap">
     <h2 class="section-title reveal">Workbook vs FlowSuit</h2>
@@ -262,16 +277,6 @@
         <tr><td>Works properly on a phone</td><td><?= icon('cross') ?></td><td><?= icon('check') ?></td></tr>
         <tr><td>Reports update by themselves</td><td><?= icon('cross') ?></td><td><?= icon('check') ?></td></tr>
       </table>
-    </div>
-  </div>
-</section>
-
-<section class="section section-soft">
-  <div class="wrap">
-    <h2 class="section-title reveal">Services</h2>
-    <p class="section-lead reveal">Need something specific? Our team builds it for you.</p>
-    <div class="grid-4">
-<?php foreach (products_of_type('service') as $p) { require __DIR__ . '/card.php'; } ?>
     </div>
   </div>
 </section>
