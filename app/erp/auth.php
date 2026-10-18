@@ -139,18 +139,30 @@ function erp_mail(string $to, string $subject, string $body): bool
     $from = 'no-reply@' . $host;
     $headers = 'From: FlowSuit ERP <' . $from . ">\r\nReply-To: " . config('contact_email') . "\r\n"
         . "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n";
+    if (erp_secret('erp_mail_log')) {
+        // Testing only: copies every e-mail to flowsuit-data/mail.log.
+        file_put_contents(erp_data_dir() . '/mail.log', "To: $to\nSubject: $subject\n\n$body\n----\n", FILE_APPEND);
+    }
     return @mail($to, $subject, $body, $headers, '-f' . $from);
 }
 
-function erp_send_password_link(array $user, string $kind): array
+function erp_send_password_link(array $user, string $kind, bool $withCode = false): array
 {
     $invite = $kind === 'invite';
     $token = erp_token_create((int) $user['id'], $kind, $invite ? ERP_INVITE_HOURS * 3600 : ERP_RESET_MINUTES * 60);
     $link = erp_base_url() . '/erp/reset?t=' . $token;
+    $code = '';
+    if ($withCode) {
+        // The same reset can be done by typing a 6-digit code on the page that asked for it.
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $_SESSION['otp_reset'] = ['uid' => (int) $user['id'], 'hash' => hash('sha256', $code), 'token' => $token,
+            'expires' => time() + ERP_OTP_MINUTES * 60, 'tries' => 0, 'sent' => time()];
+    }
     $body = 'Hello ' . $user['name'] . ",\r\n\r\n"
         . ($invite ? "An account has been made for you in FlowSuit ERP. Choose your password here:\r\n"
             : "Someone asked to reset your FlowSuit ERP password. Choose a new one here:\r\n")
         . $link . "\r\n\r\n"
+        . ($code !== '' ? 'Or type this code on the reset page: ' . $code . ' (works for ' . ERP_OTP_MINUTES . " minutes).\r\n\r\n" : '')
         . 'The link works once and stops working after ' . ($invite ? ERP_INVITE_HOURS . ' hours' : ERP_RESET_MINUTES . ' minutes') . ".\r\n"
         . ($invite ? '' : "If you did not ask for this, ignore this e-mail; your password stays the same.\r\n")
         . "\r\nFlowSuit ERP\r\n";
@@ -165,7 +177,14 @@ function erp_forgot(bool $post): void
     $done = false;
     $error = null;
     $email = trim((string) ($_POST['email'] ?? ''));
-    if ($post) {
+    if ($post && ($_POST['action'] ?? '') === 'code') {
+        $res = erp_otp_check('otp_reset', (string) ($_POST['code'] ?? ''));
+        if (is_array($res) && $res['token'] !== '') {
+            erp_redirect('/erp/reset?t=' . $res['token']);
+        }
+        $error = is_array($res) ? 'That code is not right.' : $res;
+        $done = !empty($_SESSION['otp_reset']);
+    } elseif ($post) {
         if (erp_too_many_attempts()) {
             $error = 'Too many tries. Wait 15 minutes and try again.';
         } else {
@@ -174,7 +193,11 @@ function erp_forgot(bool $post): void
             $st = erp_db()->prepare('SELECT * FROM users WHERE email = ? AND active = 1');
             $st->execute([$email]);
             if ($row = $st->fetch()) {
-                erp_send_password_link($row, 'reset');
+                erp_send_password_link($row, 'reset', true);
+            } else {
+                // No account: a code that can never match, so the page behaves the same.
+                $_SESSION['otp_reset'] = ['uid' => 0, 'hash' => bin2hex(random_bytes(32)), 'token' => '',
+                    'expires' => time() + ERP_OTP_MINUTES * 60, 'tries' => 0, 'sent' => time()];
             }
             $done = true; // the same answer whether or not the e-mail has an account
         }
@@ -244,4 +267,139 @@ function erp_brand_logo(): void
     header('Content-Length: ' . filesize($png));
     readfile($png);
     exit;
+}
+
+// ---- E-mailed one-time codes (OTP) ----
+// Sign-in can ask for a 6-digit code sent to the user's e-mail. An admin switches it on from
+// Security only after a test code reached their own inbox, so a broken mail server cannot lock
+// everyone out. Emergency switch: 'erp_otp_off' => true in ~/flowsuit-secrets.php.
+
+const ERP_OTP_MINUTES = 10;
+const ERP_OTP_TRIES = 5;
+
+function erp_setting(string $name): ?string
+{
+    $db = erp_db();
+    $db->exec('CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    $st = $db->prepare('SELECT value FROM settings WHERE name = ?');
+    $st->execute([$name]);
+    $v = $st->fetchColumn();
+    return $v === false ? null : (string) $v;
+}
+
+function erp_setting_set(string $name, ?string $value): void
+{
+    erp_setting($name); // makes sure the table exists
+    if ($value === null) {
+        erp_db()->prepare('DELETE FROM settings WHERE name = ?')->execute([$name]);
+        return;
+    }
+    erp_db()->prepare('INSERT INTO settings (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value')
+        ->execute([$name, $value]);
+}
+
+function erp_otp_on(): bool
+{
+    return erp_setting('otp_login') === '1' && !erp_secret('erp_otp_off');
+}
+
+// Makes a code, keeps its hash in the session under $slot, and e-mails it. Returns whether mail() accepted it.
+function erp_otp_send(string $slot, array $user, string $purpose, array $extra = []): bool
+{
+    $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    $_SESSION[$slot] = $extra + ['uid' => (int) $user['id'], 'hash' => hash('sha256', $code),
+        'expires' => time() + ERP_OTP_MINUTES * 60, 'tries' => 0, 'sent' => time()];
+    $body = 'Hello ' . $user['name'] . ",\r\n\r\nYour FlowSuit ERP code " . $purpose . " is:\r\n\r\n    " . $code . "\r\n\r\n"
+        . 'It works for ' . ERP_OTP_MINUTES . " minutes. Never share it; FlowSuit will never ask you for it.\r\n"
+        . "If you did not ask for this, someone may know your password: change it.\r\n\r\nFlowSuit ERP\r\n";
+    return erp_mail($user['email'], $code . ' is your FlowSuit ERP code', $body);
+}
+
+// Checks a typed code against the session slot. Returns the slot on success, an error message otherwise.
+function erp_otp_check(string $slot, string $typed)
+{
+    $otp = $_SESSION[$slot] ?? null;
+    if (!$otp || $otp['expires'] < time()) {
+        unset($_SESSION[$slot]);
+        return 'The code has expired. Ask for a new one.';
+    }
+    if ($otp['tries'] >= ERP_OTP_TRIES) {
+        unset($_SESSION[$slot]);
+        return 'Too many wrong codes. Ask for a new one.';
+    }
+    $_SESSION[$slot]['tries']++;
+    if (!hash_equals($otp['hash'], hash('sha256', preg_replace('/\D/', '', $typed)))) {
+        return 'That code is not right. ' . (ERP_OTP_TRIES - $_SESSION[$slot]['tries']) . ' tries left.';
+    }
+    unset($_SESSION[$slot]);
+    return $otp;
+}
+
+function erp_user_by_id(int $id): ?array
+{
+    $st = erp_db()->prepare('SELECT * FROM users WHERE id = ? AND active = 1');
+    $st->execute([$id]);
+    return $st->fetch() ?: null;
+}
+
+// /erp/verify: second step of sign-in.
+function erp_verify(bool $post): void
+{
+    $pending = $_SESSION['otp_login'] ?? null;
+    $user = $pending ? erp_user_by_id($pending['uid']) : null;
+    if (!$user) {
+        erp_redirect('/erp/login');
+    }
+    $error = null;
+    $notice = null;
+    if ($post && ($_POST['action'] ?? '') === 'resend') {
+        if (time() - $pending['sent'] < 60) {
+            $error = 'Wait a minute before asking for another code.';
+        } else {
+            $notice = erp_otp_send('otp_login', $user, 'to sign in', ['remember' => $pending['remember']])
+                ? 'A new code is on its way.' : 'The server could not send the e-mail. Ask your admin.';
+        }
+    } elseif ($post) {
+        $res = erp_otp_check('otp_login', (string) ($_POST['code'] ?? ''));
+        if (is_array($res)) {
+            erp_sign_in($user);
+            if ($res['remember']) {
+                erp_remember_set((int) $user['id']);
+            }
+            erp_redirect($user['must_change'] ? '/erp/account' : '/erp');
+        }
+        $error = $res;
+        if (empty($_SESSION['otp_login'])) {
+            erp_flash($error);
+            erp_redirect('/erp/login');
+        }
+    }
+    erp_render('verify', ['email' => $user['email'], 'error' => $error, 'notice' => $notice]);
+}
+
+// /erp/security: admin turns e-mail codes on (after a test) or off.
+function erp_security(bool $post): void
+{
+    $me = erp_require_admin();
+    $error = null;
+    $action = $_POST['action'] ?? '';
+    if ($post && $action === 'test') {
+        if (!erp_otp_send('otp_test', $me, 'to switch on sign-in codes')) {
+            $error = 'The server refused to send the e-mail, so codes cannot be switched on yet.';
+        }
+    } elseif ($post && $action === 'confirm') {
+        $res = erp_otp_check('otp_test', (string) ($_POST['code'] ?? ''));
+        if (is_array($res)) {
+            erp_setting_set('otp_login', '1');
+            erp_flash('Sign-in codes are on. Everyone gets a code by e-mail when they sign in.');
+            erp_redirect('/erp/security');
+        }
+        $error = $res;
+    } elseif ($post && $action === 'off') {
+        erp_setting_set('otp_login', null);
+        erp_flash('Sign-in codes are off.');
+        erp_redirect('/erp/security');
+    }
+    erp_render('security', ['me' => $me, 'on' => erp_otp_on(), 'testing' => !empty($_SESSION['otp_test']),
+        'forcedOff' => (bool) erp_secret('erp_otp_off'), 'error' => $error]);
 }

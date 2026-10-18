@@ -308,6 +308,10 @@ function erp_handle(string $path): void
         erp_dashboard_module($sub === '/m/receivables/dashboard', $post);
     } elseif (preg_match('#^/m/([a-z]+)$#', $sub, $m) && isset(erp_modules()[$m[1]])) {
         erp_module($m[1], $post);
+    } elseif ($sub === '/verify') {
+        erp_verify($post);
+    } elseif ($sub === '/security') {
+        erp_security($post);
     } elseif ($sub === '/forgot') {
         erp_forgot($post);
     } elseif ($sub === '/reset') {
@@ -397,6 +401,14 @@ function erp_login(bool $post): void
             $st->execute([$email]);
             $row = $st->fetch();
             if ($row && password_verify((string) ($_POST['password'] ?? ''), $row['password_hash'])) {
+                if (erp_otp_on()) {
+                    // Password is right; the e-mailed code is the second step.
+                    if (erp_otp_send('otp_login', $row, 'to sign in', ['remember' => !empty($_POST['remember'])])) {
+                        erp_redirect('/erp/verify');
+                    }
+                    erp_render('login', ['error' => 'We could not send your sign-in code. Ask your admin.', 'email' => $email]);
+                    return;
+                }
                 erp_sign_in($row);
                 if (!empty($_POST['remember'])) {
                     erp_remember_set((int) $row['id']);
