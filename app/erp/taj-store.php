@@ -62,12 +62,32 @@ function taj_inject(array $me): string
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
         // Sign-out and user management happen in the ERP itself.
         . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
+        . '#uchip{cursor:pointer}.fs-menu{position:fixed;z-index:10000;min-width:220px;padding:6px;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(15,23,42,.25);border:1px solid #e2e8f0;font:500 14px system-ui,sans-serif}'
+        . '.fs-menu[hidden]{display:none}.fs-menu p{margin:0;padding:8px 10px 10px;color:#64748b;font-size:12px;border-bottom:1px solid #eef2f7}.fs-menu p b{display:block;color:#0f172a;font-size:14px}'
+        . '.fs-menu a,.fs-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:8px;background:none;color:#0f172a;font:inherit;text-decoration:none;cursor:pointer}.fs-menu a:hover,.fs-menu button:hover{background:#f1f5f9}.fs-menu button{color:#b91c1c}'
         . '.fs-erp-back{position:fixed;left:16px;bottom:44px;z-index:9999;display:flex;gap:6px;font:600 13px system-ui,sans-serif}'
         . '.fs-erp-back a{background:#1F6FB8;color:#fff;text-decoration:none;padding:8px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(15,23,42,.25)}'
         . '.fs-erp-back a+a{background:#fff;color:#3730a3}</style>'
+        // Its own sign-in screen only shows while the data loads (the ERP already signed the person in): show a loader instead.
+        . '<style id="fs-hide-gate">#login .lcard{visibility:hidden}</style><style>.fs-loader{position:fixed;inset:0;z-index:9998;display:grid;place-content:center;justify-items:center;gap:18px;background:radial-gradient(circle at 50% 30%,#1c2850,#0b1430 70%);color:#e8cf8a;font:600 15px system-ui,sans-serif;letter-spacing:.06em;transition:opacity .4s}'
+        . '.fs-loader i{width:40px;height:40px;border-radius:50%;border:3px solid rgba(232,207,138,.25);border-top-color:#e8cf8a;animation:fs-spin .9s linear infinite}.fs-loader.is-done{opacity:0;pointer-events:none}@keyframes fs-spin{to{transform:rotate(360deg)}}</style>'
         // The dashboard opens full screen, so give a way back to the ERP (not needed inside a frame).
-        . '<script>addEventListener("DOMContentLoaded",function(){if(window.top!==window)return;var d=document.createElement("div");d.className="fs-erp-back";'
-        . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);});</script>';
+        . '<script>addEventListener("DOMContentLoaded",function(){var l=document.createElement("div");l.className="fs-loader";l.innerHTML="<i></i>Opening your dashboard\u2026";document.body.appendChild(l);'
+        . 'var t0=Date.now();(function check(){var g=document.getElementById("login");if(!g||g.hidden||Date.now()-t0>20000){var h=document.getElementById("fs-hide-gate");if(h)h.remove();l.classList.add("is-done");setTimeout(function(){l.remove();},500);}else setTimeout(check,150);})();});'
+        . 'addEventListener("DOMContentLoaded",function(){if(window.top!==window)return;var d=document.createElement("div");d.className="fs-erp-back";'
+        . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);'
+        // Clicking the name in the top bar opens a menu with Sign out (signs out of the whole ERP).
+        . 'var m=document.createElement("div");m.className="fs-menu";m.hidden=true;m.setAttribute("role","menu");'
+        . 'm.innerHTML=\'<p><b>\'+FS_TAJ.name.replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})+\'</b>Signed in to FlowSuit ERP</p><a href="/erp/account">Change password</a><a href="/erp">FlowSuit ERP home</a>'
+        . '<form method="post" action="/erp/logout"><input type="hidden" name="csrf" value="\'+FS_TAJ.csrf+\'"><button type="submit">Sign out</button></form>\';'
+        . 'm.querySelector("form").addEventListener("submit",function(){try{sessionStorage.removeItem("taj-in")}catch(e){}});document.body.appendChild(m);'
+        . 'var chip=document.getElementById("uchip");if(!chip){chip=document.createElement("a");chip.href="#";chip.textContent="Sign out";d.appendChild(chip);}'
+        . 'chip.setAttribute("role","button");chip.setAttribute("tabindex","0");chip.title="Account and sign out";'
+        . 'function open(e){e.preventDefault();e.stopPropagation();if(!m.hidden){m.hidden=true;return;}var r=chip.getBoundingClientRect();m.hidden=false;'
+        . 'm.style.top=(r.bottom+8)+"px";m.style.left=Math.max(8,Math.min(r.left,innerWidth-m.offsetWidth-8))+"px";if(r.bottom+m.offsetHeight>innerHeight){m.style.top=(r.top-m.offsetHeight-8)+"px";}}'
+        . 'chip.addEventListener("click",open);chip.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" ")open(e);});'
+        . 'document.addEventListener("click",function(e){if(!m.contains(e.target))m.hidden=true;});document.addEventListener("keydown",function(e){if(e.key==="Escape")m.hidden=true;});'
+        . '});</script>';
 }
 
 // The dashboard was written for claude.ai sharing; inside the ERP, access comes from Users and access.

@@ -798,3 +798,16 @@ tr.is-restock td { animation: row-restock 1.2s ease; }
   .col-level { display: none; }
   .data-table th, .data-table td { padding: 9px 10px; }
 }
+
+/* Dark "one system" section: white headings, all modules, more motion */
+.section-dark h2, .section-dark h3, .figures b { color: var(--white); }
+.section-dark .eyebrow { background: transparent; color: #7dd3fc; }
+.orbit .ring-2 { stroke: rgba(125, 211, 252, .18); animation-direction: reverse; animation-duration: 28s; }
+.orbit .node:not(.hub) { animation: node-in .6s cubic-bezier(.3,1.5,.5,1) both, node-float 5s ease-in-out infinite; animation-delay: calc(var(--k) * .12s + .2s), calc(var(--k) * -.8s); transition: border-color .2s, box-shadow .2s; }
+.orbit .node:not(.hub):hover { border-color: #7dd3fc; box-shadow: 0 0 24px rgba(125, 211, 252, .45); }
+.js .orbit.reveal:not(.is-visible) .node { animation-play-state: paused; }
+@keyframes node-in { from { opacity: 0; scale: .4; } to { opacity: 1; scale: 1; } }
+@keyframes node-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -8px; } }
+.orbit .node .icon { animation: icon-glow 3s ease-in-out infinite; animation-delay: calc(var(--k, 0) * .5s); }
+@keyframes icon-glow { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 6px #7dd3fc); } }
+@media (max-width: 560px) { .orbit .node:not(.hub) b { font-size: .68rem; } }
