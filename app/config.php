@@ -6,7 +6,12 @@ return [
     'site_name'   => 'FlowSuit',
     'tagline'     => 'Turn your workbooks into business software.',
     'base_url'    => 'https://flowsuit.net',   // no trailing slash
-    'contact_email' => 'hello@flowsuit.net',   // create this mailbox in GoDaddy first
+    'contact_email' => 'customerservices@flowsuit.net',   // a cPanel forwarder sends it to the owner's inbox
+
+    // Website chat assistant. The API key is NOT here: it lives in ~/flowsuit-secrets.php
+    // on the server (outside the repo). Without a key the chat answers from the FAQ only.
+    'chat_model'          => 'claude-opus-5-5',
+    'chat_limit_per_hour' => 20,   // messages per visitor IP
 
     // Lets search engines index the site. When false, every page sends "noindex"
     // and robots.txt blocks crawlers. Turned on 2026-10-17 after the owner approved the copy.

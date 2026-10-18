@@ -1,0 +1,16 @@
+{
+    "name": "flowsuit/website-app",
+    "description": "Server-side code for flowsuit.net (outside the web root).",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "anthropic-ai/sdk": "^0.59",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "allow-plugins": {
+            "php-http/discovery": false
+        }
+    }
+}
