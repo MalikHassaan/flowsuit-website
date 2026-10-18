@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title><?= e($title ?? 'FlowSuit ERP') ?></title>
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/erp.css?v=1">
+</head>
+<body class="<?= $user ? 'erp-app' : 'erp-auth' ?>">
+<?php if ($user): ?>
+  <aside class="erp-side">
+    <a class="erp-brand" href="/erp"><img src="/assets/logo/flowsuit-logo-white.svg" alt="FlowSuit" width="136" height="32"><span>ERP</span></a>
+    <nav>
+      <a href="/erp" class="<?= ($active ?? '') === 'home' ? 'is-on' : '' ?>"><?= icon('erp') ?>Dashboard</a>
+<?php foreach (erp_modules() as $key => $mod): ?>
+<?php if (erp_can($user, $key)): ?>
+      <a href="/erp/m/<?= e($key) ?>" class="<?= ($active ?? '') === $key ? 'is-on' : '' ?>"><?= icon($mod['icon']) ?><?= e($mod['name']) ?></a>
+<?php else: ?>
+      <span class="is-locked" title="No access"><?= icon('lock') ?><?= e($mod['name']) ?></span>
+<?php endif; ?>
+<?php endforeach; ?>
+<?php if ($user['is_admin']): ?>
+      <a href="/erp/users" class="<?= ($active ?? '') === 'users' ? 'is-on' : '' ?>"><?= icon('users') ?>Users and access</a>
+<?php endif; ?>
+    </nav>
+    <div class="erp-me">
+      <span class="avatar"><?= e(mb_strtoupper(mb_substr($user['name'], 0, 1))) ?></span>
+      <div><b><?= e($user['name']) ?></b><small><?= $user['is_admin'] ? 'Admin' : 'Team member' ?></small></div>
+      <form method="post" action="/erp/logout"><?= erp_csrf_field() ?><button type="submit" title="Sign out">Sign out</button></form>
+    </div>
+  </aside>
+<?php endif; ?>
+  <main class="erp-main">
+<?php if ($flash): ?>
+    <p class="erp-flash"><?= icon('check') ?><?= e($flash) ?></p>
+<?php endif; ?>
+<?= $content ?>
+  </main>
+  <script src="/assets/js/erp.js?v=1" defer></script>
+</body>
+</html>
