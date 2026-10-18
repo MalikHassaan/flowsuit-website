@@ -1,6 +1,6 @@
 <?php
 $isService = $product['type'] === 'service';
-$mail = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode(($isService ? 'Quote: ' : 'Demo: ') . $product['name']);
+$mail = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode('Quote: ' . $product['name']);
 ?>
 <section class="page-head">
   <div class="wrap product-hero">
@@ -13,7 +13,7 @@ $mail = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode(($isSer
 <?php if (!empty($product['app_url'])): ?>
         <a class="button" href="<?= e($product['app_url']) ?>">Open <?= e($product['name']) ?></a>
 <?php endif; ?>
-        <a class="button<?= !empty($product['app_url']) ? ' button-ghost' : '' ?>" href="<?= e($mail) ?>"><?= $isService ? 'Get a free quote' : 'Request a demo' ?></a>
+        <a class="button<?= !empty($product['app_url']) ? ' button-ghost' : '' ?>" href="<?= e($mail) ?>">Get a free quote</a>
       </div>
     </div>
 <?php if (!$isService): ?>
@@ -52,7 +52,7 @@ $mail = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode(($isSer
           <strong><?= $isService ? 'Tell us what you need' : 'See ' . e($product['name']) . ' with your own data' ?></strong>
           <span>Send us your workbook. We reply with a free review and next steps.</span>
         </div>
-        <a class="button" href="<?= e($mail) ?>"><?= $isService ? 'Get a free quote' : 'Request a demo' ?></a>
+        <a class="button" href="<?= e($mail) ?>">Get a free quote</a>
       </div>
     </div>
   </div>

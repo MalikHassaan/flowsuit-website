@@ -5,6 +5,7 @@
 // The app folder sits next to the web root, never inside it.
 // Locally that is ../app; on the server it is ~/flowsuit-app (see .cpanel.yml).
 $appDir = is_dir(__DIR__ . '/../flowsuit-app') ? __DIR__ . '/../flowsuit-app' : __DIR__ . '/../app';
+define('WEB_ROOT', __DIR__);
 require $appDir . '/bootstrap.php';
 
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
@@ -33,14 +34,7 @@ if ($path === '/api/chat') {
         'description' => 'FlowSuit turns Excel workbooks, Google Sheets and paper registers into business software for inventory, finance and sales, plus Google Apps Script automation, mobile apps and SEO.',
         'path'        => '/',
         'schema'      => [
-            [
-                '@context' => 'https://schema.org',
-                '@type'    => 'Organization',
-                'name'     => config('site_name'),
-                'url'      => url('/'),
-                'logo'     => url('/assets/logo/flowsuit-mark-512.png'),
-                'email'    => config('contact_email'),
-            ],
+            organization_schema(),
             [
                 '@context' => 'https://schema.org',
                 '@type'    => 'WebSite',
@@ -91,11 +85,25 @@ if ($path === '/api/chat') {
         ],
     ], ['product' => $product]);
 } elseif ($path === '/pricing') {
-    render('pricing', [
-        'title'       => 'Pricing | ' . config('site_name'),
-        'description' => 'How FlowSuit pricing works for products and services. Free workbook review.',
-        'path'        => '/pricing',
-        'schema'      => [breadcrumb_schema([['Pricing', '/pricing']])],
+    // Pricing page was removed; quotes come through the contact page.
+    header('Location: /contact', true, 301);
+    exit;
+} elseif ($path === '/about') {
+    render('about', [
+        'title'       => 'About FlowSuit: our vision and mission | ' . config('site_name'),
+        'description' => 'FlowSuit helps small and growing businesses move from Excel workbooks, Google Sheets and paper registers to secure software for inventory, finance and sales. Read our vision and mission.',
+        'path'        => '/about',
+        'schema'      => [
+            [
+                '@context'    => 'https://schema.org',
+                '@type'       => 'AboutPage',
+                'name'        => 'About FlowSuit',
+                'url'         => url('/about'),
+                'description' => config('mission'),
+                'mainEntity'  => organization_schema(),
+            ],
+            breadcrumb_schema([['About', '/about']]),
+        ],
     ]);
 } elseif ($path === '/guides') {
     render('guides', [
@@ -124,7 +132,7 @@ if ($path === '/api/chat') {
 } elseif ($path === '/sitemap.xml') {
     header('Content-Type: application/xml; charset=utf-8');
     // path => last modified date (null when unknown)
-    $paths = ['/' => null, '/products' => null, '/services' => null, '/guides' => null, '/pricing' => null, '/contact' => null];
+    $paths = ['/' => null, '/products' => null, '/services' => null, '/about' => null, '/guides' => null, '/contact' => null];
     foreach (products() as $p) {
         $paths[product_path($p)] = null;
     }

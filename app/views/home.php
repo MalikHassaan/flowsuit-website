@@ -212,6 +212,15 @@
   </div>
 </section>
 
+<section class="section mission-band">
+  <div class="wrap narrow center">
+    <span class="vm-icon pop reveal"><?= icon('target') ?></span>
+    <p class="eyebrow reveal">Our mission</p>
+    <p class="mission-quote reveal"><?= e(config('mission')) ?></p>
+    <a class="card-link reveal" href="/about">Read about FlowSuit <?= icon('arrow') ?></a>
+  </div>
+</section>
+
 <section class="cta-band">
   <div class="wrap">
     <h2 class="reveal">Send us the workbook. Get back an app.</h2>

@@ -17,7 +17,7 @@ app/                 -> copied to ~/flowsuit-app (outside the web root)
 .cpanel.yml          deploy instructions for cPanel Git Version Control
 ```
 
-Pages: `/`, `/products`, `/products/{slug}`, `/services`, `/services/{slug}`, `/pricing`, `/contact`, `/sitemap.xml`, `/robots.txt`.
+Pages: `/`, `/products`, `/products/{slug}`, `/services`, `/services/{slug}`, `/about`, `/guides`, `/guides/{slug}`, `/contact` (`/pricing` redirects to `/contact`), `/sitemap.xml`, `/robots.txt`.
 
 ## Adding or editing a product or service
 
