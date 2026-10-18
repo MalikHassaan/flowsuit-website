@@ -30,11 +30,21 @@ if ($path === '/') {
         'description' => 'FlowSuit turns Excel workbooks, Google Sheets and paper registers into business software for inventory, finance and sales, plus Google Apps Script automation, mobile apps and SEO.',
         'path'        => '/',
         'schema'      => [
-            '@context' => 'https://schema.org',
-            '@type'    => 'Organization',
-            'name'     => config('site_name'),
-            'url'      => url('/'),
-            'email'    => config('contact_email'),
+            [
+                '@context' => 'https://schema.org',
+                '@type'    => 'Organization',
+                'name'     => config('site_name'),
+                'url'      => url('/'),
+                'logo'     => url('/assets/logo/flowsuit-mark-512.png'),
+                'email'    => config('contact_email'),
+            ],
+            [
+                '@context' => 'https://schema.org',
+                '@type'    => 'WebSite',
+                'name'     => config('site_name'),
+                'url'      => url('/'),
+            ],
+            faq_schema(home_faqs()),
         ],
     ]);
 } elseif ($path === '/software' || strpos($path, '/software/') === 0) {
@@ -46,6 +56,7 @@ if ($path === '/') {
         'title'       => 'Products: inventory, finance and store | ' . config('site_name'),
         'description' => 'FlowSuit products replace your inventory, accounting and sales workbooks with shared, secure software.',
         'path'        => '/products',
+        'schema'      => [breadcrumb_schema([['Products', '/products']])],
     ], [
         'heading' => 'Products',
         'intro'   => 'Ready-made software for the workbooks most businesses keep.',
@@ -56,6 +67,7 @@ if ($path === '/') {
         'title'       => 'Services: workbook digitization, Apps Script, mobile apps, SEO | ' . config('site_name'),
         'description' => 'Done-for-you digitization: we turn workbooks into web apps, automate Google Sheets, build mobile apps and websites that rank.',
         'path'        => '/services',
+        'schema'      => [breadcrumb_schema([['Services', '/services']])],
     ], [
         'heading' => 'Services',
         'intro'   => 'Our team builds it for you, with a fixed quote up front.',
@@ -67,14 +79,39 @@ if ($path === '/') {
         'title'       => $product['name'] . ': ' . $product['summary'],
         'description' => $product['description'],
         'path'        => product_path($product),
-        'schema'      => product_schema($product),
+        'schema'      => [
+            product_schema($product),
+            breadcrumb_schema([
+                [$m[1] === 'services' ? 'Services' : 'Products', '/' . $m[1]],
+                [$product['name'], product_path($product)],
+            ]),
+        ],
     ], ['product' => $product]);
 } elseif ($path === '/pricing') {
     render('pricing', [
         'title'       => 'Pricing | ' . config('site_name'),
         'description' => 'How FlowSuit pricing works for products and services. Free workbook review.',
         'path'        => '/pricing',
+        'schema'      => [breadcrumb_schema([['Pricing', '/pricing']])],
     ]);
+} elseif ($path === '/guides') {
+    render('guides', [
+        'title'       => 'Guides: spreadsheets, inventory and accounting software | ' . config('site_name'),
+        'description' => 'Practical guides on moving from Excel and Google Sheets to inventory, accounting and ERP software, and on automating the sheets you keep.',
+        'path'        => '/guides',
+        'schema'      => [breadcrumb_schema([['Guides', '/guides']])],
+    ]);
+} elseif (preg_match('#^/guides/([a-z0-9-]+)$#', $path, $m) && ($guide = guide($m[1]))) {
+    render('guide', [
+        'title'       => $guide['title'] . ' | ' . config('site_name'),
+        'description' => $guide['description'],
+        'path'        => '/guides/' . $guide['slug'],
+        'og_type'     => 'article',
+        'schema'      => [
+            article_schema($guide),
+            breadcrumb_schema([['Guides', '/guides'], [$guide['title'], '/guides/' . $guide['slug']]]),
+        ],
+    ], ['guide' => $guide]);
 } elseif ($path === '/contact') {
     render('contact', [
         'title'       => 'Contact | ' . config('site_name'),
@@ -83,14 +120,18 @@ if ($path === '/') {
     ]);
 } elseif ($path === '/sitemap.xml') {
     header('Content-Type: application/xml; charset=utf-8');
-    $paths = ['/', '/products', '/services', '/pricing', '/contact'];
+    // path => last modified date (null when unknown)
+    $paths = ['/' => null, '/products' => null, '/services' => null, '/guides' => null, '/pricing' => null, '/contact' => null];
     foreach (products() as $p) {
-        $paths[] = product_path($p);
+        $paths[product_path($p)] = null;
+    }
+    foreach (guides() as $g) {
+        $paths['/guides/' . $g['slug']] = $g['updated'] ?? $g['published'];
     }
     echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
-    foreach ($paths as $p) {
-        echo '  <url><loc>' . e(url($p)) . "</loc></url>\n";
+    foreach ($paths as $p => $lastmod) {
+        echo '  <url><loc>' . e(url($p)) . '</loc>' . ($lastmod ? '<lastmod>' . e($lastmod) . '</lastmod>' : '') . "</url>\n";
     }
     echo "</urlset>\n";
 } elseif ($path === '/robots.txt') {

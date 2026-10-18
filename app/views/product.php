@@ -5,7 +5,7 @@ $mail = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode(($isSer
 <section class="page-head">
   <div class="wrap product-hero">
     <div>
-      <p class="crumbs reveal"><a href="<?= $isService ? '/services' : '/products' ?>"><?= $isService ? 'Services' : 'Products' ?></a> / <?= e($product['category']) ?></p>
+      <p class="crumbs reveal"><a href="/">Home</a> / <a href="<?= $isService ? '/services' : '/products' ?>"><?= $isService ? 'Services' : 'Products' ?></a> / <?= e($product['category']) ?></p>
       <span class="card-icon card-icon-large reveal"><?= icon($product['icon']) ?></span>
       <h1 class="reveal"><?= e($product['name']) ?></h1>
       <p class="lead reveal"><?= e($product['description']) ?></p>

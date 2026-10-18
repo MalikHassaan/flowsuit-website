@@ -4,17 +4,37 @@
   <div class="wrap hero-grid">
     <div>
       <p class="eyebrow anim-up">Workbook, finance and accounting digitization</p>
-      <h1 class="anim-up d1">Turn your workbooks into <span class="text-gradient">business software.</span></h1>
+      <h1 class="anim-up d1">
+        <span class="sr-only">Turn your workbooks into business software.</span>
+        <span aria-hidden="true">Turn your<br><span class="rotator"><span>workbooks</span><span>stock sheets</span><span>ledgers</span><span>registers</span><span>workbooks</span></span><br>into <span class="text-gradient">business software.</span></span>
+      </h1>
       <p class="lead anim-up d2">Your business runs on Excel files, Google Sheets and paper registers. FlowSuit turns them into one secure ERP for inventory, finance and sales that your whole team can use from any device.</p>
       <div class="actions anim-up d3">
-        <a class="button" href="<?= e($quote) ?>">Digitize my workbook <?= icon('arrow') ?></a>
+        <a class="button button-shine" href="<?= e($quote) ?>">Digitize my workbook <?= icon('arrow') ?></a>
         <a class="button button-ghost" href="/products/erp">Explore FlowSuit ERP</a>
       </div>
       <p class="hero-note anim-up d4"><?= icon('check') ?> Free review of your current workbook</p>
     </div>
-    <div class="mock anim-up d2" aria-hidden="true">
-      <div class="mock-file"><?= icon('sheet') ?> stock_register_FINAL_v3.xlsx</div>
-      <div class="mock-arrow"><?= icon('arrow') ?></div>
+    <div class="transform anim-up d2" aria-hidden="true">
+      <div class="sheet">
+        <div class="sheet-title"><?= icon('sheet') ?> stock_register_FINAL_v3.xlsx</div>
+        <div class="sheet-grid">
+          <b></b><b>A</b><b>B</b><b>C</b>
+          <b>1</b><i>Item</i><i>Qty</i><i>Price</i>
+          <b>2</b><i>Cement</i><i>420</i><i>1,150</i>
+          <b>3</b><i>Steel</i><i>38</i><i>2,400</i>
+          <b>4</b><i>Paint</i><i>112</i><i>3,900</i>
+          <b>5</b><i class="err">#REF!</i><i></i><i></i>
+        </div>
+        <span class="scan"></span>
+      </div>
+      <svg class="flow" viewBox="0 0 200 200" preserveAspectRatio="none">
+        <path id="flow-a" d="M20 30 C 120 30, 80 170, 180 170" />
+        <path id="flow-b" d="M20 60 C 140 60, 60 140, 180 140" />
+        <circle r="4"><animateMotion dur="2.4s" repeatCount="indefinite"><mpath href="#flow-a"/></animateMotion></circle>
+        <circle r="4"><animateMotion dur="2.4s" begin="0.8s" repeatCount="indefinite"><mpath href="#flow-b"/></animateMotion></circle>
+        <circle r="3"><animateMotion dur="2.4s" begin="1.6s" repeatCount="indefinite"><mpath href="#flow-a"/></animateMotion></circle>
+      </svg>
       <div class="mock-app float">
         <div class="mock-bar"><span></span><span></span><span></span> FlowSuit Inventory</div>
         <table>
@@ -24,20 +44,29 @@
           <tr class="row-in r3"><td>Paint 20L</td><td>112</td><td><span class="pill pill-ok">OK</span></td></tr>
         </table>
       </div>
+      <div class="toasts">
+        <span class="toast t1"><?= icon('check') ?> Invoice INV-1043 paid</span>
+        <span class="toast t2"><?= icon('boxes') ?> 50 steel rods received</span>
+        <span class="toast t3"><?= icon('chart') ?> Sales up 12% this week</span>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="industries">
-  <div class="wrap">
-    <p>Built for businesses that run on spreadsheets</p>
-    <div class="industry-row">
-      <span class="reveal"><?= icon('cart') ?> Retail</span>
-      <span class="reveal"><?= icon('truck') ?> Wholesale &amp; distribution</span>
-      <span class="reveal"><?= icon('factory') ?> Manufacturing</span>
-      <span class="reveal"><?= icon('pill') ?> Pharmacies</span>
-      <span class="reveal"><?= icon('build') ?> Construction</span>
-      <span class="reveal"><?= icon('brief') ?> Services</span>
+<section class="industries" aria-label="Industries we work with">
+  <p>Built for businesses that run on spreadsheets</p>
+  <div class="marquee">
+    <div class="marquee-track">
+<?php for ($copy = 0; $copy < 2; $copy++): ?>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('cart') ?> Retail</span>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('truck') ?> Wholesale &amp; distribution</span>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('factory') ?> Manufacturing</span>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('pill') ?> Pharmacies</span>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('build') ?> Construction</span>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('brief') ?> Services</span>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('ledger') ?> Accounting firms</span>
+      <span<?= $copy ? ' aria-hidden="true"' : '' ?>><?= icon('store') ?> Restaurants</span>
+<?php endfor; ?>
     </div>
   </div>
 </section>
@@ -62,6 +91,36 @@
       <li class="reveal"><strong>We set up FlowSuit</strong><span>Using FlowSuit ERP or a custom build.</span></li>
       <li class="reveal"><strong>Your team logs in</strong><span>Your data is moved over, and everyone works in one place.</span></li>
     </ol>
+  </div>
+</section>
+
+<section class="section section-dark connected">
+  <div class="wrap split">
+    <div class="orbit reveal" aria-hidden="true">
+      <svg viewBox="0 0 400 400">
+        <circle class="ring" cx="200" cy="200" r="140" />
+        <path id="ln-1" class="link" d="M200 200 L200 60" />
+        <path id="ln-2" class="link" d="M200 200 L321 270" />
+        <path id="ln-3" class="link" d="M200 200 L79 270" />
+        <circle class="packet" r="5"><animateMotion dur="2s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#ln-1"/></animateMotion></circle>
+        <circle class="packet" r="5"><animateMotion dur="2s" begin=".66s" repeatCount="indefinite"><mpath href="#ln-2"/></animateMotion></circle>
+        <circle class="packet" r="5"><animateMotion dur="2s" begin="1.33s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#ln-3"/></animateMotion></circle>
+      </svg>
+      <div class="node hub"><?= icon('erp') ?><b>FlowSuit ERP</b></div>
+      <div class="node n1"><?= icon('boxes') ?><b>Inventory</b></div>
+      <div class="node n2"><?= icon('ledger') ?><b>Finance</b></div>
+      <div class="node n3"><?= icon('store') ?><b>Store</b></div>
+    </div>
+    <div>
+      <p class="eyebrow reveal">One system</p>
+      <h2 class="reveal">Enter it once. Everything else updates.</h2>
+      <p class="lead reveal">A sale at the counter lowers stock, adds to today's revenue and posts to the books in the same second. No more typing the same number into three sheets.</p>
+      <ul class="ticks">
+        <li class="reveal"><?= icon('check') ?>Stock, sales and accounts always agree</li>
+        <li class="reveal"><?= icon('check') ?>Every change recorded against a named user</li>
+        <li class="reveal"><?= icon('check') ?>Start with one product, add the rest later</li>
+      </ul>
+    </div>
   </div>
 </section>
 
@@ -119,12 +178,28 @@
 </section>
 
 <section class="section">
+  <div class="wrap">
+    <h2 class="section-title reveal">Guides</h2>
+    <p class="section-lead reveal">Practical advice for businesses moving off spreadsheets.</p>
+    <div class="grid-3">
+<?php foreach (guides() as $g): ?>
+      <a class="card guide-card reveal" href="/guides/<?= e($g['slug']) ?>">
+        <span class="card-icon"><?= icon($g['icon']) ?></span>
+        <h3><?= e($g['title']) ?></h3>
+        <p><?= e($g['description']) ?></p>
+        <span class="card-link">Read guide <?= icon('arrow') ?></span>
+      </a>
+<?php endforeach; ?>
+    </div>
+  </div>
+</section>
+
+<section class="section section-soft">
   <div class="wrap narrow">
     <h2 class="section-title reveal">Questions</h2>
-    <details class="reveal"><summary>Do I lose my existing data?</summary><p>No. We move the data from your current workbook into FlowSuit as part of the project.</p></details>
-    <details class="reveal"><summary>Can I keep using Google Sheets?</summary><p>Yes. If your team prefers Sheets, we can automate it with Google Apps Script instead of replacing it.</p></details>
-    <details class="reveal"><summary>Does it work on mobile?</summary><p>Yes. FlowSuit works in a phone browser, and we also build Android and iPhone apps.</p></details>
-    <details class="reveal"><summary>How much does it cost?</summary><p>It depends on the size of your workbook and process. Send it to us for a free review and a fixed quote.</p></details>
+<?php foreach (home_faqs() as $q => $a): ?>
+    <details class="reveal"><summary><?= e($q) ?></summary><p><?= e($a) ?></p></details>
+<?php endforeach; ?>
   </div>
 </section>
 

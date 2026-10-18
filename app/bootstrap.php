@@ -100,6 +100,79 @@ function product_schema(array $product): array
     return $schema;
 }
 
+// BreadcrumbList JSON-LD from [name, path] pairs, home first.
+function breadcrumb_schema(array $trail): array
+{
+    $items = [];
+    foreach (array_merge([['Home', '/']], $trail) as $i => [$name, $path]) {
+        $items[] = ['@type' => 'ListItem', 'position' => $i + 1, 'name' => $name, 'item' => url($path)];
+    }
+    return ['@context' => 'https://schema.org', '@type' => 'BreadcrumbList', 'itemListElement' => $items];
+}
+
+// FAQPage JSON-LD from [question => answer]. Only for questions shown on the same page.
+function faq_schema(array $faqs): array
+{
+    $entities = [];
+    foreach ($faqs as $q => $a) {
+        $entities[] = ['@type' => 'Question', 'name' => $q, 'acceptedAnswer' => ['@type' => 'Answer', 'text' => $a]];
+    }
+    return ['@context' => 'https://schema.org', '@type' => 'FAQPage', 'mainEntity' => $entities];
+}
+
+// Guides (articles) from the registry, newest first. Each body is views/guides/<slug>.php.
+function guides(): array
+{
+    static $guides = null;
+    if ($guides === null) {
+        $json = file_get_contents(__DIR__ . '/data/guides.json');
+        $guides = json_decode($json, true)['guides'] ?? [];
+        usort($guides, fn($a, $b) => strcmp($b['published'], $a['published']));
+    }
+    return $guides;
+}
+
+function guide(string $slug): ?array
+{
+    foreach (guides() as $guide) {
+        if ($guide['slug'] === $slug) {
+            return $guide;
+        }
+    }
+    return null;
+}
+
+function article_schema(array $guide): array
+{
+    $org = ['@type' => 'Organization', 'name' => config('site_name'), 'url' => url('/'),
+            'logo' => ['@type' => 'ImageObject', 'url' => url('/assets/logo/flowsuit-mark-512.png')]];
+    return [
+        '@context'         => 'https://schema.org',
+        '@type'            => 'Article',
+        'headline'         => $guide['title'],
+        'description'      => $guide['description'],
+        'datePublished'    => $guide['published'],
+        'dateModified'     => $guide['updated'] ?? $guide['published'],
+        'mainEntityOfPage' => url('/guides/' . $guide['slug']),
+        'image'            => url('/assets/og-image.png'),
+        'author'           => $org,
+        'publisher'        => $org,
+    ];
+}
+
+// FAQs shown on the home page (also used for its FAQPage schema).
+function home_faqs(): array
+{
+    return [
+        'Do I lose my existing data?' => 'No. We move the data from your current workbook into FlowSuit as part of the project.',
+        'Can I keep using Google Sheets?' => 'Yes. If your team prefers Sheets, we can automate it with Google Apps Script instead of replacing it.',
+        'Does it work on mobile?' => 'Yes. FlowSuit works in a phone browser, and we also build Android and iPhone apps.',
+        'How much does it cost?' => 'It depends on the size of your workbook and process. Send it to us for a free review and a fixed quote.',
+        'How long does a workbook take to digitize?' => 'Most single workbooks take two to six weeks, depending on how many sheets, formulas and users are involved. You get a timeline with the fixed quote.',
+        'Is my data safe?' => 'Each staff member gets their own login and only sees what their role allows. Every change is recorded, and data is backed up daily.',
+    ];
+}
+
 // Inline SVG icon by name (see views/icons.php).
 function icon(string $name): string
 {

@@ -1,5 +1,6 @@
 <section class="page-head">
   <div class="wrap">
+    <p class="crumbs reveal"><a href="/">Home</a> / <?= e($heading) ?></p>
     <h1 class="reveal"><?= e($heading) ?></h1>
     <p class="lead reveal"><?= e($intro) ?></p>
   </div>

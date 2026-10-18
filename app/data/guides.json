@@ -1,0 +1,32 @@
+{
+  "_comment": "Each guide gets a page at /guides/<slug> and a sitemap entry. The body lives in app/views/guides/<slug>.php. related: a product or service path to promote at the end.",
+  "guides": [
+    {
+      "slug": "excel-inventory-to-software",
+      "title": "How to turn an Excel stock register into inventory software",
+      "description": "A step-by-step plan for moving your stock spreadsheet into real inventory software without losing data or stopping sales.",
+      "icon": "boxes",
+      "published": "2026-10-18",
+      "read_minutes": 7,
+      "related": "/products/inventory"
+    },
+    {
+      "slug": "outgrown-spreadsheets",
+      "title": "7 signs your business has outgrown spreadsheets",
+      "description": "Spreadsheets are a great start. Here are the seven warning signs that yours are now costing you time, money and sleep, and what to do next.",
+      "icon": "sheet",
+      "published": "2026-10-17",
+      "read_minutes": 6,
+      "related": "/products/erp"
+    },
+    {
+      "slug": "google-apps-script-bookkeeping",
+      "title": "5 Google Apps Script automations for small business bookkeeping",
+      "description": "Five practical Google Sheets automations that save bookkeepers hours each week, from invoice numbering to month-end reminders.",
+      "icon": "bolt",
+      "published": "2026-10-16",
+      "read_minutes": 6,
+      "related": "/services/google-apps-script"
+    }
+  ]
+}
