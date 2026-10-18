@@ -231,19 +231,22 @@
 <section class="section section-dark connected">
   <div class="wrap split">
     <div class="orbit reveal" aria-hidden="true">
+<?php
+$orbit = [['boxes', 'Inventory', '/products/inventory'], ['ledger', 'Finance', '/products/finance'], ['store', 'Store', '/products/store'],
+          ['chart', 'Reports', '/products/erp'], ['bolt', 'Automation', '/services/google-apps-script'], ['phone', 'Mobile apps', '/services/mobile-apps']];
+?>
       <svg viewBox="0 0 400 400">
-        <circle class="ring" cx="200" cy="200" r="140" />
-        <path id="ln-1" class="link" d="M200 200 L200 60" />
-        <path id="ln-2" class="link" d="M200 200 L321 270" />
-        <path id="ln-3" class="link" d="M200 200 L79 270" />
-        <circle class="packet" r="5"><animateMotion dur="2s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#ln-1"/></animateMotion></circle>
-        <circle class="packet" r="5"><animateMotion dur="2s" begin=".66s" repeatCount="indefinite"><mpath href="#ln-2"/></animateMotion></circle>
-        <circle class="packet" r="5"><animateMotion dur="2s" begin="1.33s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#ln-3"/></animateMotion></circle>
+        <circle class="ring" cx="200" cy="200" r="150" />
+        <circle class="ring ring-2" cx="200" cy="200" r="95" />
+<?php foreach ($orbit as $k => $n): $ang = deg2rad(-90 + $k * 60); $x = round(200 + 150 * cos($ang), 1); $y = round(200 + 150 * sin($ang), 1); ?>
+        <path id="ln-<?= $k ?>" class="link" d="M200 200 L<?= $x ?> <?= $y ?>" />
+        <circle class="packet" r="4.5"><animateMotion dur="2.4s" begin="<?= $k * 0.4 ?>s" repeatCount="indefinite"<?= $k % 2 ? '' : ' keyPoints="1;0" keyTimes="0;1" calcMode="linear"' ?>><mpath href="#ln-<?= $k ?>"/></animateMotion></circle>
+<?php endforeach; ?>
       </svg>
       <div class="node hub"><?= icon('erp') ?><b>FlowSuit ERP</b></div>
-      <div class="node n1"><?= icon('boxes') ?><b>Inventory</b></div>
-      <div class="node n2"><?= icon('ledger') ?><b>Finance</b></div>
-      <div class="node n3"><?= icon('store') ?><b>Store</b></div>
+<?php foreach ($orbit as $k => [$ic, $label, $href]): $ang = deg2rad(-90 + $k * 60); ?>
+      <div class="node" style="left:<?= round(50 + 37.5 * cos($ang), 2) ?>%;top:<?= round(50 + 37.5 * sin($ang), 2) ?>%;--k:<?= $k ?>"><?= icon($ic) ?><b><?= e($label) ?></b></div>
+<?php endforeach; ?>
     </div>
     <div>
       <p class="eyebrow reveal">One system</p>
