@@ -217,7 +217,7 @@ function erp_reset(bool $post): void
             erp_sign_in($row);
             erp_set_password((int) $row['id'], $password);
             erp_flash('Your new password is saved. Welcome, ' . strtok($row['name'], ' ') . '.');
-            erp_redirect('/erp');
+            erp_redirect(erp_start_page(['must_change' => 0] + $row));
         }
     }
     erp_render('reset', ['row' => $row, 'token' => $token, 'errors' => $errors]);
@@ -366,7 +366,7 @@ function erp_verify(bool $post): void
             if ($res['remember']) {
                 erp_remember_set((int) $user['id']);
             }
-            erp_redirect($user['must_change'] ? '/erp/account' : '/erp');
+            erp_redirect(erp_start_page($user));
         }
         $error = $res;
         if (empty($_SESSION['otp_login'])) {

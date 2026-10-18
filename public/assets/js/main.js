@@ -229,3 +229,130 @@ document.querySelectorAll('[data-video]').forEach(function (btn) {
     btn.replaceChildren(f);
   }, { once: true });
 });
+
+// Product tour: plays a short scripted sale on a mock screen, like a looping video.
+(function () {
+  var demo = document.querySelector('[data-demo]');
+  if (!demo) return;
+  var screen = demo.querySelector('.demo-screen');
+  var cursor = demo.querySelector('[data-cursor]');
+  var toast = demo.querySelector('[data-toast]');
+  var caption = demo.querySelector('[data-caption]');
+  var bar = demo.querySelector('[data-progress]');
+  var fields = demo.querySelectorAll('[data-type]');
+  var save = demo.querySelector('[data-save]');
+  var growBar = demo.querySelector('[data-bar]');
+  var kpi = {};
+  demo.querySelectorAll('[data-k]').forEach(function (el) { kpi[el.getAttribute('data-k')] = el; });
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var TOTAL = 13000, elapsed = 0, paused = false, onScreen = false, running = false;
+
+  function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
+  function setKpi(k, v) { kpi[k].textContent = fmt(v); }
+  // A wait that stands still while the demo is paused or scrolled away.
+  function wait(ms) {
+    return new Promise(function (done) {
+      (function tick() {
+        if (!paused && onScreen) { ms -= 50; elapsed += 50; bar.style.width = Math.min(elapsed / TOTAL * 100, 100) + '%'; }
+        if (ms <= 0) done(); else setTimeout(tick, 50);
+      })();
+    });
+  }
+  function moveTo(el) {
+    var s = screen.getBoundingClientRect(), r = el.getBoundingClientRect();
+    cursor.style.left = (r.left - s.left + Math.min(r.width * 0.6, 60)) + 'px';
+    cursor.style.top = (r.top - s.top + r.height * 0.55) + 'px';
+    return wait(900);
+  }
+  function click() { cursor.classList.remove('is-click'); void cursor.offsetWidth; cursor.classList.add('is-click'); return wait(250); }
+  function type(el) {
+    var text = el.getAttribute('data-type'), i = 0;
+    el.classList.add('is-typing');
+    return (function next() {
+      el.textContent = text.slice(0, ++i);
+      return i < text.length ? wait(70).then(next) : wait(200).then(function () { el.classList.remove('is-typing'); });
+    })();
+  }
+  function countTo(k, from, to) {
+    var steps = 12, n = 0;
+    kpi[k].classList.add(to > from ? 'is-up' : 'is-down');
+    return (function next() {
+      setKpi(k, from + (to - from) * (++n / steps));
+      return n < steps ? new Promise(function (r) { setTimeout(r, 40); }).then(next) : Promise.resolve();
+    })();
+  }
+  function reset() {
+    elapsed = 0; bar.style.width = '0%';
+    fields.forEach(function (f) { f.textContent = ''; });
+    toast.classList.remove('is-on');
+    Object.keys(kpi).forEach(function (k) { setKpi(k, +kpi[k].getAttribute('data-v')); kpi[k].classList.remove('is-up', 'is-down'); });
+    growBar.style.setProperty('--h', '48%');
+  }
+  function play() {
+    reset();
+    caption.textContent = '1. The cashier enters a sale';
+    var p = wait(400);
+    fields.forEach(function (f) { p = p.then(function () { return moveTo(f); }).then(click).then(function () { return type(f); }); });
+    return p
+      .then(function () { caption.textContent = '2. One click to save'; return moveTo(save); })
+      .then(function () { save.classList.add('is-pressed'); return click(); })
+      .then(function () { save.classList.remove('is-pressed'); toast.classList.add('is-on'); caption.textContent = '3. Stock, cash and today\'s sales update at once'; })
+      .then(function () {
+        growBar.style.setProperty('--h', '78%');
+        countTo('sales', 184500, 201900); countTo('stock', 82, 76); countTo('cash', 96200, 113600);
+        return wait(Math.max(TOTAL - elapsed, 3500));
+      })
+      .then(play);
+  }
+  if (reduce) {
+    fields.forEach(function (f) { f.textContent = f.getAttribute('data-type'); });
+    toast.classList.add('is-on'); bar.style.width = '100%';
+    caption.textContent = 'One sale updates stock, cash and reports at once';
+    demo.querySelector('[data-demo-toggle]').hidden = true;
+    return;
+  }
+  demo.querySelector('[data-demo-toggle]').addEventListener('click', function () {
+    paused = !paused;
+    demo.classList.toggle('is-paused', paused);
+    this.setAttribute('aria-label', paused ? 'Play the demo' : 'Pause the demo');
+  });
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (e) {
+      onScreen = e[0].isIntersecting;
+      if (onScreen && !running) { running = true; play(); }
+    }, { threshold: 0.35 }).observe(demo);
+  } else { onScreen = true; running = true; play(); }
+})();
+
+// Live stock table: a sale or a delivery every couple of seconds (sample data).
+(function () {
+  var card = document.querySelector('[data-live]');
+  if (!card || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var rows = card.querySelectorAll('tbody tr');
+  var note = card.querySelector('[data-live-note]');
+  var visible = false;
+  if ('IntersectionObserver' in window) new IntersectionObserver(function (e) { visible = e[0].isIntersecting; }).observe(card);
+  function paint(tr, qty) {
+    var max = +tr.getAttribute('data-max'), low = qty < 25, pill = tr.querySelector('[data-status]');
+    tr.querySelector('[data-qty]').textContent = qty;
+    tr.querySelector('.level i').style.width = Math.round(qty / max * 100) + '%';
+    tr.classList.toggle('is-low', low);
+    pill.textContent = low ? 'Reorder' : 'OK';
+    pill.className = 'pill ' + (low ? 'pill-low' : 'pill-ok');
+  }
+  rows.forEach(function (tr) { paint(tr, +tr.querySelector('[data-qty]').textContent); });
+  setInterval(function () {
+    if (!visible || document.hidden) return;
+    var tr = rows[Math.floor(Math.random() * rows.length)];
+    var name = tr.cells[0].textContent, qty = +tr.querySelector('[data-qty]').textContent, cls;
+    if (qty < 12) {
+      var add = +tr.getAttribute('data-max') - qty;
+      qty += add; cls = 'is-restock'; note.textContent = 'Delivery received: ' + add + ' x ' + name;
+    } else {
+      var sold = 1 + Math.floor(Math.random() * 6);
+      qty -= sold; cls = 'is-flash'; note.textContent = 'Sold ' + sold + ' x ' + name + ' at the counter';
+    }
+    paint(tr, qty);
+    tr.classList.remove('is-flash', 'is-restock'); void tr.offsetWidth; tr.classList.add(cls);
+  }, 2200);
+})();

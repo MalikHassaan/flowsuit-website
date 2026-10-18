@@ -151,6 +151,16 @@ function erp_user(): ?array
     return $user;
 }
 
+// Where someone lands after signing in: straight into the TAJ dashboard when they can open it.
+function erp_start_page(array $row): string
+{
+    if (!empty($row['must_change'])) {
+        return '/erp/account';
+    }
+    $can = !empty($row['is_admin']) || isset(erp_access_for((int) $row['id'])['receivables']);
+    return $can ? '/erp/m/receivables' : '/erp';
+}
+
 function erp_access_for(int $userId): array
 {
     $st = erp_db()->prepare('SELECT module, level FROM access WHERE user_id = ?');
@@ -418,7 +428,7 @@ function erp_login(bool $post): void
                 if (!empty($_POST['remember'])) {
                     erp_remember_set((int) $row['id']);
                 }
-                erp_redirect($row['must_change'] ? '/erp/account' : '/erp');
+                erp_redirect(erp_start_page($row));
             }
             erp_db()->prepare('INSERT INTO login_attempts (ip, at) VALUES (?, ?)')->execute([erp_ip(), time()]);
             $error = 'That email and password do not match an active account.';
