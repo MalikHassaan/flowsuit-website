@@ -9,8 +9,8 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/erp.css?v=1">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/erp.css?v=2">
 </head>
 <body class="<?= $user ? 'erp-app' : 'erp-auth' ?>">
 <?php if ($user): ?>
@@ -18,7 +18,7 @@
     <a class="erp-brand" href="/erp"><img src="/assets/logo/flowsuit-logo-white.svg" alt="FlowSuit" width="136" height="32"><span>ERP</span></a>
     <nav>
       <a href="/erp" class="<?= ($active ?? '') === 'home' ? 'is-on' : '' ?>"><?= icon('erp') ?>Dashboard</a>
-<?php foreach (erp_modules() as $key => $mod): ?>
+<?php foreach (erp_live_modules() as $key => $mod): ?>
 <?php if (erp_can($user, $key)): ?>
       <a href="/erp/m/<?= e($key) ?>" class="<?= ($active ?? '') === $key ? 'is-on' : '' ?>"><?= icon($mod['icon']) ?><?= e($mod['name']) ?></a>
 <?php endif; ?>
@@ -30,10 +30,13 @@
     </nav>
     <div class="erp-me">
       <span class="avatar"><?= e(mb_strtoupper(mb_substr($user['name'], 0, 1))) ?></span>
-      <div><b><?= e($user['name']) ?></b><small><?= $user['is_admin'] ? 'Admin' : 'Team member' ?></small></div>
+      <div><b><?= e($user['name']) ?></b><small><?= $user['is_admin'] ? 'Admin' : 'Team member' ?> · <a href="/erp/account">Change password</a></small></div>
       <form method="post" action="/erp/logout"><?= erp_csrf_field() ?><button type="submit" title="Sign out">Sign out</button></form>
     </div>
   </aside>
+<?php endif; ?>
+<?php if (!$user): ?>
+  <div class="auth-bg" aria-hidden="true"><b class="glow g1"></b><b class="glow g2"></b><?php for ($k = 0; $k < 14; $k++): ?><i style="--k:<?= $k ?>"></i><?php endfor; ?></div>
 <?php endif; ?>
   <main class="erp-main">
 <?php if ($flash): ?>
@@ -41,6 +44,6 @@
 <?php endif; ?>
 <?= $content ?>
   </main>
-  <script src="/assets/js/erp.js?v=1" defer></script>
+  <script src="/assets/js/erp.js?v=2" defer></script>
 </body>
 </html>

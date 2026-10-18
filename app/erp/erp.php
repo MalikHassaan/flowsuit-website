@@ -6,6 +6,7 @@
 require_once __DIR__ . '/import.php';
 require_once __DIR__ . '/taj-store.php';
 require_once __DIR__ . '/backup.php';
+require_once __DIR__ . '/auth.php';
 
 const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
@@ -22,6 +23,14 @@ function erp_modules(): array
         'sales'       => ['name' => 'Sales',       'icon' => 'cart',   'ready' => false, 'about' => 'Invoices, orders and customers.'],
     ];
 }
+
+// Modules that are switched on; the others stay hidden until they are built.
+function erp_live_modules(): array
+{
+    return array_filter(erp_modules(), fn(array $m): bool => $m['ready']);
+}
+
+const ERP_CLIENT_NAME = 'TAJ Residencia'; // shown on the sign-in screens
 
 const ERP_LEVELS = ['view' => 'View only', 'edit' => 'View and upload'];
 
@@ -58,6 +67,7 @@ function erp_db(): PDO
         columns TEXT NOT NULL, rows TEXT NOT NULL, row_count INTEGER NOT NULL,
         uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL, uploaded_at TEXT NOT NULL)');
     $db->exec('CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT NOT NULL, at INTEGER NOT NULL)');
+    erp_auth_schema($db);
     return $db;
 }
 
@@ -118,10 +128,21 @@ function erp_user(): ?array
     static $user = false;
     if ($user === false) {
         $user = null;
+        if (empty($_SESSION['uid'])) {
+            erp_remember_login();
+        }
         if (!empty($_SESSION['uid'])) {
             $st = erp_db()->prepare('SELECT * FROM users WHERE id = ? AND active = 1');
             $st->execute([$_SESSION['uid']]);
             $user = $st->fetch() ?: null;
+            // A password change elsewhere signs out sessions that started with the old password.
+            $pwv = $user ? hash('sha256', $user['password_hash']) : '';
+            if ($user && isset($_SESSION['pwv']) && !hash_equals($_SESSION['pwv'], $pwv)) {
+                $user = null;
+                unset($_SESSION['uid'], $_SESSION['admin']);
+            } elseif ($user) {
+                $_SESSION['pwv'] = $pwv;
+            }
             if ($user) {
                 $user['access'] = erp_access_for((int) $user['id']);
             }
@@ -180,11 +201,15 @@ function erp_render(string $view, array $data = [], int $status = 200): void
     require __DIR__ . '/views/layout.php';
 }
 
-function erp_require_user(): array
+// $enforceChange: someone who must change their password is sent to that page first.
+function erp_require_user(bool $enforceChange = true): array
 {
     $user = erp_user();
     if (!$user) {
         erp_redirect('/erp/login');
+    }
+    if ($enforceChange && $user['must_change']) {
+        erp_redirect('/erp/account');
     }
     return $user;
 }
@@ -271,6 +296,7 @@ function erp_handle(string $path): void
     } elseif ($sub === '/login') {
         erp_login($post);
     } elseif ($sub === '/logout' && $post) {
+        erp_remember_clear();
         $_SESSION = [];
         session_regenerate_id(true);
         erp_redirect('/erp/login');
@@ -282,6 +308,14 @@ function erp_handle(string $path): void
         erp_dashboard_module($sub === '/m/receivables/dashboard', $post);
     } elseif (preg_match('#^/m/([a-z]+)$#', $sub, $m) && isset(erp_modules()[$m[1]])) {
         erp_module($m[1], $post);
+    } elseif ($sub === '/forgot') {
+        erp_forgot($post);
+    } elseif ($sub === '/reset') {
+        erp_reset($post);
+    } elseif ($sub === '/account') {
+        erp_account($post);
+    } elseif ($sub === '/brand-logo') {
+        erp_brand_logo();
     } elseif ($sub === '/backup') {
         erp_backup_download();
     } elseif ($sub === '/backups') {
@@ -363,11 +397,11 @@ function erp_login(bool $post): void
             $st->execute([$email]);
             $row = $st->fetch();
             if ($row && password_verify((string) ($_POST['password'] ?? ''), $row['password_hash'])) {
-                session_regenerate_id(true);
-                $_SESSION['uid'] = (int) $row['id'];
-                $_SESSION['admin'] = (bool) $row['is_admin'];
-                erp_db()->prepare('UPDATE users SET last_login = ? WHERE id = ?')->execute([erp_now(), $row['id']]);
-                erp_redirect('/erp');
+                erp_sign_in($row);
+                if (!empty($_POST['remember'])) {
+                    erp_remember_set((int) $row['id']);
+                }
+                erp_redirect($row['must_change'] ? '/erp/account' : '/erp');
             }
             erp_db()->prepare('INSERT INTO login_attempts (ip, at) VALUES (?, ?)')->execute([erp_ip(), time()]);
             $error = 'That email and password do not match an active account.';
@@ -459,14 +493,16 @@ function erp_users_list(): void
         $u['access'] = erp_access_for((int) $u['id']);
     }
     unset($u);
-    erp_render('users', ['me' => $me, 'users' => $users]);
+    $share = $_SESSION['share_link'] ?? null;
+    unset($_SESSION['share_link']);
+    erp_render('users', ['me' => $me, 'users' => $users, 'share' => $share]);
 }
 
 function erp_user_form(?int $id, bool $post): void
 {
     $me = erp_require_admin();
     $db = erp_db();
-    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => []];
+    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1];
     if ($id !== null) {
         $st = $db->prepare('SELECT * FROM users WHERE id = ?');
         $st->execute([$id]);
@@ -484,6 +520,13 @@ function erp_user_form(?int $id, bool $post): void
         $name = trim((string) ($_POST['name'] ?? ''));
         $email = trim((string) ($_POST['email'] ?? ''));
         $password = (string) ($_POST['password'] ?? '');
+        // New users get an e-mailed link to choose their own password, unless the admin sets one.
+        $invite = $id === null && ($_POST['pw_mode'] ?? 'invite') === 'invite';
+        $sendLink = $id !== null && ($_POST['action'] ?? '') === 'send_link';
+        $mustChange = (int) !empty($_POST['must_change']);
+        if ($invite) {
+            $password = '';
+        }
         // An admin cannot remove their own admin rights or switch themselves off, so nobody gets locked out.
         $isAdmin = $isSelf ? 1 : (int) !empty($_POST['is_admin']);
         $active = $isSelf ? 1 : (int) !empty($_POST['active']);
@@ -494,18 +537,22 @@ function erp_user_form(?int $id, bool $post): void
                 $access[$key] = $level;
             }
         }
-        $errors = erp_validate_user($name, $email, $password, $id === null, $id);
+        $errors = erp_validate_user($name, $email, $password, $id === null && !$invite, $id);
         if (!$errors) {
             $db->beginTransaction();
             if ($id === null) {
-                $db->prepare('INSERT INTO users (name, email, password_hash, is_admin, active, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-                    ->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT), $isAdmin, $active, erp_now()]);
+                $hash = password_hash($invite ? bin2hex(random_bytes(32)) : $password, PASSWORD_DEFAULT);
+                $db->prepare('INSERT INTO users (name, email, password_hash, is_admin, active, created_at, must_change) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$name, $email, $hash, $isAdmin, $active, erp_now(), $invite ? 0 : $mustChange]);
                 $id = (int) $db->lastInsertId();
             } else {
-                $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ? WHERE id = ?')
-                    ->execute([$name, $email, $isAdmin, $active, $id]);
+                $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ? WHERE id = ?')
+                    ->execute([$name, $email, $isAdmin, $active, $mustChange, $id]);
                 if ($password !== '') {
-                    $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?')->execute([password_hash($password, PASSWORD_DEFAULT), $id]);
+                    erp_set_password($id, $password, (bool) $mustChange);
+                }
+                if (!$active) {
+                    $db->prepare('DELETE FROM auth_tokens WHERE user_id = ?')->execute([$id]);
                 }
             }
             $db->prepare('DELETE FROM access WHERE user_id = ?')->execute([$id]);
@@ -515,9 +562,14 @@ function erp_user_form(?int $id, bool $post): void
             }
             $db->commit();
             erp_flash('Saved ' . $name . '.');
+            if ($invite || $sendLink) {
+                $res = erp_send_password_link(['id' => $id, 'name' => $name, 'email' => $email], $invite ? 'invite' : 'reset');
+                // Shown once on the users page, so the admin can share it if the e-mail does not arrive.
+                $_SESSION['share_link'] = $res + ['name' => $name, 'email' => $email, 'invite' => $invite];
+            }
             erp_redirect('/erp/users');
         }
-        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access];
+        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange];
     }
     erp_render('user-form', ['me' => $me, 'target' => $target, 'isSelf' => $isSelf, 'errors' => $errors]);
 }

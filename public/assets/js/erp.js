@@ -57,4 +57,53 @@
     var sync = function () { grid.classList.toggle('is-admin', admin.checked); };
     admin.addEventListener('change', sync); sync();
   }
+
+  // Show / hide a password.
+  document.querySelectorAll('[data-reveal]').forEach(function (btn) {
+    var input = btn.parentNode.querySelector('input');
+    btn.addEventListener('click', function () {
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.classList.toggle('is-on', show);
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
+  });
+
+  // Password strength bar: length, mixed case, digits, symbols.
+  document.querySelectorAll('[data-strength]').forEach(function (input) {
+    var bar = input.closest('form').querySelector('.pw-meter i');
+    if (!bar) return;
+    input.addEventListener('input', function () {
+      var v = input.value, n = 0;
+      if (v.length >= 10) n++; if (v.length >= 14) n++;
+      if (/[a-z]/.test(v) && /[A-Z]/.test(v)) n++; if (/\d/.test(v)) n++; if (/[^A-Za-z0-9]/.test(v)) n++;
+      bar.style.width = (v ? Math.max(12, n * 20) : 0) + '%';
+      bar.className = n < 2 ? 'weak' : n < 4 ? 'ok' : 'strong';
+    });
+  });
+
+  // New user: show the password box only when the admin sets the password.
+  var modes = document.querySelectorAll('[data-pw-mode]'), pwSet = document.querySelector('[data-pw-set]');
+  if (modes.length && pwSet) {
+    var pick = function () {
+      var set = document.querySelector('[data-pw-mode]:checked').value === 'set';
+      pwSet.hidden = !set; pwSet.querySelector('input[type=password]').required = set;
+    };
+    modes.forEach(function (m) { m.addEventListener('change', pick); }); pick();
+  }
+
+  // Copy a link to the clipboard.
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var src = btn.parentNode.querySelector('[data-copy-src]');
+      src.select();
+      (navigator.clipboard ? navigator.clipboard.writeText(src.value) : Promise.reject()).catch(function () { document.execCommand('copy'); });
+      btn.textContent = 'Copied';
+    });
+  });
+
+  // Sign-in forms: show that the button is working.
+  document.querySelectorAll('form[data-busy]').forEach(function (form) {
+    form.addEventListener('submit', function () { var b = form.querySelector('button[type=submit]'); if (b) b.classList.add('is-busy'); });
+  });
 })();
