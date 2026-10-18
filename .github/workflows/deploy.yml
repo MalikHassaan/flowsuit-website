@@ -24,7 +24,9 @@ jobs:
 
       - name: Install PHP libraries (Claude SDK for the chat)
         if: env.FTP_SERVER != ''
-        run: composer install --no-dev --no-interaction --optimize-autoloader --working-dir=app
+        run: |
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --working-dir=app
+          cd app/vendor && zip -qr -9 ../vendor.zip . -x '*/.git/*' '*/tests/*' '*/docs/*' '*/examples/*' '*/fixtures/*' '*/libraries/*'
 
       - name: Upload app (outside the web root)
         if: env.FTP_SERVER != ''
@@ -36,6 +38,12 @@ jobs:
           protocol: ftps
           local-dir: ./app/
           server-dir: flowsuit-app/
+          # vendor/ goes up as vendor.zip and is unpacked on the server by app/chat.php.
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            vendor/**
 
       - name: Upload public site
         if: env.FTP_SERVER != ''

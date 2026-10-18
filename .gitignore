@@ -2,3 +2,7 @@
 .env
 *.log
 app/vendor/
+app/vendor.zip
+app/vendor.lock
+app/vendor-new/
+app/vendor-old/
