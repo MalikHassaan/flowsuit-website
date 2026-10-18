@@ -149,3 +149,83 @@
   form.addEventListener('submit', function (e) { e.preventDefault(); send(input.value); });
   chips.addEventListener('click', function (e) { if (e.target.tagName === 'BUTTON') send(e.target.textContent); });
 })();
+
+// Home page slideshow. Without this script the slides still scroll sideways.
+(function () {
+  var slider = document.querySelector('[data-slider]');
+  if (!slider) return;
+  var track = slider.querySelector('[data-track]');
+  var slides = track.querySelectorAll('.slide');
+  var tabs = slider.querySelectorAll('[role="tab"]');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var current = 0;
+
+  function show(i, scroll) {
+    current = (i + slides.length) % slides.length;
+    slides.forEach(function (s, n) { s.classList.toggle('is-active', n === current); s.inert = n !== current; });
+    tabs.forEach(function (t, n) {
+      t.setAttribute('aria-selected', String(n === current));
+      t.tabIndex = n === current ? 0 : -1;
+      // Restart the progress bar on the new tab.
+      var bar = t.querySelector('i'); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = '';
+    });
+    var tab = tabs[current];
+    tab.parentNode.scrollTo({ left: tab.offsetLeft - 10, behavior: reduce ? 'auto' : 'smooth' });
+    if (scroll !== false) track.scrollTo({ left: current * track.clientWidth });
+  }
+
+  tabs.forEach(function (t, n) {
+    t.addEventListener('click', function () { show(n); });
+    t.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault(); show(current + (e.key === 'ArrowRight' ? 1 : -1)); tabs[current].focus();
+      }
+    });
+    // When a tab's progress bar fills up, move to the next slide.
+    t.querySelector('i').addEventListener('animationend', function () { if (n === current) show(current + 1); });
+  });
+  slider.querySelector('[data-prev]').addEventListener('click', function () { show(current - 1); });
+  slider.querySelector('[data-next]').addEventListener('click', function () { show(current + 1); });
+  track.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') { e.preventDefault(); show(current + 1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); show(current - 1); }
+  });
+
+  // Swiping on a phone scrolls the track; pick up the slide it settles on.
+  var settle;
+  track.addEventListener('scroll', function () {
+    clearTimeout(settle);
+    settle = setTimeout(function () {
+      var i = Math.round(track.scrollLeft / track.clientWidth);
+      if (i !== current) show(i, false);
+    }, 120);
+  }, { passive: true });
+
+  // Plays only while on screen, and pauses while the visitor is pointing at or using it.
+  function pause(on) { slider.classList.toggle('is-paused', on); }
+  slider.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse') pause(true); });
+  slider.addEventListener('pointerleave', function () { pause(false); });
+  slider.addEventListener('focusin', function () { pause(true); });
+  slider.addEventListener('focusout', function () { pause(false); });
+  track.addEventListener('touchstart', function () { pause(true); }, { passive: true });
+  window.addEventListener('resize', function () { track.scrollTo({ left: current * track.clientWidth, behavior: 'auto' }); });
+
+  show(0, false);
+  if (!reduce && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      slider.classList.toggle('is-playing', entries[0].isIntersecting);
+    }, { threshold: 0.4 }).observe(slider);
+  }
+})();
+
+// Home page video: loads YouTube only when the visitor presses play.
+document.querySelectorAll('[data-video]').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var f = document.createElement('iframe');
+    f.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(btn.getAttribute('data-video')) + '?autoplay=1&rel=0';
+    f.allow = 'autoplay; encrypted-media; picture-in-picture';
+    f.allowFullscreen = true;
+    f.title = 'FlowSuit video';
+    btn.replaceChildren(f);
+  }, { once: true });
+});

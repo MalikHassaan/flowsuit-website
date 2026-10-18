@@ -17,5 +17,8 @@ return [
 
     // Lets search engines index the site. When false, every page sends "noindex"
     // and robots.txt blocks crawlers. Turned on 2026-10-17 after the owner approved the copy.
+    // Home page video: a YouTube video id (the part after watch?v=). Leave empty to hide the section.
+    'video_id'    => '',
+
     'indexable'   => true,
 ];

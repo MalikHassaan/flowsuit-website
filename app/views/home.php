@@ -1,55 +1,21 @@
 <?php $quote = 'mailto:' . config('contact_email') . '?subject=' . rawurlencode('Digitize my workbook'); ?>
-<section class="hero">
-  <div class="hero-bg" aria-hidden="true"><span class="blob blob-1"></span><span class="blob blob-2"></span><span class="grid-lines"></span></div>
-  <div class="wrap hero-grid">
-    <div>
-      <p class="eyebrow anim-up">Workbook, finance and accounting digitization</p>
-      <h1 class="anim-up d1">
-        <span class="sr-only">Turn your workbooks into business software.</span>
-        <span aria-hidden="true">Turn your<br><span class="rotator"><span>workbooks</span><span>stock sheets</span><span>ledgers</span><span>registers</span><span>workbooks</span></span><br>into <span class="text-gradient">business software.</span></span>
-      </h1>
-      <p class="lead anim-up d2">Your business runs on Excel files, Google Sheets and paper registers. FlowSuit turns them into one secure ERP for inventory, finance and sales that your whole team can use from any device.</p>
-      <div class="actions anim-up d3">
-        <a class="button button-shine" href="<?= e($quote) ?>">Digitize my workbook <?= icon('arrow') ?></a>
-        <a class="button button-ghost" href="/products/erp">Explore FlowSuit ERP</a>
-      </div>
-      <p class="hero-note anim-up d4"><?= icon('check') ?> Free review of your current workbook</p>
+<section class="hero hero-center">
+  <div class="hero-bg" aria-hidden="true"><span class="blob blob-1"></span><span class="blob blob-2"></span></div>
+  <div class="wrap">
+    <h1 class="anim-up">All your <span class="hl">workbooks</span><br>in <span class="scribble">one platform.<svg viewBox="0 0 320 24" preserveAspectRatio="none" aria-hidden="true"><path d="M4 15 C 70 5, 170 4, 316 11"/><path d="M28 20 C 120 13, 220 13, 300 17"/></svg></span></h1>
+    <p class="lead anim-up d1">Simple, secure, <span class="underline">and affordable</span> software for inventory, finance, sales and accounting. Built from the Excel files and Google Sheets your business already runs on.</p>
+    <div class="actions anim-up d2">
+      <a class="button button-shine" href="<?= e($quote) ?>">Digitize my workbook <?= icon('arrow') ?></a>
+      <a class="button button-soft" href="/products/erp">Explore FlowSuit ERP</a>
     </div>
-    <div class="transform anim-up d2" aria-hidden="true">
-      <div class="sheet">
-        <div class="sheet-title"><?= icon('sheet') ?> stock_register_FINAL_v3.xlsx</div>
-        <div class="sheet-grid">
-          <b></b><b>A</b><b>B</b><b>C</b>
-          <b>1</b><i>Item</i><i>Qty</i><i>Price</i>
-          <b>2</b><i>Cement</i><i>420</i><i>1,150</i>
-          <b>3</b><i>Steel</i><i>38</i><i>2,400</i>
-          <b>4</b><i>Paint</i><i>112</i><i>3,900</i>
-          <b>5</b><i class="err">#REF!</i><i></i><i></i>
-        </div>
-        <span class="scan"></span>
-      </div>
-      <svg class="flow" viewBox="0 0 200 200" preserveAspectRatio="none">
-        <path id="flow-a" d="M20 30 C 120 30, 80 170, 180 170" />
-        <path id="flow-b" d="M20 60 C 140 60, 60 140, 180 140" />
-        <circle r="4"><animateMotion dur="2.4s" repeatCount="indefinite"><mpath href="#flow-a"/></animateMotion></circle>
-        <circle r="4"><animateMotion dur="2.4s" begin="0.8s" repeatCount="indefinite"><mpath href="#flow-b"/></animateMotion></circle>
-        <circle r="3"><animateMotion dur="2.4s" begin="1.6s" repeatCount="indefinite"><mpath href="#flow-a"/></animateMotion></circle>
-      </svg>
-      <div class="mock-app float">
-        <div class="mock-bar"><span></span><span></span><span></span> FlowSuit Inventory</div>
-        <table>
-          <tr><th>Item</th><th>In stock</th><th>Status</th></tr>
-          <tr class="row-in r1"><td>Cement bags</td><td>420</td><td><span class="pill pill-ok">OK</span></td></tr>
-          <tr class="row-in r2"><td>Steel rods</td><td>38</td><td><span class="pill pill-low pulse">Low</span></td></tr>
-          <tr class="row-in r3"><td>Paint 20L</td><td>112</td><td><span class="pill pill-ok">OK</span></td></tr>
-        </table>
-      </div>
-      <div class="toasts">
-        <span class="toast t1"><?= icon('check') ?> Invoice INV-1043 paid</span>
-        <span class="toast t2"><?= icon('boxes') ?> 50 steel rods received</span>
-        <span class="toast t3"><?= icon('chart') ?> Sales up 12% this week</span>
-      </div>
-    </div>
+    <p class="hand-note anim-up d3"><svg viewBox="0 0 60 40" aria-hidden="true"><path d="M56 6 C 34 4, 14 12, 8 32 M8 32 L4 20 M8 32 L19 26"/></svg>Free review of your workbook!</p>
+  </div>
+  <div class="wrap">
+    <ul class="app-grid">
+<?php foreach (array_merge(products_of_type('product'), products_of_type('service')) as $i => $p): ?>
+      <li class="pop" style="--i:<?= $i ?>"><a href="<?= e(product_path($p)) ?>"><span class="app-icon app-<?= e($p['slug']) ?>"><?= icon($p['icon']) ?></span><?= e(preg_replace('/^FlowSuit /', '', $p['name'])) ?></a></li>
+<?php endforeach; ?>
+    </ul>
   </div>
 </section>
 
@@ -70,6 +36,147 @@
     </div>
   </div>
 </section>
+
+<section class="section showcase">
+  <div class="wrap">
+    <p class="eyebrow reveal center">See it in action</p>
+    <h2 class="section-title reveal">From a messy sheet to a <span class="hl">live app.</span></h2>
+    <div class="slider reveal" data-slider>
+      <div class="slider-tabs" role="tablist" aria-label="FlowSuit screens">
+        <button type="button" role="tab" aria-selected="true"><span>Workbook to app</span><i></i></button>
+        <button type="button" role="tab" aria-selected="false"><span>ERP dashboard</span><i></i></button>
+        <button type="button" role="tab" aria-selected="false"><span>Inventory</span><i></i></button>
+        <button type="button" role="tab" aria-selected="false"><span>Finance</span><i></i></button>
+        <button type="button" role="tab" aria-selected="false"><span>Store</span><i></i></button>
+      </div>
+      <div class="slider-track" data-track tabindex="0" aria-label="Slides, swipe or use the arrow keys">
+        <div class="slide" role="tabpanel" aria-roledescription="slide" aria-label="1 of 5">
+          <div class="slide-text">
+            <h3>Send us the file. Get back an app.</h3>
+            <p>We read your stock register, ledger or price list, keep the way you work, and fix the broken formulas on the way.</p>
+            <a class="card-link" href="/services/workbook-digitization">Workbook digitization <?= icon('arrow') ?></a>
+          </div>
+          <div class="slide-visual">
+  <div class="transform" aria-hidden="true">
+    <div class="sheet">
+      <div class="sheet-title"><?= icon('sheet') ?> stock_register_FINAL_v3.xlsx</div>
+      <div class="sheet-grid">
+        <b></b><b>A</b><b>B</b><b>C</b>
+        <b>1</b><i>Item</i><i>Qty</i><i>Price</i>
+        <b>2</b><i>Cement</i><i>420</i><i>1,150</i>
+        <b>3</b><i>Steel</i><i>38</i><i>2,400</i>
+        <b>4</b><i>Paint</i><i>112</i><i>3,900</i>
+        <b>5</b><i class="err">#REF!</i><i></i><i></i>
+      </div>
+      <span class="scan"></span>
+    </div>
+    <svg class="flow" viewBox="0 0 200 200" preserveAspectRatio="none">
+      <path id="flow-a" d="M20 30 C 120 30, 80 170, 180 170" />
+      <path id="flow-b" d="M20 60 C 140 60, 60 140, 180 140" />
+      <circle r="4"><animateMotion dur="2.4s" repeatCount="indefinite"><mpath href="#flow-a"/></animateMotion></circle>
+      <circle r="4"><animateMotion dur="2.4s" begin="0.8s" repeatCount="indefinite"><mpath href="#flow-b"/></animateMotion></circle>
+      <circle r="3"><animateMotion dur="2.4s" begin="1.6s" repeatCount="indefinite"><mpath href="#flow-a"/></animateMotion></circle>
+    </svg>
+    <div class="mock-app float">
+      <div class="mock-bar"><span></span><span></span><span></span> FlowSuit Inventory</div>
+      <table>
+        <tr><th>Item</th><th>In stock</th><th>Status</th></tr>
+        <tr class="row-in r1"><td>Cement bags</td><td>420</td><td><span class="pill pill-ok">OK</span></td></tr>
+        <tr class="row-in r2"><td>Steel rods</td><td>38</td><td><span class="pill pill-low pulse">Low</span></td></tr>
+        <tr class="row-in r3"><td>Paint 20L</td><td>112</td><td><span class="pill pill-ok">OK</span></td></tr>
+      </table>
+    </div>
+    <div class="toasts">
+      <span class="toast t1"><?= icon('check') ?> Invoice INV-1043 paid</span>
+      <span class="toast t2"><?= icon('boxes') ?> 50 steel rods received</span>
+      <span class="toast t3"><?= icon('chart') ?> Sales up 12% this week</span>
+    </div>
+  </div>
+          </div>
+        </div>
+        <div class="slide" role="tabpanel" aria-roledescription="slide" aria-label="2 of 5">
+          <div class="slide-text">
+            <h3>Your whole business on one screen.</h3>
+            <p>Sales, stock and cash update live. Every staff member gets their own login and only sees what they need.</p>
+            <a class="card-link" href="/products/erp">FlowSuit ERP <?= icon('arrow') ?></a>
+          </div>
+          <div class="slide-visual"><?php $mockTitle = 'FlowSuit ERP'; require __DIR__ . '/dashboard-mock.php'; ?></div>
+        </div>
+        <div class="slide" role="tabpanel" aria-roledescription="slide" aria-label="3 of 5">
+          <div class="slide-text">
+            <h3>Know what is on the shelf.</h3>
+            <p>Stock goes down with every sale and up with every delivery. Low items are flagged before you run out.</p>
+            <a class="card-link" href="/products/inventory">FlowSuit Inventory <?= icon('arrow') ?></a>
+          </div>
+          <div class="slide-visual">
+            <div class="mock-app" aria-hidden="true">
+              <div class="mock-bar"><span></span><span></span><span></span> FlowSuit Inventory</div>
+              <table>
+                <tr><th>Item</th><th>In stock</th><th>Status</th></tr>
+                <tr><td>Cooking oil 5L</td><td>82</td><td><span class="pill pill-ok">OK</span></td></tr>
+                <tr><td>Rice 10kg</td><td>64</td><td><span class="pill pill-ok">OK</span></td></tr>
+                <tr><td>Sugar 1kg</td><td>18</td><td><span class="pill pill-low">Reorder</span></td></tr>
+                <tr><td>Tea 950g</td><td>47</td><td><span class="pill pill-ok">OK</span></td></tr>
+                <tr><td>Flour 20kg</td><td>12</td><td><span class="pill pill-low">Reorder</span></td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="slide" role="tabpanel" aria-roledescription="slide" aria-label="4 of 5">
+          <div class="slide-text">
+            <h3>Books that balance themselves.</h3>
+            <p>Invoices, payments and expenses post to the accounts as they happen, so receivables and cash are always current.</p>
+            <a class="card-link" href="/products/finance">FlowSuit Finance <?= icon('arrow') ?></a>
+          </div>
+          <div class="slide-visual">
+            <div class="mock-app mock-fin" aria-hidden="true">
+              <div class="mock-bar"><span></span><span></span><span></span> FlowSuit Finance</div>
+              <div class="fin-body">
+                <div class="donut" style="--p:72"><b>72%</b><small>collected</small></div>
+                <ul>
+                  <li><span>INV-1043</span><b>184,500</b><span class="pill pill-ok">Paid</span></li>
+                  <li><span>INV-1044</span><b>62,300</b><span class="pill pill-low">Due</span></li>
+                  <li><span>INV-1045</span><b>48,900</b><span class="pill pill-ok">Paid</span></li>
+                  <li><span>INV-1046</span><b>21,750</b><span class="pill pill-low">Due</span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="slide" role="tabpanel" aria-roledescription="slide" aria-label="5 of 5">
+          <div class="slide-text">
+            <h3>A till that keeps up with the counter.</h3>
+            <p>Tap the items, take the payment, print the receipt. Stock and today's sales update in the same second.</p>
+            <a class="card-link" href="/products/store">FlowSuit Store <?= icon('arrow') ?></a>
+          </div>
+          <div class="slide-visual">
+            <div class="mock-app mock-pos" aria-hidden="true">
+              <div class="mock-bar"><span></span><span></span><span></span> FlowSuit Store</div>
+              <div class="pos-body">
+                <div class="pos-items"><i style="--c:#714B67">Tea</i><i style="--c:#017E84">Rice</i><i style="--c:#F59E0B">Oil</i><i style="--c:#E4578A">Sugar</i><i style="--c:#4F46E5">Flour</i><i style="--c:#10B981">Soap</i></div>
+                <div class="pos-cart"><p><span>Tea 950g x2</span><b>1,980</b></p><p><span>Rice 10kg</span><b>3,450</b></p><p><span>Oil 5L</span><b>2,900</b></p><p class="pos-total"><span>Total</span><b>8,330</b></p><span class="pos-pay">Pay</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="slider-nav">
+        <button type="button" class="slider-btn" data-prev aria-label="Previous slide"><?= icon('arrow') ?></button>
+        <button type="button" class="slider-btn" data-next aria-label="Next slide"><?= icon('arrow') ?></button>
+      </div>
+    </div>
+  </div>
+</section>
+<?php $video = (string) config('video_id'); if (preg_match('/^[\w-]{6,20}$/', $video)): ?>
+
+<section class="section section-soft">
+  <div class="wrap narrow center">
+    <p class="eyebrow reveal center">Watch</p>
+    <h2 class="section-title reveal">FlowSuit in two minutes</h2>
+    <button type="button" class="video reveal" data-video="<?= e($video) ?>" style="background-image:url(https://i.ytimg.com/vi/<?= e($video) ?>/hqdefault.jpg)"><span class="video-play"><?= icon('arrow') ?></span><span class="sr-only">Play video</span></button>
+  </div>
+</section>
+<?php endif; ?>
 
 <section class="section">
   <div class="wrap">
@@ -121,23 +228,6 @@
         <li class="reveal"><?= icon('check') ?>Start with one product, add the rest later</li>
       </ul>
     </div>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap split">
-    <div>
-      <p class="eyebrow reveal">FlowSuit ERP</p>
-      <h2 class="reveal">Your whole business on one screen.</h2>
-      <p class="lead reveal">Every sale updates stock and the books at the same moment. Owners see sales, inventory and cash live, without waiting for someone to update a spreadsheet.</p>
-      <ul class="ticks">
-        <li class="reveal"><?= icon('check') ?>Live dashboard for sales, stock and cash</li>
-        <li class="reveal"><?= icon('check') ?>Roles and permissions for every staff member</li>
-        <li class="reveal"><?= icon('check') ?>Works on desktop, tablet and phone</li>
-      </ul>
-      <a class="button reveal" href="/products/erp">See FlowSuit ERP <?= icon('arrow') ?></a>
-    </div>
-    <div class="reveal"><?php $mockTitle = 'FlowSuit ERP'; require __DIR__ . '/dashboard-mock.php'; ?></div>
   </div>
 </section>
 
