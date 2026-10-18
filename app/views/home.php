@@ -141,6 +141,15 @@
   </div>
 </section>
 
+<section class="section section-charts">
+  <div class="wrap">
+    <p class="eyebrow reveal center">Reports</p>
+    <h2 class="section-title reveal">See your numbers, not cells.</h2>
+    <p class="section-lead reveal">Charts build themselves from the data you already enter. No formulas, no copy and paste.</p>
+    <?php require __DIR__ . '/charts.php'; ?>
+  </div>
+</section>
+
 <section class="section section-soft">
   <div class="wrap">
     <h2 class="section-title reveal">Products</h2>
