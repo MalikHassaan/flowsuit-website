@@ -6,7 +6,7 @@
   </div>
 <?php if ($hasFile): ?>
   <div class="page-actions">
-    <a class="btn btn-ghost" href="/erp/m/receivables/dashboard" target="_blank" rel="noopener">Open full screen</a>
+    <a class="btn btn-ghost" href="/erp/m/receivables/dashboard">Open dashboard</a>
 <?php if ($me['is_admin']): ?>
     <button class="btn btn-ghost" type="button" data-toggle="#dash-upload">Replace file</button>
 <?php endif; ?>

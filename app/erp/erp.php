@@ -542,7 +542,7 @@ function erp_dashboard_module(bool $raw, bool $post): void
 
     if ($raw) {
         if (!is_file($file)) {
-            erp_render('notfound', [], 404);
+            erp_redirect('/erp/m/receivables');
             return;
         }
         // The ERP has already checked who this is: skip the dashboard's own sign-in and connect shared storage.
@@ -590,11 +590,15 @@ function erp_dashboard_module(bool $raw, bool $post): void
                 file_put_contents($file . '.new', $html);
                 rename($file . '.new', $file);
                 erp_flash('Dashboard file updated.');
-                erp_redirect('/erp/m/receivables');
+                erp_redirect('/erp/m/receivables?manage=1');
             } catch (RuntimeException $ex) {
                 $errors[] = $ex->getMessage();
             }
         }
+    }
+    // The module opens full screen; admins reach this page with ?manage=1 to replace the file.
+    if (!$post && is_file($file) && !isset($_GET['manage'])) {
+        erp_redirect('/erp/m/receivables/dashboard');
     }
     erp_render('dashboard-host', ['me' => $me, 'module' => $module, 'hasFile' => is_file($file),
         'updated' => is_file($file) ? filemtime($file) : null, 'errors' => $errors]);
