@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/erp.css?v=2">
+  <link rel="stylesheet" href="/assets/css/erp.css?v=3">
 </head>
 <body class="<?= $user ? 'erp-app' : 'erp-auth' ?>">
 <?php if ($user): ?>
@@ -26,6 +26,7 @@
 <?php if ($user['is_admin']): ?>
       <a href="/erp/users" class="<?= ($active ?? '') === 'users' ? 'is-on' : '' ?>"><?= icon('users') ?>Users and access</a>
       <a href="/erp/backups" class="<?= ($active ?? '') === 'backups' ? 'is-on' : '' ?>"><?= icon('cloud') ?>Backups</a>
+      <a href="/erp/security" class="<?= ($active ?? '') === 'security' ? 'is-on' : '' ?>"><?= icon('shield') ?>Security</a>
 <?php endif; ?>
     </nav>
     <div class="erp-me">
