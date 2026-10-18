@@ -88,4 +88,6 @@ A signed-in area for customers. Code: `public/erp/` (entry point) and `app/erp/`
 - First run: add `'erp_setup_code' => 'a-long-secret',` to `~/flowsuit-secrets.php`, open `/erp`, and create the first admin with that code. The setup page closes once an admin exists.
 - Admins add users under **Users and access** and give each person "No access", "View only" or "View and upload" per module.
 - **TAJ Receivables** shows the TAJ dashboard file that an admin uploads inside the ERP. It is stored at `~/flowsuit-data/modules/taj-receivables.html` and is never committed here.
+  - Exports uploaded inside the dashboard are saved on the server and shown to everyone with access (`app/erp/taj-store.php`, connected by `app/erp/taj-bridge.js`). Records live in `erp.sqlite`, export files in `~/flowsuit-data/taj-assets`.
+  - "View only" users can look and download PDFs; "View and upload" users can also upload exports, restore backups and update follow-ups, history and the recovery desk; admins also see the audit trail and can change business rules and targets.
 - **Reports** accepts any `.xlsx` or `.csv` export and shows totals, aging and the biggest balances.
