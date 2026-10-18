@@ -180,3 +180,33 @@ function icon(string $name): string
     $icons ??= require __DIR__ . '/views/icons.php';
     return $icons[$name] ?? '';
 }
+
+function organization_schema(): array
+{
+    return [
+        '@context'    => 'https://schema.org',
+        '@type'       => 'Organization',
+        'name'        => config('site_name'),
+        'url'         => url('/'),
+        'logo'        => url('/assets/logo/flowsuit-mark-512.png'),
+        'email'       => config('contact_email'),
+        'slogan'      => config('tagline'),
+        'description' => config('mission'),
+        'knowsAbout'  => ['Inventory management software', 'Accounting software', 'ERP', 'Spreadsheet digitization', 'Google Apps Script', 'Mobile apps', 'SEO'],
+    ];
+}
+
+// The header logo, inlined so its parts can animate (see .logo-anim in style.css).
+function logo_svg(): string
+{
+    static $svg = null;
+    if ($svg === null) {
+        $svg = @file_get_contents(WEB_ROOT . '/assets/logo/flowsuit-logo.svg');
+        if ($svg === false) {
+            return $svg = '<img src="/assets/logo/flowsuit-logo.svg" alt="" width="152" height="36">';
+        }
+        $svg = preg_replace('#<title>.*?</title>#s', '', $svg);
+        $svg = str_replace(['<svg ', 'id="fs-g"', 'url(#fs-g)'], ['<svg width="152" height="36" aria-hidden="true" ', 'id="fs-g-head"', 'url(#fs-g-head)'], $svg);
+    }
+    return $svg;
+}

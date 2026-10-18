@@ -5,6 +5,8 @@
 return [
     'site_name'   => 'FlowSuit',
     'tagline'     => 'Turn your workbooks into business software.',
+    'vision'      => 'A world where every small business runs on clear, live numbers instead of fragile spreadsheets.',
+    'mission'     => 'To turn the workbooks businesses already rely on into simple, secure software, quickly and affordably, so owners spend their time on the business and not on the spreadsheet.',
     'base_url'    => 'https://flowsuit.net',   // no trailing slash
     'contact_email' => 'customerservices@flowsuit.net',   // a cPanel forwarder sends it to the owner's inbox
 

@@ -34,12 +34,12 @@
   <div class="scroll-progress" aria-hidden="true"></div>
   <header class="site-header">
     <div class="wrap">
-      <a class="logo" href="/"><img src="/assets/logo/flowsuit-logo.svg" alt="<?= e(config('site_name')) ?>" width="152" height="36"></a>
+      <a class="logo logo-anim" href="/" aria-label="<?= e(config('site_name')) ?> home"><?= logo_svg() ?></a>
       <nav>
         <a href="/products">Products</a>
         <a href="/services">Services</a>
         <a href="/guides">Guides</a>
-        <a href="/pricing">Pricing</a>
+        <a href="/about">About</a>
         <a href="/contact">Contact</a>
         <a class="button button-small" href="/contact">Get a free quote</a>
       </nav>
@@ -70,8 +70,8 @@
       </div>
       <div>
         <h4>Company</h4>
+        <a href="/about">About FlowSuit</a>
         <a href="/guides">Guides</a>
-        <a href="/pricing">Pricing</a>
         <a href="/contact">Contact</a>
         <a href="mailto:<?= e(config('contact_email')) ?>"><?= e(config('contact_email')) ?></a>
       </div>
