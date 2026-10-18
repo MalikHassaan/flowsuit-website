@@ -534,8 +534,12 @@ function erp_dashboard_module(bool $raw, bool $post): void
             return;
         }
         // The dashboard has its own sign-in screen; the ERP has already checked who this is, so skip it.
+        // taj-role lets admins and "View and upload" users load new exports inside the dashboard;
+        // taj-host makes its sign-out button return to the ERP.
         $html = file_get_contents($file);
-        $skip = '<script>try{sessionStorage.setItem("taj-in",' . json_encode($me['name'], JSON_HEX_TAG | JSON_HEX_AMP) . ')}catch(e){}</script>';
+        $role = erp_can($me, 'receivables', 'edit') ? 'Admin' : 'User';
+        $skip = '<script>try{sessionStorage.setItem("taj-in",' . json_encode($me['name'], JSON_HEX_TAG | JSON_HEX_AMP) . ');'
+            . 'sessionStorage.setItem("taj-role",' . json_encode($role) . ');sessionStorage.setItem("taj-host","erp")}catch(e){}</script>';
         $pos = stripos($html, '</head>');
         $html = $pos !== false ? substr_replace($html, $skip, $pos, 0) : $skip . $html;
         if (isset($_GET['probe'])) {
