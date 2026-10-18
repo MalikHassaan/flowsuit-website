@@ -131,6 +131,67 @@ function chat_fallback(string $question): string
         . 'For anything specific, email ' . $email . ' and the team will reply.';
 }
 
+// The deploy uploads the PHP libraries as one vendor.zip (FTP is too slow for thousands of
+// small files). Unpack it into vendor/ the first time it is needed after each deploy.
+function chat_ensure_vendor(): bool
+{
+    $zip = __DIR__ . '/vendor.zip';
+    $vendor = __DIR__ . '/vendor';
+    if (!is_file($zip)) {
+        return is_file($vendor . '/autoload.php');
+    }
+    $stamp = filesize($zip) . '-' . filemtime($zip);
+    $marker = $vendor . '/.zip-stamp';
+    if (is_file($marker) && trim(file_get_contents($marker)) === $stamp) {
+        return true;
+    }
+    if (!class_exists('ZipArchive')) {
+        return is_file($vendor . '/autoload.php');
+    }
+
+    $lock = fopen(__DIR__ . '/vendor.lock', 'c');
+    flock($lock, LOCK_EX);
+    try {
+        if (is_file($marker) && trim(file_get_contents($marker)) === $stamp) {
+            return true;   // another request unpacked it while we waited
+        }
+        $fresh = __DIR__ . '/vendor-new';
+        $old = __DIR__ . '/vendor-old';
+        chat_remove_dir($fresh);
+        chat_remove_dir($old);
+        $archive = new ZipArchive();
+        if ($archive->open($zip) !== true || !$archive->extractTo($fresh)) {
+            return is_file($vendor . '/autoload.php');
+        }
+        $archive->close();
+        file_put_contents($fresh . '/.zip-stamp', $stamp);
+        if (is_dir($vendor)) {
+            rename($vendor, $old);
+        }
+        rename($fresh, $vendor);
+        chat_remove_dir($old);
+        return true;
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+function chat_remove_dir(string $dir): void
+{
+    if (!is_dir($dir)) {
+        return;
+    }
+    $items = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($items as $item) {
+        $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+    }
+    rmdir($dir);
+}
+
 function chat_handle(): void
 {
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -151,12 +212,11 @@ function chat_handle(): void
 
     $question = end($messages)['content'];
     $key = chat_api_key();
-    $autoload = __DIR__ . '/vendor/autoload.php';
-    if (!$key || !is_file($autoload)) {
+    if (!$key || !chat_ensure_vendor()) {
         chat_respond(['reply' => chat_fallback($question), 'ai' => false]);
         return;
     }
-    require_once $autoload;
+    require_once __DIR__ . '/vendor/autoload.php';
 
     try {
         $client = new Client(apiKey: $key);
