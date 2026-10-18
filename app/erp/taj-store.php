@@ -61,7 +61,13 @@ function taj_inject(array $me): string
         . 'window.FS_TAJ=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
         // Sign-out and user management happen in the ERP itself.
-        . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}</style>';
+        . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
+        . '.fs-erp-back{position:fixed;left:16px;bottom:44px;z-index:9999;display:flex;gap:6px;font:600 13px system-ui,sans-serif}'
+        . '.fs-erp-back a{background:#4f46e5;color:#fff;text-decoration:none;padding:8px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(15,23,42,.25)}'
+        . '.fs-erp-back a+a{background:#fff;color:#3730a3}</style>'
+        // The dashboard opens full screen, so give a way back to the ERP (not needed inside a frame).
+        . '<script>addEventListener("DOMContentLoaded",function(){if(window.top!==window)return;var d=document.createElement("div");d.className="fs-erp-back";'
+        . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);});</script>';
 }
 
 // The dashboard was written for claude.ai sharing; inside the ERP, access comes from Users and access.
@@ -70,6 +76,7 @@ function taj_wording(string $html): string
     return strtr($html, [
         'ask the report owner to raise your access in the Share menu.' => 'ask an ERP admin for View and upload access.',
         '>claude.ai account</th>' => '>ERP account</th>',
+        '"claude.ai account: "' => '"ERP account: "',
         '", on a claude.ai Editor account,"' => '", as an ERP admin,"',
         '" on a claude.ai Editor account"' => '" as an ERP admin"',
         '" and claude.ai Editor access"' => '" and View and upload access in the ERP"',
