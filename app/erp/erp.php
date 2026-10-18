@@ -537,14 +537,25 @@ function erp_dashboard_module(bool $raw, bool $post): void
         $html = file_get_contents($file);
         $skip = '<script>try{sessionStorage.setItem("taj-in",' . json_encode($me['name'], JSON_HEX_TAG | JSON_HEX_AMP) . ')}catch(e){}</script>';
         $pos = stripos($html, '</head>');
+        $html = $pos !== false ? substr_replace($html, $skip, $pos, 0) : $skip . $html;
+        if (isset($_GET['probe'])) {
+            // Quick check that PHP can read the file, without sending the whole page.
+            header('Content-Type: text/plain; charset=utf-8');
+            echo 'ok: ' . strlen($html) . ' bytes, gzip ' . (function_exists('gzencode') ? 'available' : 'missing');
+            return;
+        }
         header('X-Frame-Options: SAMEORIGIN', true);
         header('Cache-Control: private, no-store');
         header('Content-Type: text/html; charset=utf-8');
-        echo $pos !== false ? substr($html, 0, $pos) . $skip : $skip;
-        $html = $pos !== false ? substr($html, $pos) : $html;
-        for ($i = 0, $n = strlen($html); $i < $n; $i += 262144) {
-            echo substr($html, $i, 262144);
+        // Send it compressed (about 4x smaller): some hosts cut off large PHP responses.
+        if (function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
+            ini_set('zlib.output_compression', '0');
+            $html = gzencode($html, 6);
+            header('Content-Encoding: gzip');
+            header('Vary: Accept-Encoding');
         }
+        header('Content-Length: ' . strlen($html));
+        echo $html;
         return;
     }
 
