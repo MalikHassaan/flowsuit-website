@@ -2,6 +2,7 @@
 // Shared helpers used by the front controller and the views.
 
 $config = require __DIR__ . '/config.php';
+require_once __DIR__ . '/analytics.php';
 
 function config(string $key)
 {
@@ -18,6 +19,13 @@ function e(?string $value): string
 function url(string $path = '/'): string
 {
     return rtrim(config('base_url'), '/') . $path;
+}
+
+// wa.me link that opens WhatsApp with a ready-made first message, or null when no number is set.
+function whatsapp_url(?string $message = null): ?string
+{
+    $number = preg_replace('/\D/', '', (string) config('whatsapp_number'));
+    return $number === '' ? null : 'https://wa.me/' . $number . '?text=' . rawurlencode($message ?? (string) config('whatsapp_message'));
 }
 
 // All products from the registry, in file order.
@@ -63,6 +71,9 @@ function render(string $view, array $page, array $data = [], int $status = 200):
     require __DIR__ . '/views/' . $view . '.php';
     $content = ob_get_clean();
     require __DIR__ . '/views/layout.php';
+    if ($status === 200) {
+        stats_hit($page['path']);
+    }
 }
 
 // JSON-LD for a product (SoftwareApplication) or service (Service) page. Only real

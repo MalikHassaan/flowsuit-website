@@ -356,3 +356,13 @@ document.querySelectorAll('[data-video]').forEach(function (btn) {
     tr.classList.remove('is-flash', 'is-restock'); void tr.offsetWidth; tr.classList.add(cls);
   }, 2200);
 })();
+
+// Count clicks that usually mean a new lead (WhatsApp, email) for the ERP's Website visitors page.
+document.addEventListener('click', function (e) {
+  var el = e.target.closest && e.target.closest('a, button');
+  if (!el || !navigator.sendBeacon) return;
+  var href = el.getAttribute('href') || '';
+  var name = el.getAttribute('data-track') || (href.indexOf('mailto:') === 0 ? 'email' : href.indexOf('wa.me/') > -1 ? 'whatsapp' : '');
+  if (!name) return;
+  navigator.sendBeacon('/api/event', new Blob([JSON.stringify({ name: name, path: location.pathname })], { type: 'application/json' }));
+});

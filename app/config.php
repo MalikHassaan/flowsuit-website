@@ -10,6 +10,11 @@ return [
     'base_url'    => 'https://flowsuit.net',   // no trailing slash
     'contact_email' => 'customerservices@flowsuit.net',   // a cPanel forwarder sends it to the owner's inbox
 
+    // WhatsApp button on every page: the business number in international format, digits only
+    // (Pakistan 0300 1234567 becomes 923001234567). Leave empty to hide the button.
+    'whatsapp_number'  => '',
+    'whatsapp_message' => 'Hi FlowSuit, I would like to know more about digitizing my workbook.',
+
     // Website chat assistant. The API key is NOT here: it lives in ~/flowsuit-secrets.php
     // on the server (outside the repo). Without a key the chat answers from the FAQ only.
     'chat_model'          => 'claude-opus-5-5',

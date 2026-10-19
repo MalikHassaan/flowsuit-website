@@ -28,6 +28,8 @@ if (!config('indexable')) {
 if ($path === '/erp' || strpos($path, '/erp/') === 0) {
     // On Apache, public_html/erp/.htaccess handles these; this branch serves them locally.
     require __DIR__ . '/erp/index.php';
+} elseif ($path === '/api/event') {
+    stats_event_handle();
 } elseif ($path === '/api/chat') {
     require $appDir . '/chat.php';
     chat_handle();
@@ -108,6 +110,13 @@ if ($path === '/erp' || strpos($path, '/erp/') === 0) {
             breadcrumb_schema([['About', '/about']]),
         ],
     ]);
+} elseif ($path === '/case-studies') {
+    render('case-studies', [
+        'title'       => 'Case studies: ERP and recovery software in use | ' . config('site_name'),
+        'description' => 'How a real estate developer and a multi-company group moved from Excel exports and QuickBooks to FlowSuit ERP, with per-person access, locked vouchers and live reports.',
+        'path'        => '/case-studies',
+        'schema'      => [breadcrumb_schema([['Case studies', '/case-studies']])],
+    ]);
 } elseif ($path === '/guides') {
     render('guides', [
         'title'       => 'Guides: spreadsheets, inventory and accounting software | ' . config('site_name'),
@@ -139,6 +148,7 @@ if ($path === '/erp' || strpos($path, '/erp/') === 0) {
     $mod = fn(string ...$files): string => date('Y-m-d', max(array_map(fn($f) => @filemtime($appDir . '/' . $f) ?: 0, $files)));
     $paths = ['/' => $mod('views/home.php', 'data/products.json'), '/products' => $mod('views/catalog.php', 'data/products.json'),
         '/services' => $mod('views/catalog.php', 'data/products.json'), '/about' => $mod('views/about.php', 'config.php'),
+        '/case-studies' => $mod('views/case-studies.php'),
         '/guides' => $mod('views/guides.php', 'data/guides.json'), '/contact' => $mod('views/contact.php')];
     foreach (products() as $p) {
         $paths[product_path($p)] = $mod('views/product.php', 'data/products.json');

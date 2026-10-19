@@ -373,6 +373,9 @@ function erp_handle(string $path): void
         erp_backup_download();
     } elseif ($sub === '/backups') {
         erp_backups_page($post);
+    } elseif ($sub === '/analytics') {
+        $days = in_array((int) ($_GET['days'] ?? 30), [7, 30, 90, 365], true) ? (int) ($_GET['days'] ?? 30) : 30;
+        erp_render('analytics', ['me' => erp_require_admin(), 'days' => $days, 'r' => stats_report($days)]);
     } elseif ($sub === '/users') {
         erp_users_list();
     } elseif ($sub === '/users/new' || preg_match('#^/users/(\d+)$#', $sub, $m)) {
