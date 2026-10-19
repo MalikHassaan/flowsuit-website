@@ -12,7 +12,7 @@ return [
 
     // WhatsApp button on every page: the business number in international format, digits only
     // (Pakistan 0300 1234567 becomes 923001234567). Leave empty to hide the button.
-    'whatsapp_number'  => '',
+    'whatsapp_number'  => '923035074703',
     'whatsapp_message' => 'Hi FlowSuit, I would like to know more about digitizing my workbook.',
 
     // Website chat assistant. The API key is NOT here: it lives in ~/flowsuit-secrets.php
