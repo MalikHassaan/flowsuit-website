@@ -19,7 +19,7 @@ function erp_modules(): array
 {
     return [
         'receivables' => ['name' => 'TAJ Receivables', 'icon' => 'ledger', 'ready' => true, 'about' => 'TAJ Residencia receivable and recovery dashboards.'],
-        'hsec'        => ['name' => 'HSEC Finance', 'icon' => 'chart', 'ready' => true, 'about' => 'HSEC restructure finance ERP: vouchers, ledgers, payables, payroll and statements.', 'edit' => 'View and edit'],
+        'hsec'        => ['name' => 'HSEC ERP', 'icon' => 'chart', 'ready' => true, 'about' => 'HSEC restructure finance ERP: vouchers, ledgers, payables, payroll and statements.', 'edit' => 'View and edit'],
         'reports'     => ['name' => 'Reports',     'icon' => 'sheet',  'ready' => true,  'about' => 'Upload Excel or CSV reports and share them with your team.'],
         'inventory'   => ['name' => 'Inventory',   'icon' => 'boxes',  'ready' => false, 'about' => 'Stock levels, purchases and reorder alerts.'],
         'finance'     => ['name' => 'Finance',     'icon' => 'chart',  'ready' => false, 'about' => 'Expenses, payables and cash flow.'],
@@ -186,7 +186,7 @@ function erp_system(): string
 
 function erp_client_name(): string
 {
-    return erp_system() === 'hsec' ? 'HSEC' : ERP_CLIENT_NAME;
+    return erp_system() === 'hsec' ? 'HSEC PVT. LTD' : ERP_CLIENT_NAME;
 }
 
 function erp_access_for(int $userId): array
@@ -367,6 +367,8 @@ function erp_handle(string $path): void
         erp_account($post);
     } elseif ($sub === '/brand-logo') {
         erp_brand_logo();
+    } elseif ($sub === '/hsec-logo') {
+        hsec_logo();
     } elseif ($sub === '/backup') {
         erp_backup_download();
     } elseif ($sub === '/backups') {

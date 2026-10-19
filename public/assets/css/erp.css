@@ -248,3 +248,7 @@ select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-
 .qb-sum .is-ok b { color: #166534; } .qb-sum .is-bad b { color: #b91c1c; }
 .qb-map td { white-space: normal; } .qb-map select { min-width: 260px; padding: 7px 10px; }
 .qb-map tr.is-todo td:first-child { box-shadow: inset 3px 0 #f59e0b; }
+.system-crest.is-light { background: var(--white); border: 1px solid var(--line); }
+.auth-crest.is-hsec { padding: 10px; border-radius: 22px; background: var(--white); box-shadow: 0 10px 26px rgba(15, 23, 42, .18); }
+.auth-crest.is-hsec img { filter: none; }
+.auth-crest.is-hsec::after { display: none; }

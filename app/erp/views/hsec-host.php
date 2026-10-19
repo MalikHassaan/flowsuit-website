@@ -1,11 +1,11 @@
-<?php $title = 'HSEC Finance | FlowSuit ERP'; $active = 'hsec'; ?>
+<?php $title = 'HSEC ERP | FlowSuit ERP'; $active = 'hsec'; ?>
 <header class="page-top">
   <div>
-    <h1>HSEC Finance</h1>
-    <p class="muted"><?= $hasFile ? 'Finance ERP' . ($updated ? ' · file updated ' . e(date('j M Y', $updated)) : '') . ' · ' . number_format($counts['records']) . ' records, ' . number_format($counts['journals']) . ' vouchers' : 'The HSEC file has not been added yet.' ?></p>
+    <h1>HSEC ERP</h1>
+    <p class="muted"><?= $hasFile ? 'HSEC PVT. LTD' . ($updated ? ' · file updated ' . e(date('j M Y', $updated)) : '') . ' · ' . number_format($counts['records']) . ' records, ' . number_format($counts['journals']) . ' vouchers' : 'The HSEC file has not been added yet.' ?></p>
   </div>
 <?php if ($hasFile): ?>
-  <div class="page-actions"><a class="btn" href="/erp/m/hsec/app">Open HSEC Finance</a></div>
+  <div class="page-actions"><a class="btn" href="/erp/m/hsec/app">Open HSEC ERP</a></div>
 <?php endif; ?>
 </header>
 <?php foreach ($errors as $err): ?>

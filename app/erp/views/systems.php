@@ -9,8 +9,8 @@
     <span class="system-go"><?= icon('arrow') ?></span>
   </a>
   <a class="system-tile" href="/erp/login?to=hsec">
-    <span class="system-crest"><img src="/assets/logo/hsec-mark.svg" alt="" width="56" height="56"></span>
-    <span class="system-text"><small>HSEC Restructure</small><b>Finance ERP</b></span>
+    <span class="system-crest is-light"><img src="/erp/hsec-logo" alt="" width="56" height="56"></span>
+    <span class="system-text"><small>HSEC PVT. LTD</small><b>HSEC ERP</b></span>
     <span class="system-go"><?= icon('arrow') ?></span>
   </a>
   <p class="auth-foot">Want FlowSuit ERP for your business? <a href="/contact">Talk to us</a></p>

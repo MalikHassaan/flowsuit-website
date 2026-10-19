@@ -1,4 +1,4 @@
-<?php $title = 'Sign in | ' . erp_client_name() . ' ERP'; $authTitle = erp_system() === 'hsec' ? 'Finance ERP' : 'Receivable & Recovery ERP'; $authLead = 'Sign in with the e-mail and password from your admin.'; ?>
+<?php $title = 'Sign in | ' . erp_client_name() . ' ERP'; $authTitle = erp_system() === 'hsec' ? 'HSEC ERP' : 'Receivable & Recovery ERP'; $authLead = 'Sign in with the e-mail and password from your admin.'; ?>
 <div class="auth-card">
 <?php require __DIR__ . '/auth-brand.php'; ?>
 <?php if ($error): ?>
