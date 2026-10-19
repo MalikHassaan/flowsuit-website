@@ -30,8 +30,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="/assets/css/style.css?v=9">
-  <script src="/assets/js/main.js?v=8" defer></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=10">
+  <script src="/assets/js/main.js?v=9" defer></script>
 <?php foreach ($page['schema'] ?? [] as $schema): ?>
   <script type="application/ld+json"><?= json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?></script>
 <?php endforeach; ?>
@@ -47,7 +47,7 @@
         <a href="/guides">Guides</a>
         <a href="/about">About</a>
         <a href="/contact">Contact</a>
-        <a class="button button-small" href="/erp"><?= icon('lock') ?>ERP software</a>
+        <a class="button button-small" href="/erp" data-track="erp"><?= icon('lock') ?>ERP software</a>
       </nav>
     </div>
   </header>
@@ -77,6 +77,7 @@
       <div>
         <h4>Company</h4>
         <a href="/about">About FlowSuit</a>
+        <a href="/case-studies">Case studies</a>
         <a href="/guides">Guides</a>
         <a href="/contact">Contact</a>
         <a href="mailto:<?= e(config('contact_email')) ?>"><?= e(config('contact_email')) ?></a>
@@ -85,8 +86,11 @@
     <div class="wrap footer-bottom">&copy; <?= date('Y') ?> <?= e(config('site_name')) ?>. <a href="/sitemap.xml">Sitemap</a></div>
   </footer>
 
+<?php if ($wa = whatsapp_url()): ?>
+  <a class="wa-float" href="<?= e($wa) ?>" target="_blank" rel="noopener" data-track="whatsapp" aria-label="Chat with FlowSuit on WhatsApp"><?= icon('whatsapp') ?><span>WhatsApp us</span></a>
+<?php endif; ?>
   <div class="chat" data-chat>
-    <button class="chat-toggle" type="button" aria-expanded="false" aria-controls="chat-panel" data-chat-toggle>
+    <button class="chat-toggle" type="button" data-track="chat" aria-expanded="false" aria-controls="chat-panel" data-chat-toggle>
       <?= icon('chat') ?><span>Chat with us</span>
     </button>
     <section class="chat-panel" id="chat-panel" role="dialog" aria-label="FlowSuit assistant" hidden>
@@ -108,7 +112,7 @@
         <input id="chat-input" name="message" type="text" maxlength="1000" autocomplete="off" placeholder="Type your question..." required>
         <button type="submit" aria-label="Send"><?= icon('send') ?></button>
       </form>
-      <p class="chat-foot"><?= icon('mail') ?> Or email <a href="mailto:<?= e(config('contact_email')) ?>"><?= e(config('contact_email')) ?></a></p>
+      <p class="chat-foot"><?= icon('mail') ?> Or email <a href="mailto:<?= e(config('contact_email')) ?>" data-track="email"><?= e(config('contact_email')) ?></a><?php if (whatsapp_url()): ?> or <a href="<?= e(whatsapp_url()) ?>" target="_blank" rel="noopener" data-track="whatsapp">WhatsApp</a><?php endif; ?></p>
     </section>
   </div>
 </body>

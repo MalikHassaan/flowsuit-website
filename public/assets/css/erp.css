@@ -252,3 +252,19 @@ select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-
 .auth-crest.is-hsec { padding: 10px; border-radius: 22px; background: var(--white); box-shadow: 0 10px 26px rgba(15, 23, 42, .18); }
 .auth-crest.is-hsec img { filter: none; }
 .auth-crest.is-hsec::after { display: none; }
+
+/* Website visitors report */
+.range-pick select { width: auto; margin-left: 6px; }
+.bars { display: grid; grid-template-columns: repeat(var(--n), 1fr); align-items: end; gap: 2px; height: 180px; padding-top: 8px; border-bottom: 1px solid var(--line); }
+.bars i { display: block; height: var(--h); min-height: 2px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #0B8BD0, #1F6FB8); }
+.bars i:hover { background: #13304f; }
+.bars-axis { display: flex; justify-content: space-between; color: var(--muted); font-size: .8rem; margin-top: 6px; }
+.stats-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 18px; align-items: start; }
+.stats-grid .panel { margin-bottom: 0; }
+.share { position: relative; display: flex; justify-content: space-between; padding: 7px 10px; margin-bottom: 4px; border-radius: 8px; overflow: hidden; font-size: .9rem; }
+.share i { position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--soft); z-index: -1; }
+.share { z-index: 0; }
+.panel h2.mt { margin-top: 20px; }
+.panel .small { font-size: .82rem; margin: 10px 0 0; }
+table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr; } }

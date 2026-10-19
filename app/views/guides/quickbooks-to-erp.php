@@ -41,4 +41,4 @@
 <p>The Journal carries the accounting entries. It does not carry customer and supplier master details, open invoices with due dates, fixed asset registers or payroll setup. If you need those in the new system from day one, plan a separate import for each.</p>
 
 <h2>How FlowSuit does it</h2>
-<p>FlowSuit ERP imports the QuickBooks Journal report per company, shows a check page with totals and unbalanced items, remembers your account matches and posts each transaction as a locked voucher. <a href="/contact">Send us your QuickBooks export</a> for a free migration review, or read more about <a href="/products/erp">FlowSuit ERP</a>.</p>
+<p>FlowSuit ERP imports the QuickBooks Journal report per company, shows a check page with totals and unbalanced items, remembers your account matches and posts each transaction as a locked voucher. See the <a href="/case-studies#group-finance-erp">multi-company case study</a>, <a href="/contact">send us your QuickBooks export</a> for a free migration review, or read more about <a href="/products/erp">FlowSuit ERP</a>.</p>

@@ -36,7 +36,7 @@
   <li>Run both for a few days, then retire the sheet.</li>
 </ol>
 
-<div class="callout"><strong>Built for this:</strong> FlowSuit runs a live receivable and recovery ERP for a real estate developer, with receipts against dues, aging, installment counts, bank collections and a recovery desk, all behind per-person logins. <a href="/contact">Ask for a walkthrough</a>.</div>
+<div class="callout"><strong>Built for this:</strong> FlowSuit runs a live receivable and recovery ERP for a real estate developer, with receipts against dues, aging, installment counts, bank collections and a recovery desk, all behind per-person logins. <a href="/case-studies#real-estate-recovery">Read the case study</a> or <a href="/contact">ask for a walkthrough</a>.</div>
 
 <h2>Next steps</h2>
 <p>If your recovery team still works from a shared spreadsheet, start with a free review of your current files. We will show which reports can run automatically from the exports you already have. Read more about <a href="/products/erp">FlowSuit ERP</a> or our <a href="/services/workbook-digitization">workbook digitization service</a>.</p>
