@@ -192,7 +192,9 @@ function organization_schema(): array
         'email'       => config('contact_email'),
         'slogan'      => config('tagline'),
         'description' => config('mission'),
-        'knowsAbout'  => ['Inventory management software', 'Accounting software', 'ERP', 'Spreadsheet digitization', 'Google Apps Script', 'Mobile apps', 'SEO'],
+        'knowsAbout'  => ['ERP software', 'Inventory management software', 'Accounting software', 'QuickBooks migration', 'Receivables and recovery tracking', 'Spreadsheet digitization', 'Google Apps Script', 'Mobile apps', 'SEO'],
+        'areaServed'  => ['@type' => 'Country', 'name' => 'Pakistan'],
+        'contactPoint' => ['@type' => 'ContactPoint', 'contactType' => 'sales', 'email' => config('contact_email'), 'availableLanguage' => ['English', 'Urdu']],
     ];
 }
 

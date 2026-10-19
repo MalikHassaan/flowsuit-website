@@ -2,6 +2,33 @@
   "_comment": "Each guide gets a page at /guides/<slug> and a sitemap entry. The body lives in app/views/guides/<slug>.php. related: a product or service path to promote at the end.",
   "guides": [
     {
+      "slug": "erp-software-pakistan",
+      "title": "ERP software in Pakistan: a buyer's checklist for small and mid-sized businesses",
+      "description": "What to check before choosing ERP software in Pakistan: sales and withholding tax, PKR banking, multiple companies, user access, data migration from Excel or QuickBooks, and cost.",
+      "icon": "erp",
+      "published": "2026-10-19",
+      "read_minutes": 7,
+      "related": "/products/erp"
+    },
+    {
+      "slug": "quickbooks-to-erp",
+      "title": "Moving from QuickBooks to an ERP without losing your history",
+      "description": "A step-by-step guide to exporting the QuickBooks Journal report, matching accounts, checking totals and switching to an ERP with your full transaction history.",
+      "icon": "ledger",
+      "published": "2026-10-19",
+      "read_minutes": 6,
+      "related": "/products/erp"
+    },
+    {
+      "slug": "installment-recovery-tracking",
+      "title": "Installment and recovery tracking for real estate developers",
+      "description": "How housing projects and developers can replace installment spreadsheets with a recovery system: receipts against dues, overdue aging, bank collections and a recovery desk.",
+      "icon": "build",
+      "published": "2026-10-19",
+      "read_minutes": 5,
+      "related": "/products/erp"
+    },
+    {
       "slug": "excel-inventory-to-software",
       "title": "How to turn an Excel stock register into inventory software",
       "description": "A step-by-step plan for moving your stock spreadsheet into real inventory software without losing data or stopping sales.",
