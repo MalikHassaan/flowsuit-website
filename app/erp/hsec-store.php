@@ -330,7 +330,20 @@ function hsec_module(bool $raw, bool $post): void
 
     $errors = [];
     $action = $_POST['action'] ?? '';
-    if ($post && in_array($action, ['app', 'import'], true)) {
+    if ($post && in_array($action, ['clear', 'qb_check', 'qb_cancel', 'qb_import'], true)) {
+        if (!$me['is_admin']) {
+            erp_forbidden($module);
+        }
+        try {
+            $done = hsec_qb_action($me, $action);
+            if ($done !== null) {
+                erp_flash($done);
+            }
+            erp_redirect('/erp/m/hsec?manage=1' . ($action === 'qb_check' ? '#qb-check' : ''));
+        } catch (RuntimeException $ex) {
+            $errors[] = $ex->getMessage();
+        }
+    } elseif ($post && in_array($action, ['app', 'import'], true)) {
         if (!$me['is_admin']) {
             erp_forbidden($module);
         }
@@ -366,6 +379,10 @@ function hsec_module(bool $raw, bool $post): void
     if (!$post && is_file($file) && !isset($_GET['manage'])) {
         erp_redirect('/erp/m/hsec/app');
     }
+    $check = $me['is_admin'] ? hsec_qb_unstash() : null;
+    $posting = $check ? hsec_posting_accounts() : [];
     erp_render('hsec-host', ['me' => $me, 'module' => $module, 'hasFile' => is_file($file),
-        'updated' => is_file($file) ? filemtime($file) : null, 'counts' => hsec_counts(), 'errors' => $errors]);
+        'updated' => is_file($file) ? filemtime($file) : null, 'counts' => hsec_counts(), 'errors' => $errors,
+        'companies' => $me['is_admin'] ? hsec_companies() : [], 'check' => $check, 'posting' => $posting,
+        'suggest' => $check ? hsec_qb_suggest(array_keys($check['accounts']), $posting) : []]);
 }
