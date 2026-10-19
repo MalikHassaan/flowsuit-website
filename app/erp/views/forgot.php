@@ -1,4 +1,4 @@
-<?php $title = 'Forgot password | ' . erp_client_name() . ' ERP'; $authTitle = 'Forgot your password?'; $authLead = $done ? '' : 'Enter your e-mail and we will send you a link to choose a new one.'; ?>
+<?php $title = 'Forgot password | ' . erp_client_name() . ' ERP'; $authTitle = 'Forgot your password?'; $authLead = $done ? '' : 'Enter the e-mail you sign in with. We will send you a 6-digit code and a link to choose a new password.'; ?>
 <div class="auth-card">
 <?php require __DIR__ . '/auth-brand.php'; ?>
 <?php if ($error): ?>
@@ -6,7 +6,7 @@
 <?php endif; ?>
 <?php if ($done): ?>
   <div class="auth-done"><span class="auth-tick"><?= icon('check') ?></span>
-    <p>If <b><?= e($email) ?></b> has an account, a reset link is on its way. It works for <?= ERP_RESET_MINUTES ?> minutes. Check your spam folder too.</p>
+    <p>If <b><?= e($email) ?></b> has an account, a 6-digit code and a reset link are on their way. It works for <?= ERP_RESET_MINUTES ?> minutes. Check your spam folder too.</p>
     <p class="muted">No e-mail after a few minutes? Ask your admin to send you a link from Users and access.</p></div>
   <form method="post" class="form auth-form" data-busy>
     <?= erp_csrf_field() ?>
@@ -19,8 +19,9 @@
   <form method="post" class="form auth-form" data-busy>
     <?= erp_csrf_field() ?>
     <label>E-mail<input type="email" name="email" value="<?= e($email) ?>" autocomplete="username" required autofocus></label>
-    <button class="btn btn-gold" type="submit"><span>Send reset link</span></button>
+    <button class="btn btn-gold" type="submit"><span>Send me a code</span></button>
   </form>
+  <p class="muted small">Forgot which e-mail you use? Your user ID is the e-mail your admin added you with. Ask your admin, who can see it in Users and access.</p>
 <?php endif; ?>
   <p class="auth-foot"><a href="/erp/login">&larr; Back to sign in</a></p>
 </div>

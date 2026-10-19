@@ -17,6 +17,28 @@ function erp_auth_schema(PDO $db): void
     if (!in_array('must_change', $cols, true)) {
         $db->exec('ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0');
     }
+    if (!in_array('pw_changed_at', $cols, true)) {
+        $db->exec('ALTER TABLE users ADD COLUMN pw_changed_at TEXT');
+        $db->exec('ALTER TABLE users ADD COLUMN pw_how TEXT');
+    }
+    // Account history shown to admins in Users and access: invites, reset codes, password changes.
+    $db->exec('CREATE TABLE IF NOT EXISTS user_events (
+        id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        at TEXT NOT NULL, what TEXT NOT NULL, by_name TEXT)');
+}
+
+// Records one line of a user's account history. $byName is the admin who did it, if not the user.
+function erp_user_event(int $userId, string $what, ?string $byName = null): void
+{
+    erp_db()->prepare('INSERT INTO user_events (user_id, at, what, by_name) VALUES (?, ?, ?, ?)')
+        ->execute([$userId, erp_now(), $what, $byName]);
+}
+
+function erp_user_events(int $userId, int $limit = 20): array
+{
+    $st = erp_db()->prepare('SELECT * FROM user_events WHERE user_id = ? ORDER BY id DESC LIMIT ' . $limit);
+    $st->execute([$userId]);
+    return $st->fetchAll();
 }
 
 // Returns "selector.validator" for a link or cookie.
@@ -108,11 +130,14 @@ function erp_sign_in(array $row): void
     erp_db()->prepare('UPDATE users SET last_login = ? WHERE id = ?')->execute([erp_now(), $row['id']]);
 }
 
-function erp_set_password(int $userId, string $password, bool $mustChange = false): void
+// $how is a short note for Users and access, such as "Reset with e-mail code".
+function erp_set_password(int $userId, string $password, bool $mustChange = false, string $how = 'Changed', ?string $byName = null): void
 {
     $db = erp_db();
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $db->prepare('UPDATE users SET password_hash = ?, must_change = ? WHERE id = ?')->execute([$hash, (int) $mustChange, $userId]);
+    $db->prepare('UPDATE users SET password_hash = ?, must_change = ?, pw_changed_at = ?, pw_how = ? WHERE id = ?')
+        ->execute([$hash, (int) $mustChange, erp_now(), $how, $userId]);
+    erp_user_event($userId, 'Password: ' . lcfirst($how), $byName);
     if ((int) ($_SESSION['uid'] ?? 0) === $userId) {
         $_SESSION['pwv'] = hash('sha256', $hash); // keep the person who changed it signed in
     }
@@ -167,6 +192,9 @@ function erp_send_password_link(array $user, string $kind, bool $withCode = fals
         . ($invite ? '' : "If you did not ask for this, ignore this e-mail; your password stays the same.\r\n")
         . "\r\nFlowSuit ERP\r\n";
     $sent = erp_mail($user['email'], $invite ? 'Your FlowSuit ERP account' : 'Reset your FlowSuit ERP password', $body);
+    $what = ($invite ? 'Invite' : ($withCode ? 'Reset code and link' : 'Reset link')) . ($sent ? ' e-mailed to ' : ' could not be e-mailed to ') . $user['email'];
+    $admin = erp_user();
+    erp_user_event((int) $user['id'], $what, $admin && (int) $admin['id'] !== (int) $user['id'] ? $admin['name'] : null);
     return ['sent' => $sent, 'link' => $link];
 }
 
@@ -180,6 +208,7 @@ function erp_forgot(bool $post): void
     if ($post && ($_POST['action'] ?? '') === 'code') {
         $res = erp_otp_check('otp_reset', (string) ($_POST['code'] ?? ''));
         if (is_array($res) && $res['token'] !== '') {
+            $_SESSION['reset_by_code'] = true;
             erp_redirect('/erp/reset?t=' . $res['token']);
         }
         $error = is_array($res) ? 'That code is not right.' : $res;
@@ -215,7 +244,10 @@ function erp_reset(bool $post): void
         $errors = erp_password_errors($password, (string) ($_POST['confirm'] ?? ''));
         if (!$errors) {
             erp_sign_in($row);
-            erp_set_password((int) $row['id'], $password);
+            $how = $row['token_kind'] === 'invite' ? 'Chosen from invite link'
+                : (!empty($_SESSION['reset_by_code']) ? 'Reset with e-mail code' : 'Reset with e-mail link');
+            unset($_SESSION['reset_by_code']);
+            erp_set_password((int) $row['id'], $password, false, $how);
             erp_flash('Your new password is saved. Welcome, ' . strtok($row['name'], ' ') . '.');
             erp_redirect(erp_start_page(['must_change' => 0] + $row));
         }
@@ -235,7 +267,7 @@ function erp_account(bool $post): void
         }
         $errors = array_merge($errors, erp_password_errors($password, (string) ($_POST['confirm'] ?? '')));
         if (!$errors) {
-            erp_set_password((int) $me['id'], $password);
+            erp_set_password((int) $me['id'], $password, false, 'Changed by the user');
             if (!empty($_COOKIE[ERP_REMEMBER_COOKIE])) {
                 erp_remember_set((int) $me['id']); // keep this device remembered
             }
