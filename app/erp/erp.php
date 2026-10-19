@@ -612,11 +612,16 @@ function erp_user_form(?int $id, bool $post): void
                 $db->prepare('INSERT INTO users (name, email, password_hash, is_admin, active, created_at, must_change) VALUES (?, ?, ?, ?, ?, ?, ?)')
                     ->execute([$name, $email, $hash, $isAdmin, $active, erp_now(), $invite ? 0 : $mustChange]);
                 $id = (int) $db->lastInsertId();
+                erp_user_event($id, 'Account created', $me['name']);
+                if (!$invite) {
+                    $db->prepare('UPDATE users SET pw_changed_at = ?, pw_how = ? WHERE id = ?')->execute([erp_now(), 'Set by admin', $id]);
+                    erp_user_event($id, 'Password: set by admin', $me['name']);
+                }
             } else {
                 $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ? WHERE id = ?')
                     ->execute([$name, $email, $isAdmin, $active, $mustChange, $id]);
                 if ($password !== '') {
-                    erp_set_password($id, $password, (bool) $mustChange);
+                    erp_set_password($id, $password, (bool) $mustChange, 'Set by admin', $me['name']);
                 }
                 if (!$active) {
                     $db->prepare('DELETE FROM auth_tokens WHERE user_id = ?')->execute([$id]);
@@ -638,7 +643,8 @@ function erp_user_form(?int $id, bool $post): void
         }
         $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange];
     }
-    erp_render('user-form', ['me' => $me, 'target' => $target, 'isSelf' => $isSelf, 'errors' => $errors]);
+    erp_render('user-form', ['me' => $me, 'target' => $target, 'isSelf' => $isSelf, 'errors' => $errors,
+        'events' => $target['id'] ? erp_user_events((int) $target['id']) : []]);
 }
 
 // ---- TAJ receivables dashboard ----

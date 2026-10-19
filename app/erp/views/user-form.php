@@ -57,3 +57,21 @@
     <a href="/erp/users">Cancel</a>
   </div>
 </form>
+<?php if (!$isNew): ?>
+<section class="panel">
+  <h2>Account history</h2>
+  <p class="muted small">Invites, reset codes and password changes for <?= e($target['name']) ?>, newest first. Passwords themselves are never stored, only a scrambled check.</p>
+<?php if ($events): ?>
+  <table class="data">
+    <thead><tr><th>When</th><th>What happened</th><th>By</th></tr></thead>
+    <tbody>
+<?php foreach ($events as $ev): ?>
+      <tr><td class="small"><?= e(date('j M Y, g:i a', strtotime($ev['at']))) ?></td><td><?= e($ev['what']) ?></td><td class="muted small"><?= e($ev['by_name'] ?? $target['name']) ?></td></tr>
+<?php endforeach; ?>
+    </tbody>
+  </table>
+<?php else: ?>
+  <p class="muted">Nothing yet. From now on every invite, reset code and password change is listed here.</p>
+<?php endif; ?>
+</section>
+<?php endif; ?>
