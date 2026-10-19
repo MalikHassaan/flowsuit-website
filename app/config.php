@@ -21,4 +21,9 @@ return [
     'video_id'    => '',
 
     'indexable'   => true,
+
+    // Search engine ownership checks: paste only the code from the "HTML tag" option
+    // (Google Search Console / Bing Webmaster Tools), not the whole tag. Safe to be public.
+    'google_site_verification' => '',
+    'bing_site_verification'   => '',
 ];

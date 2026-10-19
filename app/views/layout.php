@@ -6,6 +6,12 @@
   <title><?= e($page['title']) ?></title>
   <meta name="description" content="<?= e($page['description']) ?>">
   <link rel="canonical" href="<?= e(url($page['path'])) ?>">
+<?php if (config('google_site_verification')): ?>
+  <meta name="google-site-verification" content="<?= e(config('google_site_verification')) ?>">
+<?php endif; ?>
+<?php if (config('bing_site_verification')): ?>
+  <meta name="msvalidate.01" content="<?= e(config('bing_site_verification')) ?>">
+<?php endif; ?>
 <?php if (!config('indexable')): ?>
   <meta name="robots" content="noindex, nofollow">
 <?php endif; ?>

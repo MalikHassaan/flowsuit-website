@@ -33,8 +33,8 @@ if ($path === '/erp' || strpos($path, '/erp/') === 0) {
     chat_handle();
 } elseif ($path === '/') {
     render('home', [
-        'title'       => config('site_name') . ' | Workbook, inventory and accounting digitization',
-        'description' => 'FlowSuit turns Excel workbooks, Google Sheets and paper registers into business software for inventory, finance and sales, plus Google Apps Script automation, mobile apps and SEO.',
+        'title'       => 'FlowSuit | ERP, inventory and accounting software in Pakistan',
+        'description' => 'FlowSuit turns Excel workbooks, Google Sheets and QuickBooks files into ERP software for inventory, accounts, receivables and sales in Pakistan, plus Google Apps Script automation, mobile apps and SEO.',
         'path'        => '/',
         'schema'      => [
             organization_schema(),
@@ -53,8 +53,8 @@ if ($path === '/erp' || strpos($path, '/erp/') === 0) {
     exit;
 } elseif ($path === '/products') {
     render('catalog', [
-        'title'       => 'Products: inventory, finance and store | ' . config('site_name'),
-        'description' => 'FlowSuit products replace your inventory, accounting and sales workbooks with shared, secure software.',
+        'title'       => 'ERP, inventory, accounting and POS software | ' . config('site_name'),
+        'description' => 'FlowSuit ERP, Inventory, Finance and Store replace your inventory, accounting and sales workbooks with shared, secure software for businesses in Pakistan.',
         'path'        => '/products',
         'schema'      => [breadcrumb_schema([['Products', '/products']])],
     ], [
@@ -64,7 +64,7 @@ if ($path === '/erp' || strpos($path, '/erp/') === 0) {
     ]);
 } elseif ($path === '/services') {
     render('catalog', [
-        'title'       => 'Services: workbook digitization, Apps Script, mobile apps, SEO | ' . config('site_name'),
+        'title'       => 'Excel to web app, Google Apps Script, mobile apps and SEO services | ' . config('site_name'),
         'description' => 'Done-for-you digitization: we turn workbooks into web apps, automate Google Sheets, build mobile apps and websites that rank.',
         'path'        => '/services',
         'schema'      => [breadcrumb_schema([['Services', '/services']])],
@@ -128,16 +128,20 @@ if ($path === '/erp' || strpos($path, '/erp/') === 0) {
     ], ['guide' => $guide]);
 } elseif ($path === '/contact') {
     render('contact', [
-        'title'       => 'Contact | ' . config('site_name'),
-        'description' => 'Get in touch with the FlowSuit team.',
+        'title'       => 'Contact FlowSuit: free workbook review and ERP quote',
+        'description' => 'Send FlowSuit your Excel workbook, Google Sheet or QuickBooks file for a free review and a fixed quote for ERP, inventory or accounting software.',
+        'schema'      => [breadcrumb_schema([['Contact', '/contact']])],
         'path'        => '/contact',
     ]);
 } elseif ($path === '/sitemap.xml') {
     header('Content-Type: application/xml; charset=utf-8');
     // path => last modified date (null when unknown)
-    $paths = ['/' => null, '/products' => null, '/services' => null, '/about' => null, '/guides' => null, '/contact' => null];
+    $mod = fn(string ...$files): string => date('Y-m-d', max(array_map(fn($f) => @filemtime($appDir . '/' . $f) ?: 0, $files)));
+    $paths = ['/' => $mod('views/home.php', 'data/products.json'), '/products' => $mod('views/catalog.php', 'data/products.json'),
+        '/services' => $mod('views/catalog.php', 'data/products.json'), '/about' => $mod('views/about.php', 'config.php'),
+        '/guides' => $mod('views/guides.php', 'data/guides.json'), '/contact' => $mod('views/contact.php')];
     foreach (products() as $p) {
-        $paths[product_path($p)] = null;
+        $paths[product_path($p)] = $mod('views/product.php', 'data/products.json');
     }
     foreach (guides() as $g) {
         $paths['/guides/' . $g['slug']] = $g['updated'] ?? $g['published'];
