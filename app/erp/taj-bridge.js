@@ -1,13 +1,13 @@
-// FlowSuit ERP bridge for the TAJ dashboard.
-// The dashboard was built to save through window.claude.use("db" | "assets" | "user" | "downloads").
+// FlowSuit ERP bridge for the dashboards built on claude.ai (TAJ Receivables, HSEC Finance).
+// Each was built to save through window.claude.use("db" | "assets" | "user" | "downloads").
 // This file provides those with the ERP server behind them, so uploads, follow-ups, history and
 // targets are saved once and seen by every ERP user with access. It is inlined by erp.php with
-// window.FS_TAJ = { api, csrf, uid, edit, name } set just before it.
+// window.FS_BRIDGE (or FS_TAJ) = { api, csrf, uid, edit, owner, assets, name } set just before it.
 (function () {
-  var C = window.FS_TAJ; if (!C) return;
+  var C = window.FS_BRIDGE || window.FS_TAJ; if (!C) return;
   var docs = {};          // "coll/id" -> data object
   var listeners = [];     // { kind: "doc"|"query", path|coll, order, dir, max, cb }
-  var version = 0, loaded = false, names = {}, synced = null, ended = false;
+  var version = 0, loaded = false, names = {}, members = null, synced = null, ended = false;
 
   function err(code, message) { var e = new Error(message || code); e.code = code; return e; }
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
@@ -52,6 +52,7 @@
     if (ended) return Promise.resolve();
     return api("GET", "/sync?v=" + version).then(function (j) {
       if (j.names) names = j.names;
+      if (j.members) members = j.members;
       var changed = [];
       (j.docs || []).forEach(function (d) {
         if (d.data === null) delete docs[d.path]; else docs[d.path] = d.data;
@@ -126,9 +127,18 @@
   var user = {
     id: function () { return Promise.resolve(C.uid); },
     canEdit: function () { return Promise.resolve(!!C.edit); },
-    me: function () { return Promise.resolve({ name: C.name }); },
+    me: function () { return Promise.resolve({ id: C.uid, name: C.name, isOwner: !!C.owner, canEdit: !!C.edit }); },
+    isOwner: function () { return !!C.owner; },
     profiles: function (ids) {
-      return ready().then(function () { var o = {}; ids.forEach(function (id) { if (names[id]) o[id] = { name: names[id] }; }); return o; });
+      return ready().then(function () { var o = {}; (ids || []).forEach(function (id) { if (names[id]) o[id] = { id: id, name: names[id] }; }); return o; });
+    },
+    // People with access to this module, for screens that pick users (HSEC Users & roles).
+    search: function (q) {
+      q = String(q || "").toLowerCase();
+      return ready().then(function () {
+        return (members || []).filter(function (m) { return !q || m.name.toLowerCase().indexOf(q) >= 0 || (m.email || "").toLowerCase().indexOf(q) >= 0; })
+          .slice(0, 20).map(function (m) { return { id: m.id, name: m.name }; });
+      });
     }
   };
 
@@ -141,7 +151,7 @@
     }
   };
 
-  var caps = { db: db, assets: C.edit ? assets : null, user: user, downloads: downloads };
+  var caps = { db: db, assets: C.edit && C.assets !== false ? assets : null, user: user, downloads: downloads };
   window.claude = {
     use: function (n) { return caps[n] ? ready().then(function () { return caps[n]; }) : Promise.reject(err("unavailable", n + " is not available")); }
   };

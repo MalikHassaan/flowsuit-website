@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/import.php';
 require_once __DIR__ . '/taj-store.php';
+require_once __DIR__ . '/hsec-store.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/auth.php';
 
@@ -17,6 +18,7 @@ function erp_modules(): array
 {
     return [
         'receivables' => ['name' => 'TAJ Receivables', 'icon' => 'ledger', 'ready' => true, 'about' => 'TAJ Residencia receivable and recovery dashboards.'],
+        'hsec'        => ['name' => 'HSEC Finance', 'icon' => 'chart', 'ready' => true, 'about' => 'HSEC restructure finance ERP: vouchers, ledgers, payables, payroll and statements.', 'edit' => 'View and edit'],
         'reports'     => ['name' => 'Reports',     'icon' => 'sheet',  'ready' => true,  'about' => 'Upload Excel or CSV reports and share them with your team.'],
         'inventory'   => ['name' => 'Inventory',   'icon' => 'boxes',  'ready' => false, 'about' => 'Stock levels, purchases and reorder alerts.'],
         'finance'     => ['name' => 'Finance',     'icon' => 'chart',  'ready' => false, 'about' => 'Expenses, payables and cash flow.'],
@@ -33,6 +35,12 @@ function erp_live_modules(): array
 const ERP_CLIENT_NAME = 'TAJ Residencia'; // shown on the sign-in screens
 
 const ERP_LEVELS = ['view' => 'View only', 'edit' => 'View and upload'];
+
+// What a level is called for one module (HSEC edits records rather than uploading files).
+function erp_level_label(string $module, string $level): string
+{
+    return $level === 'edit' ? (erp_modules()[$module]['edit'] ?? ERP_LEVELS['edit']) : (ERP_LEVELS[$level] ?? $level);
+}
 
 function erp_data_dir(): string
 {
@@ -151,14 +159,33 @@ function erp_user(): ?array
     return $user;
 }
 
-// Where someone lands after signing in: straight into the TAJ dashboard when they can open it.
+// Where someone lands after signing in: the system they picked on the "Choose your system" page
+// (TAJ unless they came from the HSEC tile), or the other one when that is all they can open.
 function erp_start_page(array $row): string
 {
     if (!empty($row['must_change'])) {
         return '/erp/account';
     }
-    $can = !empty($row['is_admin']) || isset(erp_access_for((int) $row['id'])['receivables']);
-    return $can ? '/erp/m/receivables' : '/erp';
+    $access = erp_access_for((int) $row['id']);
+    $can = fn(string $key): bool => !empty($row['is_admin']) || isset($access[$key]);
+    $order = ($_SESSION['system'] ?? '') === 'hsec' ? ['hsec', 'receivables'] : ['receivables', 'hsec'];
+    foreach ($order as $key) {
+        if ($can($key)) {
+            return '/erp/m/' . $key;
+        }
+    }
+    return '/erp';
+}
+
+// Which system's name and crest the sign-in screens show: set by the tile the person clicked.
+function erp_system(): string
+{
+    return ($_SESSION['system'] ?? '') === 'hsec' ? 'hsec' : 'taj';
+}
+
+function erp_client_name(): string
+{
+    return erp_system() === 'hsec' ? 'HSEC' : ERP_CLIENT_NAME;
 }
 
 function erp_access_for(int $userId): array
@@ -290,7 +317,7 @@ function erp_handle(string $path): void
     }
 
     $sub = substr($path, strlen('/erp')) ?: '/';
-    erp_start_session($sub !== '/m/receivables/api/sync');
+    erp_start_session($sub !== '/m/receivables/api/sync' && $sub !== '/m/hsec/api/sync');
     $post = $_SERVER['REQUEST_METHOD'] === 'POST';
     if ($post) {
         erp_check_csrf();
@@ -319,6 +346,10 @@ function erp_handle(string $path): void
         }
     } elseif (str_starts_with($sub, '/m/receivables/api/')) {
         taj_api(substr($sub, strlen('/m/receivables/api')));
+    } elseif (str_starts_with($sub, '/m/hsec/api/')) {
+        hsec_api(substr($sub, strlen('/m/hsec/api')));
+    } elseif ($sub === '/m/hsec' || $sub === '/m/hsec/app') {
+        hsec_module($sub === '/m/hsec/app', $post);
     } elseif ($sub === '/m/receivables' || $sub === '/m/receivables/dashboard') {
         erp_dashboard_module($sub === '/m/receivables/dashboard', $post);
     } elseif (preg_match('#^/m/([a-z]+)$#', $sub, $m) && isset(erp_modules()[$m[1]])) {
@@ -402,8 +433,11 @@ function erp_validate_user(string $name, string $email, string $password, bool $
 
 function erp_login(bool $post): void
 {
-    if (erp_user()) {
-        erp_redirect('/erp');
+    if (!$post) {
+        $_SESSION['system'] = ($_GET['to'] ?? '') === 'hsec' ? 'hsec' : 'taj';
+    }
+    if ($u = erp_user()) {
+        erp_redirect($u['must_change'] ? '/erp/account' : erp_start_page($u));
     }
     $error = null;
     $email = '';
