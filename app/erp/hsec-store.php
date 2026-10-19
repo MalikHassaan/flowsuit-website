@@ -31,6 +31,28 @@ function hsec_file(): string
     return erp_data_dir() . '/modules/hsec.html';
 }
 
+// The HSEC emblem for the sign-in screens, taken from the uploaded app file (it is not in the repository).
+function hsec_logo(): void
+{
+    $html = hsec_file();
+    $png = erp_data_dir() . '/hsec-logo.png';
+    if (is_file($html) && (!is_file($png) || filemtime($png) < filemtime($html))) {
+        $src = (string) file_get_contents($html);
+        if (preg_match('/HSEC_ICON\s*=\s*"data:image\/png;base64,([A-Za-z0-9+\/=]+)"/', $src, $m)) {
+            file_put_contents($png, base64_decode($m[1]));
+        }
+    }
+    if (!is_file($png)) {
+        header('Location: /assets/logo/hsec-mark.svg', true, 302);
+        exit;
+    }
+    header('Content-Type: image/png');
+    header('Cache-Control: public, max-age=3600');
+    header('Content-Length: ' . filesize($png));
+    readfile($png);
+    exit;
+}
+
 // Script placed before </head>: connects shared storage and adds the account menu to the app's top bar.
 function hsec_inject(array $me): string
 {
@@ -47,7 +69,10 @@ function hsec_inject(array $me): string
         . '<script>addEventListener("DOMContentLoaded",function(){var C=FS_BRIDGE,esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})};'
         . 'var m=document.createElement("div");m.className="fs-menu";m.hidden=true;m.setAttribute("role","menu");'
         . 'm.innerHTML="<p><b>"+esc(C.name)+"</b>Signed in to FlowSuit ERP</p><a href=\"/erp/account\">Change password</a><a href=\"/erp\">FlowSuit ERP home</a>"+(C.owner?"<a href=\"/erp/users\">Users and access</a><a href=\"/erp/m/hsec?manage=1\">Replace file or import a backup</a>":"")'
-        . '+"<form method=\"post\" action=\"/erp/logout\"><input type=\"hidden\" name=\"csrf\" value=\""+C.csrf+"\"><button type=\"submit\">Sign out</button></form>";document.body.appendChild(m);'
+        . '+"<button type=\"button\" data-fs-out>Sign out</button>";document.body.appendChild(m);'
+        // The app cancels every form submit on its page, so Sign out sends its own form directly.
+        . 'm.querySelector("[data-fs-out]").addEventListener("click",function(){var f=document.createElement("form");f.method="post";f.action="/erp/logout";'
+        . 'var i=document.createElement("input");i.type="hidden";i.name="csrf";i.value=C.csrf;f.appendChild(i);document.body.appendChild(f);HTMLFormElement.prototype.submit.call(f);});'
         // The app redraws its top bar, so the account button is put back whenever it goes missing.
         . 'function put(){var top=document.querySelector("#topbar");if(!top||top.querySelector(".fs-acct"))return;var s=document.createElement("span");s.className="fs-acct";'
         . 's.innerHTML="<button type=\"button\" aria-haspopup=\"true\" title=\"Account and sign out\"><i>"+esc(C.name.charAt(0).toUpperCase())+"</i>"+esc(C.name.split(" ")[0])+"</button>";top.appendChild(s);}'
@@ -72,7 +97,7 @@ function hsec_api(string $rest): void
         taj_fail(401, 'unauthenticated', 'Your ERP session has ended. Reload the page and sign in again');
     }
     if (!erp_can($me, 'hsec')) {
-        taj_fail(403, 'permission_denied', 'You do not have access to HSEC Finance');
+        taj_fail(403, 'permission_denied', 'You do not have access to HSEC ERP');
     }
     $method = $_SERVER['REQUEST_METHOD'];
     if ($rest === '/sync' && $method === 'GET') {
@@ -120,7 +145,7 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
         return 'Only an ERP admin can change the HSEC setup and its users and roles';
     }
     if (!erp_can($me, 'hsec', 'edit')) {
-        return 'Your ERP access to HSEC Finance is view only';
+        return 'Your ERP access to HSEC ERP is view only';
     }
     if ($coll === 'journals' && $old !== null && ($old['status'] ?? '') === 'Posted') {
         if ($new === null) {
@@ -330,7 +355,20 @@ function hsec_module(bool $raw, bool $post): void
 
     $errors = [];
     $action = $_POST['action'] ?? '';
-    if ($post && in_array($action, ['app', 'import'], true)) {
+    if ($post && in_array($action, ['clear', 'qb_check', 'qb_cancel', 'qb_import'], true)) {
+        if (!$me['is_admin']) {
+            erp_forbidden($module);
+        }
+        try {
+            $done = hsec_qb_action($me, $action);
+            if ($done !== null) {
+                erp_flash($done);
+            }
+            erp_redirect('/erp/m/hsec?manage=1' . ($action === 'qb_check' ? '#qb-check' : ''));
+        } catch (RuntimeException $ex) {
+            $errors[] = $ex->getMessage();
+        }
+    } elseif ($post && in_array($action, ['app', 'import'], true)) {
         if (!$me['is_admin']) {
             erp_forbidden($module);
         }
@@ -345,7 +383,7 @@ function hsec_module(bool $raw, bool $post): void
                 if ($action === 'app') {
                     $html = erp_dashboard_html($up['tmp_name'], (string) $up['name']);
                     if (stripos($html, 'HSEC') === false) {
-                        throw new RuntimeException('That does not look like the HSEC Finance ERP file.');
+                        throw new RuntimeException('That does not look like the HSEC ERP file.');
                     }
                     if (!is_dir(dirname($file))) {
                         mkdir(dirname($file), 0700, true);
@@ -366,6 +404,10 @@ function hsec_module(bool $raw, bool $post): void
     if (!$post && is_file($file) && !isset($_GET['manage'])) {
         erp_redirect('/erp/m/hsec/app');
     }
+    $check = $me['is_admin'] ? hsec_qb_unstash() : null;
+    $posting = $check ? hsec_posting_accounts() : [];
     erp_render('hsec-host', ['me' => $me, 'module' => $module, 'hasFile' => is_file($file),
-        'updated' => is_file($file) ? filemtime($file) : null, 'counts' => hsec_counts(), 'errors' => $errors]);
+        'updated' => is_file($file) ? filemtime($file) : null, 'counts' => hsec_counts(), 'errors' => $errors,
+        'companies' => $me['is_admin'] ? hsec_companies() : [], 'check' => $check, 'posting' => $posting,
+        'suggest' => $check ? hsec_qb_suggest(array_keys($check['accounts']), $posting) : []]);
 }

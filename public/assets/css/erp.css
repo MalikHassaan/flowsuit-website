@@ -238,3 +238,17 @@ table.data { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .system-text b { font-family: "Cormorant Garamond", Georgia, serif; font-size: 1.3rem; color: var(--navy); }
 .system-go { color: var(--gold-ink); font-size: 1.3rem; transition: transform .2s; }
 .system-tile:hover .system-go { transform: translateX(4px); }
+
+/* HSEC: QuickBooks import */
+select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; font-weight: 400; background: var(--white); }
+.btn-danger { background: #b91c1c; box-shadow: 0 8px 20px rgba(185, 28, 28, .25); }
+.qb-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.qb-sum span { display: grid; gap: 2px; padding: 12px 14px; border-radius: 10px; background: var(--soft); color: var(--muted); font-size: .8rem; }
+.qb-sum b { color: var(--ink); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.qb-sum .is-ok b { color: #166534; } .qb-sum .is-bad b { color: #b91c1c; }
+.qb-map td { white-space: normal; } .qb-map select { min-width: 260px; padding: 7px 10px; }
+.qb-map tr.is-todo td:first-child { box-shadow: inset 3px 0 #f59e0b; }
+.system-crest.is-light { background: var(--white); border: 1px solid var(--line); }
+.auth-crest.is-hsec { padding: 10px; border-radius: 22px; background: var(--white); box-shadow: 0 10px 26px rgba(15, 23, 42, .18); }
+.auth-crest.is-hsec img { filter: none; }
+.auth-crest.is-hsec::after { display: none; }

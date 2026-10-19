@@ -65,7 +65,7 @@ function erp_read_table(string $path, string $name): array
     return ['columns' => $columns, 'rows' => $rows];
 }
 
-function erp_read_csv(string $path): array
+function erp_read_csv(string $path, int $limit = ERP_MAX_ROWS + 50): array
 {
     $fh = fopen($path, 'r');
     if (!$fh) {
@@ -78,7 +78,7 @@ function erp_read_csv(string $path): array
     arsort($delims);
     $delim = array_key_first($delims);
     $grid = [];
-    while (($row = fgetcsv($fh, 0, $delim, '"', '')) !== false && count($grid) < ERP_MAX_ROWS + 50) {
+    while (($row = fgetcsv($fh, 0, $delim, '"', '')) !== false && count($grid) < $limit) {
         if (!$grid && isset($row[0])) {
             $row[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $row[0]);
         }
@@ -89,7 +89,7 @@ function erp_read_csv(string $path): array
 }
 
 // Minimal .xlsx reader: first worksheet, values only. Avoids pulling in a large library.
-function erp_read_xlsx(string $path): array
+function erp_read_xlsx(string $path, int $limit = ERP_MAX_ROWS + 50): array
 {
     if (!class_exists('ZipArchive')) {
         throw new RuntimeException('This server cannot read .xlsx files. Save the report as .csv and upload that.');
@@ -168,7 +168,7 @@ function erp_read_xlsx(string $path): array
             $max = max(array_keys($cells));
             $grid[] = array_replace(array_fill(0, $max + 1, ''), $cells);
         }
-        if (count($grid) >= ERP_MAX_ROWS + 50) {
+        if (count($grid) >= $limit) {
             break;
         }
     }
