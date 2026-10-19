@@ -20,7 +20,7 @@
           <td><b><?= e($u['name']) ?></b><br><span class="muted small"><?= e($u['email']) ?></span></td>
           <td><?= $u['is_admin'] ? '<span class="tag tag-ok">Admin</span>' : ($u['active'] ? 'Member' : '<span class="tag">Switched off</span>') ?></td>
 <?php foreach (array_keys(erp_live_modules()) as $key): $lvl = $u['is_admin'] ? 'edit' : ($u['access'][$key] ?? null); ?>
-          <td><span class="lvl lvl-<?= $lvl ?: 'none' ?>"><?= $lvl === 'edit' ? 'View + upload' : ($lvl === 'view' ? 'View' : 'No access') ?></span></td>
+          <td><span class="lvl lvl-<?= $lvl ?: 'none' ?>"><?= $lvl ? e(erp_level_label($key, $lvl)) : 'No access' ?></span></td>
 <?php endforeach; ?>
           <td class="muted small"><?= $u['last_login'] ? e(date('j M, g:i a', strtotime($u['last_login']))) : 'Never' ?></td>
           <td><a href="/erp/users/<?= (int) $u['id'] ?>">Edit</a></td>

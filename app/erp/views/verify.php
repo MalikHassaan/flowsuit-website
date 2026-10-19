@@ -1,4 +1,4 @@
-<?php $title = 'Enter your code | ' . ERP_CLIENT_NAME . ' ERP'; $authTitle = 'Check your e-mail'; $authLead = 'We sent a 6-digit code to ' . $email . '. It works for ' . ERP_OTP_MINUTES . ' minutes.'; ?>
+<?php $title = 'Enter your code | ' . erp_client_name() . ' ERP'; $authTitle = 'Check your e-mail'; $authLead = 'We sent a 6-digit code to ' . $email . '. It works for ' . ERP_OTP_MINUTES . ' minutes.'; ?>
 <div class="auth-card">
 <?php require __DIR__ . '/auth-brand.php'; ?>
 <?php if ($error): ?>

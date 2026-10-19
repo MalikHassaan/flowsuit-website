@@ -1,5 +1,5 @@
 <?php $invite = $row && $row['token_kind'] === 'invite';
-$title = 'Choose a password | ' . ERP_CLIENT_NAME . ' ERP';
+$title = 'Choose a password | ' . erp_client_name() . ' ERP';
 $authTitle = $row ? ($invite ? 'Welcome, ' . strtok($row['name'], ' ') : 'Choose a new password') : 'This link does not work';
 $authLead = $row ? ($invite ? 'Choose a password for ' . $row['email'] . ' to finish setting up your account.' : 'For ' . $row['email'] . '.') : 'It has expired or was already used. Ask for a new one.'; ?>
 <div class="auth-card">

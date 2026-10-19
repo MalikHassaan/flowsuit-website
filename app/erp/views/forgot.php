@@ -1,4 +1,4 @@
-<?php $title = 'Forgot password | ' . ERP_CLIENT_NAME . ' ERP'; $authTitle = 'Forgot your password?'; $authLead = $done ? '' : 'Enter your e-mail and we will send you a link to choose a new one.'; ?>
+<?php $title = 'Forgot password | ' . erp_client_name() . ' ERP'; $authTitle = 'Forgot your password?'; $authLead = $done ? '' : 'Enter your e-mail and we will send you a link to choose a new one.'; ?>
 <div class="auth-card">
 <?php require __DIR__ . '/auth-brand.php'; ?>
 <?php if ($error): ?>
