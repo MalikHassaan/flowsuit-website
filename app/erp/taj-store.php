@@ -78,7 +78,7 @@ function taj_inject(array $me): string
         . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);'
         // Clicking the name in the top bar opens a menu with Sign out (signs out of the whole ERP).
         . 'var m=document.createElement("div");m.className="fs-menu";m.hidden=true;m.setAttribute("role","menu");'
-        . 'm.innerHTML=\'<p><b>\'+FS_TAJ.name.replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})+\'</b>Signed in to FlowSuit ERP</p><a href="/erp/account">Change password</a><a href="/erp">FlowSuit ERP home</a>'
+        . 'm.innerHTML=\'<p><b>\'+FS_TAJ.name.replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})+\'</b>Signed in to FlowSuit ERP</p><a href="/erp/account">Change password</a>' . (erp_can($me, 'receivables', 'edit') ? '<a href="/erp/m/receivables?manage=1#saved">Delete saved reports</a>' : '') . '<a href="/erp">FlowSuit ERP home</a>'
         . '<form method="post" action="/erp/logout"><input type="hidden" name="csrf" value="\'+FS_TAJ.csrf+\'"><button type="submit">Sign out</button></form>\';'
         . 'm.querySelector("form").addEventListener("submit",function(){try{sessionStorage.removeItem("taj-in")}catch(e){}});document.body.appendChild(m);'
         . 'var chip=document.getElementById("uchip");if(!chip){chip=document.createElement("a");chip.href="#";chip.textContent="Sign out";d.appendChild(chip);}'
@@ -289,4 +289,97 @@ function taj_asset_send(string $id): void
     header('Content-Length: ' . strlen($gz));
     echo $gz;
     exit;
+}
+
+const TAJ_KIND_NAMES = ['bank' => 'Bank Collection', 'receipt' => 'Receipt vs Applied',
+    'installments' => 'No. of Installments', 'paid' => 'Paid Percentage'];
+
+function taj_doc(string $path): ?array
+{
+    $st = taj_db()->prepare('SELECT data FROM taj_docs WHERE path = ? AND data IS NOT NULL');
+    $st->execute([$path]);
+    $json = $st->fetchColumn();
+    return $json === false ? null : json_decode($json, true);
+}
+
+// Saved exports for the manage page, newest first, with who uploaded them and whether the dashboard uses them now.
+function taj_uploads_list(): array
+{
+    $current = taj_doc('state/current') ?? [];
+    $names = [];
+    foreach (erp_db()->query('SELECT id, name FROM users') as $u) {
+        $names['u' . $u['id']] = $u['name'];
+    }
+    $out = [];
+    foreach (taj_db()->query("SELECT path, data FROM taj_docs WHERE coll = 'uploads' AND data IS NOT NULL") as $row) {
+        $d = json_decode($row['data'], true) ?: [];
+        $id = substr($row['path'], strlen('uploads/'));
+        $kind = (string) ($d['kind'] ?? '');
+        $out[] = ['id' => $id, 'kind' => TAJ_KIND_NAMES[$kind] ?? ($kind ?: 'Unknown'), 'file' => (string) ($d['fileName'] ?? ''),
+            'rows' => (int) ($d['rows'] ?? 0), 'by' => $names[$d['by'] ?? ''] ?? 'Unknown',
+            'at' => (int) ($d['at'] ?? 0), 'inUse' => ($current[$kind] ?? null) === $id];
+    }
+    usort($out, fn($a, $b) => $b['at'] <=> $a['at']);
+    return $out;
+}
+
+// Deletes saved exports: the uploads record, its stored file, and the dashboard's pointer if it was in use.
+// Each dashboard drops them on its next sync. Returns how many were deleted.
+function taj_uploads_delete(array $me, array $ids): int
+{
+    $db = taj_db();
+    $done = [];
+    $db->exec('BEGIN IMMEDIATE');
+    try {
+        $v = (int) $db->query('SELECT COALESCE(MAX(ver), 0) FROM taj_docs')->fetchColumn();
+        $put = $db->prepare('UPDATE taj_docs SET data = ?, ver = ?, updated_by = ?, updated_at = ? WHERE path = ?');
+        $current = taj_doc('state/current');
+        foreach (array_unique($ids) as $id) {
+            $id = (string) $id;
+            $d = preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id) ? taj_doc('uploads/' . $id) : null;
+            if ($d === null) {
+                continue;
+            }
+            $put->execute([null, ++$v, $me['id'], erp_now(), 'uploads/' . $id]);
+            $kind = (string) ($d['kind'] ?? '');
+            if ($current !== null && ($current[$kind] ?? null) === $id) {
+                unset($current[$kind]);
+                $current['updatedBy'] = taj_uid($me);
+                $current['updatedAt'] = (int) (microtime(true) * 1000);
+                $put->execute([json_encode($current, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ++$v, $me['id'], erp_now(), 'state/current']);
+            }
+            $done[] = $d;
+        }
+        if ($done) {
+            // Same audit trail the dashboard keeps: one list of events per person.
+            $audit = taj_doc('audit/' . taj_uid($me)) ?? [];
+            $events = $audit['events'] ?? [];
+            foreach ($done as $d) {
+                $events[] = ['at' => (int) (microtime(true) * 1000), 'action' => 'Delete', 'user' => taj_username($me),
+                    'detail' => mb_substr((TAJ_KIND_NAMES[$d['kind'] ?? ''] ?? 'Export') . ': ' . ($d['fileName'] ?? '') . ' (' . (int) ($d['rows'] ?? 0) . ' rows)', 0, 300)];
+            }
+            $json = json_encode(['events' => array_slice($events, -1000), 'last' => (int) (microtime(true) * 1000)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $db->prepare('INSERT INTO taj_docs (path, coll, data, ver, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET data = excluded.data, ver = excluded.ver, updated_by = excluded.updated_by, updated_at = excluded.updated_at')
+                ->execute(['audit/' . taj_uid($me), 'audit', $json, ++$v, $me['id'], erp_now()]);
+        }
+        $db->exec('COMMIT');
+    } catch (Throwable $ex) {
+        if ($db->inTransaction()) {
+            $db->exec('ROLLBACK');
+        }
+        throw $ex;
+    }
+    // Remove stored files nothing points to any more.
+    $used = [];
+    foreach ($db->query("SELECT data FROM taj_docs WHERE coll = 'uploads' AND data IS NOT NULL") as $row) {
+        $used[(string) (json_decode($row['data'], true)['assetId'] ?? '')] = true;
+    }
+    foreach ($done as $d) {
+        $asset = (string) ($d['assetId'] ?? '');
+        if (preg_match('/^[a-f0-9]{32}$/', $asset) && !isset($used[$asset])) {
+            @unlink(taj_asset_dir() . '/' . $asset . '.json.gz');
+        }
+    }
+    return count($done);
 }

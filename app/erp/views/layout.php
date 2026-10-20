@@ -46,6 +46,6 @@
 <?php endif; ?>
 <?= $content ?>
   </main>
-  <script src="/assets/js/erp.js?v=2" defer></script>
+  <script src="/assets/js/erp.js?v=3" defer></script>
 </body>
 </html>

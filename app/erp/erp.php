@@ -721,12 +721,21 @@ function erp_dashboard_module(bool $raw, bool $post): void
             }
         }
     }
+    if ($post && ($_POST['action'] ?? '') === 'delete_uploads') {
+        if (!erp_can($me, 'receivables', 'edit')) {
+            erp_forbidden($module);
+        }
+        $n = taj_uploads_delete($me, (array) ($_POST['uploads'] ?? []));
+        erp_flash($n ? 'Deleted ' . $n . ' saved ' . ($n === 1 ? 'report' : 'reports') . '. Open dashboards update within a few seconds.' : 'Nothing was selected.');
+        erp_redirect('/erp/m/receivables?manage=1#saved');
+    }
     // The module opens full screen; admins reach this page with ?manage=1 to replace the file.
     if (!$post && is_file($file) && !isset($_GET['manage'])) {
         erp_redirect('/erp/m/receivables/dashboard');
     }
     erp_render('dashboard-host', ['me' => $me, 'module' => $module, 'hasFile' => is_file($file),
-        'updated' => is_file($file) ? filemtime($file) : null, 'errors' => $errors]);
+        'updated' => is_file($file) ? filemtime($file) : null, 'errors' => $errors,
+        'uploads' => erp_can($me, 'receivables', 'edit') ? taj_uploads_list() : null]);
 }
 
 // Accepts the .html itself or a .zip holding one .html file.
