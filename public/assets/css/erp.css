@@ -268,3 +268,6 @@ select { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-
 .panel .small { font-size: .82rem; margin: 10px 0 0; }
 table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .stats-grid { grid-template-columns: 1fr; } }
+.report-menu { display: grid; gap: 14px 24px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.report-menu fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; }
+.report-menu legend { font-weight: 700; margin-bottom: 4px; }

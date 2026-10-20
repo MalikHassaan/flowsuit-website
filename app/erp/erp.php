@@ -729,13 +729,24 @@ function erp_dashboard_module(bool $raw, bool $post): void
         erp_flash($n ? 'Deleted ' . $n . ' saved ' . ($n === 1 ? 'report' : 'reports') . '. Open dashboards update within a few seconds.' : 'Nothing was selected.');
         erp_redirect('/erp/m/receivables?manage=1#saved');
     }
+    if ($post && ($_POST['action'] ?? '') === 'report_menu') {
+        if (!$me['is_admin']) {
+            erp_forbidden($module);
+        }
+        $shown = (array) ($_POST['shown'] ?? []);
+        taj_hidden_set(array_diff(taj_report_ids(), $shown));
+        $n = count(taj_hidden());
+        erp_flash($n ? $n . ' ' . ($n === 1 ? 'report is' : 'reports are') . ' hidden from the dashboard menu.' : 'Every report is in the dashboard menu.');
+        erp_redirect('/erp/m/receivables?manage=1#reports');
+    }
     // The module opens full screen; admins reach this page with ?manage=1 to replace the file.
     if (!$post && is_file($file) && !isset($_GET['manage'])) {
         erp_redirect('/erp/m/receivables/dashboard');
     }
     erp_render('dashboard-host', ['me' => $me, 'module' => $module, 'hasFile' => is_file($file),
         'updated' => is_file($file) ? filemtime($file) : null, 'errors' => $errors,
-        'uploads' => erp_can($me, 'receivables', 'edit') ? taj_uploads_list() : null]);
+        'uploads' => erp_can($me, 'receivables', 'edit') ? taj_uploads_list() : null,
+        'hidden' => $me['is_admin'] ? taj_hidden() : null]);
 }
 
 // Accepts the .html itself or a .zip holding one .html file.

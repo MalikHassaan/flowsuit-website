@@ -8,6 +8,15 @@ const TAJ_COLLECTIONS = ['uploads', 'state', 'settings', 'history', 'desk', 'aud
 const TAJ_MAX_DOC = 2 * 1024 * 1024;     // bytes of JSON per document
 const TAJ_MAX_ASSET = 15 * 1024 * 1024;  // bytes per uploaded export, as sent
 const TAJ_MAX_JSON = 80 * 1024 * 1024;   // bytes per export once unzipped
+// Reports an admin can take out of the dashboard menu. Hidden for everyone; no data is deleted.
+const TAJ_REPORTS = [
+    'Receivables' => ['summary' => 'Summary', 'till' => 'Receivables Till', 'history' => 'Balance History', 'dormant' => 'Dormant / Active',
+        'overdue' => 'Overdue Instalments', 'plan' => 'Plan Completion', 'status' => 'By Sector Status', 'property' => 'By Property', 'file' => 'File Status'],
+    'Collections' => ['collection' => 'Collections', 'trend' => 'Year Trend', 'pace' => 'Collection Pace', 'targets' => 'Collection Targets', 'exceptions' => 'Exceptions'],
+    'Recovery' => ['desk' => 'Recovery Desk', 'lookup' => 'Customer Statement'],
+    'Sales' => ['sales' => 'Sales Trend'],
+    'Risk' => ['top' => 'Top Outstanding', 'agents' => 'Agent Performance', 'vintage' => 'Booking Year', 'plotsize' => 'Plot Size', 'possession' => 'Possession vs Dues'],
+];
 
 function taj_db(): PDO
 {
@@ -17,6 +26,37 @@ function taj_db(): PDO
         updated_by INTEGER, updated_at TEXT NOT NULL)');
     $db->exec('CREATE INDEX IF NOT EXISTS taj_docs_ver ON taj_docs (ver)');
     return $db;
+}
+
+function taj_report_ids(): array
+{
+    return array_merge(...array_map('array_keys', array_values(TAJ_REPORTS)));
+}
+
+function taj_hidden(): array
+{
+    $v = json_decode((string) erp_setting('taj_hidden'), true);
+    return is_array($v) ? array_values(array_intersect(taj_report_ids(), $v)) : [];
+}
+
+function taj_hidden_set(array $ids): void
+{
+    $ids = array_values(array_intersect(taj_report_ids(), $ids));
+    erp_setting_set('taj_hidden', $ids ? json_encode($ids) : null);
+}
+
+// POST /api/hide {id}: an admin takes one report out of the menu from inside the dashboard.
+function taj_hide(array $me): void
+{
+    if (!$me['is_admin']) {
+        taj_fail(403, 'permission_denied', 'Only an ERP admin can hide reports');
+    }
+    $id = (string) (json_decode((string) file_get_contents('php://input'))->id ?? '');
+    if (!in_array($id, taj_report_ids(), true)) {
+        taj_fail(400, 'invalid_argument', 'Unknown report');
+    }
+    taj_hidden_set(array_merge(taj_hidden(), [$id]));
+    taj_json(['ok' => true, 'hidden' => taj_hidden()]);
 }
 
 function taj_uid(array $user): string
@@ -56,14 +96,18 @@ function taj_inject(array $me): string
 {
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     $cfg = ['api' => '/erp/m/receivables/api', 'csrf' => $_SESSION['csrf'], 'uid' => taj_uid($me),
-        'edit' => erp_can($me, 'receivables', 'edit'), 'name' => $me['name']];
+        'edit' => erp_can($me, 'receivables', 'edit'), 'name' => $me['name'], 'admin' => (bool) $me['is_admin'], 'hidden' => taj_hidden()];
     return '<script>try{sessionStorage.setItem("taj-in",' . json_encode(taj_username($me), $flags) . ')}catch(e){}'
         . 'window.FS_TAJ=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
         // Presentation mode: chart cards fill their row, and the charts share the space left on the slide.
+        . '<style>.nav-i{position:relative}.fs-hide{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:none;width:20px;height:20px;border-radius:50%;'
+        . 'line-height:19px;text-align:center;font:600 15px system-ui,sans-serif;color:#b91c1c;background:#fff;box-shadow:0 1px 4px rgba(15,23,42,.25);cursor:pointer}'
+        . '.nav-i:hover .fs-hide,.nav-i:focus-within .fs-hide{display:block}.fs-hide:hover{background:#b91c1c;color:#fff}body.navmin .fs-hide{display:none!important}</style>'
         . '<style>body.present .card:has(>.chart){display:flex;flex-direction:column}body.present .card>.chart{flex:1 1 auto}</style>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-present.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-targets.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/taj-hide.js') . '</script>'
         // Sign-out and user management happen in the ERP itself.
         . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
         . '#uchip{cursor:pointer}.fs-menu{position:fixed;z-index:10000;min-width:220px;padding:6px;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(15,23,42,.25);border:1px solid #e2e8f0;font:500 14px system-ui,sans-serif}'
@@ -82,7 +126,7 @@ function taj_inject(array $me): string
         . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);'
         // Clicking the name in the top bar opens a menu with Sign out (signs out of the whole ERP).
         . 'var m=document.createElement("div");m.className="fs-menu";m.hidden=true;m.setAttribute("role","menu");'
-        . 'm.innerHTML=\'<p><b>\'+FS_TAJ.name.replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})+\'</b>Signed in to FlowSuit ERP</p><a href="/erp/account">Change password</a>' . (erp_can($me, 'receivables', 'edit') ? '<a href="/erp/m/receivables?manage=1#saved">Delete saved reports</a>' : '') . '<a href="/erp">FlowSuit ERP home</a>'
+        . 'm.innerHTML=\'<p><b>\'+FS_TAJ.name.replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})+\'</b>Signed in to FlowSuit ERP</p><a href="/erp/account">Change password</a>' . (erp_can($me, 'receivables', 'edit') ? '<a href="/erp/m/receivables?manage=1#saved">Delete saved reports</a>' : '') . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1#reports">Hidden reports</a>' : '') . '<a href="/erp">FlowSuit ERP home</a>'
         . '<form method="post" action="/erp/logout"><input type="hidden" name="csrf" value="\'+FS_TAJ.csrf+\'"><button type="submit">Sign out</button></form>\';'
         . 'm.querySelector("form").addEventListener("submit",function(){try{sessionStorage.removeItem("taj-in")}catch(e){}});document.body.appendChild(m);'
         . 'var chip=document.getElementById("uchip");if(!chip){chip=document.createElement("a");chip.href="#";chip.textContent="Sign out";d.appendChild(chip);}'
@@ -94,9 +138,29 @@ function taj_inject(array $me): string
         . '});</script>';
 }
 
+// Hidden reports (taj-hide.js): wraps the dashboard's menu, page and PDF lists so hidden reports drop out of the
+// menu, All reports, the PDF and the slideshow. Each pair is changed only when both ends are found exactly once,
+// so a different version of the file is left as it is instead of being broken.
+function taj_hide_hooks(string $html): string
+{
+    $pairs = [
+        ['var MODULES = [', 'var MODULES = FS_MODS([', '["admin", "Administration", "Administration", ["users"]]];', '["admin", "Administration", "Administration", ["users"]]]);'],
+        ['var PAGES = [', 'var PAGES = FS_KEEP([', '"TAJ Residencia - Exceptions as at"]];', '"TAJ Residencia - Exceptions as at"]]);'],
+        ['var PDF_ORDER = [', 'var PDF_ORDER = FS_KEEP([', '"pace", "exceptions"];', '"pace", "exceptions"]);'],
+    ];
+    foreach ($pairs as [$open, $newOpen, $close, $newClose]) {
+        if (substr_count($html, $open) === 1 && substr_count($html, $close) === 1 && strpos($html, $open) < strpos($html, $close)) {
+            $html = str_replace([$open, $close], [$newOpen, $newClose], $html);
+        }
+    }
+    // Look-ups by id still find a hidden page, so links to it do not break.
+    return str_replace('function P(id) { return PAGES.find(', 'function P(id) { return (window.FS_ALLPAGES || PAGES).find(', $html);
+}
+
 // The dashboard was written for claude.ai sharing; inside the ERP, access comes from Users and access.
 function taj_wording(string $html): string
 {
+    $html = taj_hide_hooks($html);
     return strtr($html, [
         'ask the report owner to raise your access in the Share menu.' => 'ask an ERP admin for View and upload access.',
         '>claude.ai account</th>' => '>ERP account</th>',
@@ -143,6 +207,8 @@ function taj_api(string $rest): void
         taj_sync($me, max(0, (int) ($_GET['v'] ?? 0)));
     } elseif ($rest === '/doc' && $method === 'POST') {
         taj_write($me);
+    } elseif ($rest === '/hide' && $method === 'POST') {
+        taj_hide($me);
     } elseif ($rest === '/asset' && $method === 'POST') {
         taj_asset_upload($me);
     } elseif (preg_match('#^/blob/([a-f0-9]{32})$#', $rest, $m) && $method === 'GET') {

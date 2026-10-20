@@ -58,6 +58,26 @@
 <?php endif; ?>
 </form>
 <?php endif; ?>
+<?php if ($hidden !== null && $hasFile): ?>
+<form id="reports" class="panel" method="post">
+  <?= erp_csrf_field() ?>
+  <input type="hidden" name="action" value="report_menu">
+  <div class="table-head">
+    <div><h2>Reports in the menu</h2><p class="muted">Untick a report to take it out of the dashboard for everyone: the menu, All reports, the PDF and the slideshow. No data is deleted, so you can tick it again at any time. Admins can also hide a report with the &times; next to it in the dashboard menu.</p></div>
+    <button class="btn" type="submit">Save menu</button>
+  </div>
+  <div class="report-menu">
+<?php foreach (TAJ_REPORTS as $group => $reports): ?>
+    <fieldset>
+      <legend><?= e($group) ?></legend>
+<?php foreach ($reports as $id => $name): ?>
+      <label class="check"><input type="checkbox" name="shown[]" value="<?= e($id) ?>"<?= in_array($id, $hidden, true) ? '' : ' checked' ?>> <?= e($name) ?><?= in_array($id, $hidden, true) ? ' <span class="tag">Hidden</span>' : '' ?></label>
+<?php endforeach; ?>
+    </fieldset>
+<?php endforeach; ?>
+  </div>
+</form>
+<?php endif; ?>
 <?php if ($hasFile): ?>
 <div class="frame-wrap"><iframe src="/erp/m/receivables/dashboard" title="TAJ receivables dashboard" loading="eager"></iframe></div>
 <?php elseif (!$me['is_admin']): ?>
