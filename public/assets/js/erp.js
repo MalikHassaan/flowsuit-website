@@ -22,6 +22,12 @@
     form.addEventListener('submit', function (e) { if (!confirm(form.getAttribute('data-confirm'))) e.preventDefault(); });
   });
 
+  // "Select all" box in a table header.
+  document.querySelectorAll('[data-check-all]').forEach(function (all) {
+    var boxes = all.closest('table').querySelectorAll('tbody input[type=checkbox]');
+    all.addEventListener('change', function () { boxes.forEach(function (b) { b.checked = all.checked; }); });
+  });
+
   // Search box that filters table rows.
   document.querySelectorAll('[data-filter]').forEach(function (input) {
     var table = document.querySelector(input.getAttribute('data-filter'));
