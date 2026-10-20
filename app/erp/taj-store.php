@@ -60,6 +60,9 @@ function taj_inject(array $me): string
     return '<script>try{sessionStorage.setItem("taj-in",' . json_encode(taj_username($me), $flags) . ')}catch(e){}'
         . 'window.FS_TAJ=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
+        // Presentation mode: chart cards fill their row, and the charts share the space left on the slide.
+        . '<style>body.present .card:has(>.chart){display:flex;flex-direction:column}body.present .card>.chart{flex:1 1 auto}</style>'
+        . '<script>' . file_get_contents(__DIR__ . '/taj-present.js') . '</script>'
         // Sign-out and user management happen in the ERP itself.
         . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
         . '#uchip{cursor:pointer}.fs-menu{position:fixed;z-index:10000;min-width:220px;padding:6px;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(15,23,42,.25);border:1px solid #e2e8f0;font:500 14px system-ui,sans-serif}'
