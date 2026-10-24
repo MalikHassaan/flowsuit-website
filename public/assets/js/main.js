@@ -434,3 +434,119 @@ document.addEventListener('click', function (e) {
     }, 2200);
   }, 1500);
 })();
+
+// Slideshow pictures look live too: stock goes down with sales and up with deliveries, invoices get paid
+// and new ones arrive, and the till rings up items and takes payment. Each runs only while it is on screen.
+(function () {
+  var mocks = Array.prototype.slice.call(document.querySelectorAll('.slide-visual .mock-app'));
+  if (!mocks.length) return;
+  var onScreen = new Set();
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target); });
+    }, { threshold: 0.4 });
+    mocks.forEach(function (m) { io.observe(m); });
+  } else {
+    mocks.forEach(function (m) { onScreen.add(m); });
+  }
+  function fmt(n) { return n.toLocaleString('en-US'); }
+  function num(el) { return parseInt(el.textContent.replace(/[^\d]/g, ''), 10) || 0; }
+  function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+  function flash(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function setPill(pill, ok, okText, lowText) {
+    pill.className = 'pill ' + (ok ? 'pill-ok' : 'pill-low');
+    pill.textContent = ok ? okText : lowText;
+  }
+
+  function inventory(m) {
+    var rows = Array.prototype.filter.call(m.querySelectorAll('tr'), function (r) { return !r.querySelector('th'); });
+    if (!rows.length) return;
+    var row = pick(rows), cells = row.cells, qty = num(cells[1]);
+    var delivery = qty < 15 || Math.random() < 0.15;
+    qty = delivery ? qty + 40 + Math.floor(Math.random() * 30) : Math.max(0, qty - 1 - Math.floor(Math.random() * 4));
+    cells[1].textContent = qty;
+    var pill = cells[2].querySelector('.pill');
+    if (pill) setPill(pill, qty >= 20, 'OK', 'Reorder');
+    flash(row, delivery ? 'is-restock' : 'is-flash');
+  }
+
+  var invNo = 1046;
+  function finance(m) {
+    var donut = m.querySelector('.donut'), ul = m.querySelector('ul');
+    if (!donut || !ul) return;
+    var p = parseInt(donut.style.getPropertyValue('--p'), 10) || 72;
+    var due = Array.prototype.filter.call(ul.children, function (li) { return li.querySelector('.pill-low'); });
+    var li;
+    if (due.length > 1 || (due.length && Math.random() < 0.5)) {
+      li = due[0];
+      setPill(li.querySelector('.pill'), true, 'Paid', 'Due');
+      p = Math.min(96, p + 5 + Math.floor(Math.random() * 5));
+    } else {
+      li = document.createElement('li');
+      invNo++;
+      li.innerHTML = '<span>INV-' + invNo + '</span><b>' + fmt(15000 + Math.floor(Math.random() * 170) * 1000) + '</b><span class="pill pill-low">Due</span>';
+      ul.appendChild(li);
+      if (ul.children.length > 4) ul.removeChild(ul.firstElementChild);
+      p = Math.max(55, p - 6);
+    }
+    donut.style.setProperty('--p', p);
+    donut.querySelector('b').textContent = p + '%';
+    flash(li, 'is-flash');
+  }
+
+  var prices = { Tea: [990, 'Tea 950g'], Rice: [3450, 'Rice 10kg'], Oil: [2900, 'Oil 5L'], Sugar: [160, 'Sugar 1kg'], Flour: [2400, 'Flour 20kg'], Soap: [120, 'Soap'] };
+  var taps = 0;
+  function store(m) {
+    var cart = m.querySelector('.pos-cart'), total = m.querySelector('.pos-total'), pay = m.querySelector('.pos-pay');
+    if (!cart || !total || !pay) return;
+    if (pay.classList.contains('is-paid')) {   // start the next customer
+      Array.prototype.slice.call(cart.querySelectorAll('p:not(.pos-total)')).forEach(function (p) { p.remove(); });
+      total.querySelector('b').textContent = '0';
+      pay.classList.remove('is-paid'); pay.textContent = 'Pay';
+      taps = 0;
+      return;
+    }
+    if (taps >= 5) {
+      pay.classList.add('is-paid'); pay.textContent = 'Paid ✓  Receipt printed';
+      return;
+    }
+    taps++;
+    var tile = pick(m.querySelectorAll('.pos-items i')), item = prices[tile.textContent.trim()];
+    if (!item) return;
+    flash(tile, 'is-tap');
+    var line = Array.prototype.find.call(cart.querySelectorAll('p:not(.pos-total)'), function (p) { return p.getAttribute('data-item') === item[1]; });
+    if (!line) {
+      var lines = cart.querySelectorAll('p:not(.pos-total)');
+      if (lines.length >= 4) lines[0].remove();
+      line = document.createElement('p');
+      line.setAttribute('data-item', item[1]);
+      line.setAttribute('data-qty', '0');
+      line.innerHTML = '<span></span><b></b>';
+      cart.insertBefore(line, total);
+    }
+    var q = (parseInt(line.getAttribute('data-qty'), 10) || 0) + 1;
+    line.setAttribute('data-qty', q);
+    line.querySelector('span').textContent = item[1] + (q > 1 ? ' x' + q : '');
+    line.querySelector('b').textContent = fmt(item[0] * q);
+    flash(line, 'is-flash');
+    var sum = 0;
+    cart.querySelectorAll('p:not(.pos-total) b').forEach(function (b) { sum += num(b); });
+    total.querySelector('b').textContent = fmt(sum);
+  }
+
+  // The first picture's cart lines carry no item names yet; tag them so repeat taps add to the same line.
+  document.querySelectorAll('.pos-cart p:not(.pos-total)').forEach(function (p) {
+    var t = p.querySelector('span').textContent, m = t.match(/ x(\d+)$/);
+    p.setAttribute('data-item', t.replace(/ x\d+$/, ''));
+    p.setAttribute('data-qty', m ? m[1] : '1');
+  });
+
+  setInterval(function () {
+    if (document.hidden) return;
+    onScreen.forEach(function (m) {
+      if (m.classList.contains('mock-pos')) store(m);
+      else if (m.classList.contains('mock-fin')) finance(m);
+      else if (m.querySelector('table')) inventory(m);
+    });
+  }, 1600);
+})();

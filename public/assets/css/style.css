@@ -857,3 +857,17 @@ main > section:not(:first-child) { content-visibility: auto; contain-intrinsic-s
 .dash-kpis b.is-up { color: #16a34a; animation: tick-up .6s ease; }
 @keyframes tick-up { 0% { transform: translateY(6px); opacity: .4; } 100% { transform: none; opacity: 1; } }
 .dash-nav i { transition: background .4s; }
+
+/* ---- Slideshow pictures look live (main.js): rows and invoices flash as they change, the till's tiles
+   press in, the donut turns smoothly and the Pay button confirms the sale. ---- */
+@property --p { syntax: "<number>"; inherits: false; initial-value: 0; }
+.mock-fin .donut { transition: --p .9s cubic-bezier(.2,.8,.2,1); }
+.mock-fin li.is-flash { animation: row-flash 1.2s ease; border-radius: 6px; }
+.mock-app td { transition: color .3s; }
+.pos-items i { transition: transform .15s; }
+.pos-items i.is-tap { animation: tile-tap .45s ease; }
+@keyframes tile-tap { 0% { transform: scale(1); } 35% { transform: scale(.88); box-shadow: 0 0 0 4px rgba(11, 139, 208, .35); } 100% { transform: scale(1); } }
+.pos-cart { min-height: 190px; }
+.pos-cart p.is-flash { animation: row-flash 1.2s ease; }
+.pos-pay { transition: background .3s; }
+.pos-pay.is-paid { background: #16a34a; animation: tick-up .5s ease; }
