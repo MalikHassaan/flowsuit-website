@@ -36,6 +36,9 @@ function erp_live_modules(): array
 
 const ERP_CLIENT_NAME = 'TAJ Residencia'; // shown on the sign-in screens
 
+// The systems a person can land on after signing in, in the order tried when none is picked for them.
+const ERP_SYSTEMS = ['receivables' => 'TAJ Residencia: Receivable & Recovery ERP', 'hsec' => 'HSEC PVT. LTD: HSEC ERP'];
+
 const ERP_LEVELS = ['view' => 'View only', 'edit' => 'View and upload'];
 
 // What a level is called for one module (HSEC edits records rather than uploading files).
@@ -79,6 +82,10 @@ function erp_db(): PDO
     $db->exec('CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT NOT NULL, at INTEGER NOT NULL)');
     if (!in_array('email', array_column($db->query('PRAGMA table_info(login_attempts)')->fetchAll(), 'name'), true)) {
         $db->exec('ALTER TABLE login_attempts ADD COLUMN email TEXT');
+    }
+    // The system a user opens straight after signing in (empty: the first one they can open).
+    if (!in_array('home', array_column($db->query('PRAGMA table_info(users)')->fetchAll(), 'name'), true)) {
+        $db->exec("ALTER TABLE users ADD COLUMN home TEXT NOT NULL DEFAULT ''");
     }
     erp_auth_schema($db);
     return $db;
@@ -164,8 +171,8 @@ function erp_user(): ?array
     return $user;
 }
 
-// Where someone lands after signing in: the system they picked on the "Choose your system" page
-// (TAJ unless they came from the HSEC tile), or the other one when that is all they can open.
+// Where someone lands after signing in: the system the admin set for them under Users ("Opens after
+// sign-in"), else the system of an old HSEC sign-in link, else the first system they can open.
 function erp_start_page(array $row): string
 {
     if (!empty($row['must_change'])) {
@@ -173,7 +180,14 @@ function erp_start_page(array $row): string
     }
     $access = erp_access_for((int) $row['id']);
     $can = fn(string $key): bool => !empty($row['is_admin']) || isset($access[$key]);
-    $order = ($_SESSION['system'] ?? '') === 'hsec' ? ['hsec', 'receivables'] : ['receivables', 'hsec'];
+    $order = array_keys(ERP_SYSTEMS);
+    $first = $row['home'] ?? '';
+    if ($first === '' && ($_SESSION['system'] ?? '') === 'hsec') {
+        $first = 'hsec';
+    }
+    if (isset(ERP_SYSTEMS[$first])) {
+        $order = array_unique(array_merge([$first], $order));
+    }
     foreach ($order as $key) {
         if ($can($key)) {
             return '/erp/m/' . $key;
@@ -182,15 +196,17 @@ function erp_start_page(array $row): string
     return '/erp';
 }
 
-// Which system's name and crest the sign-in screens show: set by the tile the person clicked.
+// Which name and crest the sign-in screens show: FlowSuit's own, unless an old system link
+// (/erp/login?to=hsec or ?to=taj) asked for a client's.
 function erp_system(): string
 {
-    return ($_SESSION['system'] ?? '') === 'hsec' ? 'hsec' : 'taj';
+    $s = $_SESSION['system'] ?? '';
+    return in_array($s, ['hsec', 'taj'], true) ? $s : 'flowsuit';
 }
 
 function erp_client_name(): string
 {
-    return erp_system() === 'hsec' ? 'HSEC PVT. LTD' : ERP_CLIENT_NAME;
+    return ['hsec' => 'HSEC PVT. LTD', 'taj' => ERP_CLIENT_NAME][erp_system()] ?? 'FlowSuit';
 }
 
 function erp_access_for(int $userId): array
@@ -359,9 +375,9 @@ function erp_handle(string $path): void
         session_regenerate_id(true);
         erp_redirect('/erp');
     } elseif ($sub === '/') {
-        // Signed out: the list of systems; each one leads to its own sign-in screen.
+        // Signed out: one sign-in screen for every system; the account decides where it lands.
         if (!erp_user()) {
-            erp_render('systems');
+            erp_login($post);
         } else {
             erp_render('dashboard', ['me' => erp_require_user()]);
         }
@@ -460,7 +476,8 @@ function erp_validate_user(string $name, string $email, string $password, bool $
 function erp_login(bool $post): void
 {
     if (!$post) {
-        $_SESSION['system'] = ($_GET['to'] ?? '') === 'hsec' ? 'hsec' : 'taj';
+        $to = (string) ($_GET['to'] ?? '');
+        $_SESSION['system'] = in_array($to, ['hsec', 'taj'], true) ? $to : '';
     }
     if ($u = erp_user()) {
         erp_redirect($u['must_change'] ? '/erp/account' : erp_start_page($u));
@@ -589,7 +606,7 @@ function erp_user_form(?int $id, bool $post): void
 {
     $me = erp_require_admin();
     $db = erp_db();
-    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1];
+    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1, 'home' => ''];
     if ($id !== null) {
         $st = $db->prepare('SELECT * FROM users WHERE id = ?');
         $st->execute([$id]);
@@ -617,6 +634,8 @@ function erp_user_form(?int $id, bool $post): void
         // An admin cannot remove their own admin rights or switch themselves off, so nobody gets locked out.
         $isAdmin = $isSelf ? 1 : (int) !empty($_POST['is_admin']);
         $active = $isSelf ? 1 : (int) !empty($_POST['active']);
+        $home = (string) ($_POST['home'] ?? '');
+        $home = isset(ERP_SYSTEMS[$home]) ? $home : '';
         $access = [];
         foreach (array_keys(erp_modules()) as $key) {
             $level = $_POST['access'][$key] ?? '';
@@ -629,8 +648,8 @@ function erp_user_form(?int $id, bool $post): void
             $db->beginTransaction();
             if ($id === null) {
                 $hash = password_hash($invite ? bin2hex(random_bytes(32)) : $password, PASSWORD_DEFAULT);
-                $db->prepare('INSERT INTO users (name, email, password_hash, is_admin, active, created_at, must_change) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                    ->execute([$name, $email, $hash, $isAdmin, $active, erp_now(), $invite ? 0 : $mustChange]);
+                $db->prepare('INSERT INTO users (name, email, password_hash, is_admin, active, created_at, must_change, home) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$name, $email, $hash, $isAdmin, $active, erp_now(), $invite ? 0 : $mustChange, $home]);
                 $id = (int) $db->lastInsertId();
                 erp_user_event($id, 'Account created', $me['name']);
                 if (!$invite) {
@@ -638,8 +657,8 @@ function erp_user_form(?int $id, bool $post): void
                     erp_user_event($id, 'Password: set by admin', $me['name']);
                 }
             } else {
-                $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ? WHERE id = ?')
-                    ->execute([$name, $email, $isAdmin, $active, $mustChange, $id]);
+                $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ?, home = ? WHERE id = ?')
+                    ->execute([$name, $email, $isAdmin, $active, $mustChange, $home, $id]);
                 if ($password !== '') {
                     erp_set_password($id, $password, (bool) $mustChange, 'Set by admin', $me['name']);
                 }
@@ -661,7 +680,7 @@ function erp_user_form(?int $id, bool $post): void
             }
             erp_redirect('/erp/users');
         }
-        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange];
+        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange, 'home' => $home];
     }
     erp_render('user-form', ['me' => $me, 'target' => $target, 'isSelf' => $isSelf, 'errors' => $errors,
         'events' => $target['id'] ? erp_user_events((int) $target['id']) : []]);

@@ -1,4 +1,4 @@
-<?php $title = 'Sign in | ' . erp_client_name() . ' ERP'; $authTitle = erp_system() === 'hsec' ? 'HSEC ERP' : 'Receivable & Recovery ERP'; $authLead = 'Sign in with the e-mail and password from your admin.'; ?>
+<?php $title = 'Sign in | ' . erp_client_name() . ' ERP'; $authTitle = ['hsec' => 'HSEC ERP', 'taj' => 'Receivable & Recovery ERP'][erp_system()] ?? 'Sign in to your ERP'; $authLead = erp_system() === 'flowsuit' ? 'One sign-in for every FlowSuit system. Your account opens your company\'s ERP straight away.' : 'Sign in with the e-mail and password from your admin.'; ?>
 <div class="auth-card">
 <?php require __DIR__ . '/auth-brand.php'; ?>
 <?php if ($error): ?>
@@ -12,7 +12,7 @@
       <label class="check"><input type="checkbox" name="remember" value="1" checked> Remember me for 30 days</label>
       <a href="/erp/forgot">Forgot password?</a>
     </div>
-    <button class="btn btn-gold" type="submit"><span>Sign in</span></button>
+    <button class="btn btn-gold auth-go" type="submit"><span>Sign in</span></button>
   </form>
-  <p class="auth-foot">Untick "Remember me" on a shared computer. · <a href="/erp">&larr; All systems</a></p>
+  <p class="auth-foot">Untick "Remember me" on a shared computer. · <a href="/">&larr; FlowSuit website</a></p>
 </div>
