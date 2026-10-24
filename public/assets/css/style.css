@@ -243,10 +243,7 @@ details p { margin: 10px 0 0; color: var(--muted); }
 .js .reveal { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
 .js .reveal.is-visible { opacity: 1; transform: none; }
 /* Animations play on every computer, including Windows with "Animation effects" switched off (the owner's
-   choice). Only the endless background loops stop there. */
-@media (prefers-reduced-motion: reduce) {
-  .float, .blob, .pulse, .mock-arrow { animation-iteration-count: 1 !important; }
-}
+   choice), so there is no reduced-motion override here. */
 
 @media (max-width: 900px) {
   .hero-grid, .grid-2, .grid-3, .split, .product-hero { grid-template-columns: 1fr; }
@@ -848,3 +845,15 @@ tr.is-low .level i { background-image: linear-gradient(90deg, #f97316, #f59e0b, 
    and the moving background blobs get their own layer so they do not slow scrolling. ---- */
 main > section:not(:first-child) { content-visibility: auto; contain-intrinsic-size: auto 700px; }
 .blob { will-change: transform; }
+
+/* ---- Hero dashboard looks live: a pulsing "Live" tag, figures that tick up, bars that keep moving
+   (main.js changes them every couple of seconds) and a slow float. ---- */
+.hero-shot .dash { animation: float 7s ease-in-out infinite; }
+.dash .mock-live { margin-left: auto; font-style: normal; display: inline-flex; align-items: center; gap: 6px; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #86efac; }
+.dash .mock-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: live 1.6s ease-in-out infinite; }
+.dash-chart span { transition: transform .9s cubic-bezier(.2,.8,.2,1), height 1.1s cubic-bezier(.2,.8,.2,1); }
+.js .reveal .dash-chart span, .js .reveal.dash .dash-chart span { transition: transform .9s cubic-bezier(.2,.8,.2,1), height 1.1s cubic-bezier(.2,.8,.2,1); }
+.dash-kpis b { display: inline-block; transition: color .4s; }
+.dash-kpis b.is-up { color: #16a34a; animation: tick-up .6s ease; }
+@keyframes tick-up { 0% { transform: translateY(6px); opacity: .4; } 100% { transform: none; opacity: 1; } }
+.dash-nav i { transition: background .4s; }

@@ -1,6 +1,6 @@
 <?php $mockTitle = $mockTitle ?? 'FlowSuit ERP'; ?>
 <div class="dash" aria-hidden="true">
-  <div class="mock-bar"><span></span><span></span><span></span> <?= e($mockTitle) ?></div>
+  <div class="mock-bar"><span></span><span></span><span></span> <?= e($mockTitle) ?><em class="mock-live">Live</em></div>
   <div class="dash-body">
     <div class="dash-nav">
       <i class="is-on"></i><i></i><i></i><i></i><i></i>
