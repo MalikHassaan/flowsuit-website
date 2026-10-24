@@ -1,39 +1,54 @@
-/* HSEC loading screen, restyled by FlowSuit (the app file itself is not changed): a white screen with the
-   HSEC emblem inside turning rings and orbiting dots, a spaced-out title, a sweeping progress line and the
-   app's own loading text. Plays even with Windows animation effects off. */
-html body #boot { background: #fff !important; overflow: hidden; }
-html body #boot::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(15, 23, 42, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, .035) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask: radial-gradient(circle at 50% 45%, #000 0, transparent 70%); mask: radial-gradient(circle at 50% 45%, #000 0, transparent 70%); }
-html body #boot::after { content: ""; position: absolute; left: 50%; top: 42%; width: 640px; height: 640px; margin: -320px 0 0 -320px; border-radius: 50%; background: radial-gradient(circle, rgba(30, 158, 58, .10), rgba(37, 99, 235, .05) 45%, transparent 70%); animation: fsbGlow 6s ease-in-out infinite !important; }
-#boot .fsb-corner { position: absolute; width: 38px; height: 38px; border: 1.5px solid rgba(30, 158, 58, .45); }
-#boot .fsb-corner.c1 { left: 16px; top: 16px; border-right: 0; border-bottom: 0; }
-#boot .fsb-corner.c2 { right: 16px; top: 16px; border-left: 0; border-bottom: 0; }
-#boot .fsb-corner.c3 { left: 16px; bottom: 16px; border-right: 0; border-top: 0; }
-#boot .fsb-corner.c4 { right: 16px; bottom: 16px; border-left: 0; border-top: 0; }
-#boot .fsb-tag { position: absolute; left: 30px; top: 26px; font: 600 11px/1 Poppins, system-ui, sans-serif; letter-spacing: .3em; color: #1E9E3A; opacity: .8; }
-html body #boot .bt { position: relative; z-index: 1; gap: 0 !important; animation: fsbIn .8s cubic-bezier(.2, 1.2, .4, 1) both !important; }
-#boot .fsb-core { position: relative; display: grid; place-items: center; width: 220px; height: 220px; margin-bottom: 26px; }
-#boot .fsb-core i { position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(15, 23, 42, .12); }
-#boot .fsb-core i.r1 { inset: 0; border-color: rgba(30, 158, 58, .30); animation: fsbSpin 14s linear infinite !important; }
-#boot .fsb-core i.r2 { inset: 22px; border: 1px dashed rgba(37, 99, 235, .35); animation: fsbSpin 9s linear infinite reverse !important; }
-#boot .fsb-core i.r3 { inset: 46px; border-color: rgba(220, 38, 38, .25); animation: fsbSpin 6s linear infinite !important; }
-#boot .fsb-core i b { position: absolute; left: 50%; top: -5px; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%; }
-#boot .fsb-core i.r1 b { background: #1E9E3A; box-shadow: 0 0 12px #1E9E3A; }
-#boot .fsb-core i.r2 b { background: #2563EB; box-shadow: 0 0 12px #2563EB; width: 7px; height: 7px; top: -4px; }
-#boot .fsb-core i.r3 b { background: #DC2626; box-shadow: 0 0 10px #DC2626; width: 6px; height: 6px; top: -3px; }
-#boot .fsb-core i.r1 b + b { top: auto; bottom: -3px; width: 5px; height: 5px; background: #F59E0B; box-shadow: 0 0 8px #F59E0B; }
-#boot .fsb-core::after { content: ""; position: absolute; inset: 68px; border-radius: 50%; border: 2px solid rgba(30, 158, 58, .5); animation: fsbPing 2.4s ease-out infinite !important; }
-html body #boot .bt-logo { position: relative; z-index: 1; width: 84px !important; height: 84px !important; border-radius: 50% !important; background: #fff !important; padding: 10px !important; box-shadow: 0 0 0 1px rgba(15, 23, 42, .06), 0 14px 34px rgba(30, 158, 58, .22) !important; animation: fsbBreath 3s ease-in-out infinite !important; }
-html body #boot .bt-logo img { width: 100%; height: 100%; object-fit: contain; }
-html body #boot .bt-name { margin: 0; font: 700 34px/1 Poppins, system-ui, sans-serif !important; letter-spacing: .5em; text-indent: .5em; text-transform: uppercase; color: #0F172A !important; animation: fsbUp .7s .25s both !important; }
-#boot .fsb-sub { margin-top: 14px; font: 600 11px/1 Poppins, system-ui, sans-serif; letter-spacing: .42em; text-indent: .42em; text-transform: uppercase; color: #1E9E3A; animation: fsbUp .7s .4s both !important; }
-html body #boot .bt-bar { order: 5; width: 360px !important; max-width: 70vw; height: 2px !important; margin-top: 34px !important; background: rgba(15, 23, 42, .08) !important; animation: fsbUp .7s .55s both !important; }
-html body #boot .bt-bar i { width: 45% !important; background: linear-gradient(90deg, transparent, #1E9E3A, #2563EB, transparent) !important; animation: fsbRun 1.6s ease-in-out infinite !important; }
-html body #boot .bt-sub { order: 6; margin-top: 16px; font: 500 11px/1 Poppins, system-ui, sans-serif !important; letter-spacing: .3em; text-transform: uppercase; color: #64748B !important; animation: fsbUp .7s .65s both !important; }
-@keyframes fsbIn { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
-@keyframes fsbUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* HSEC opening screen, added by FlowSuit (the app file itself is not changed). Plays like a film intro: the
+   rings and HSEC emblem appear, the letters H S E C come in one by one, the subtitle types itself, the
+   progress line fills and the status text changes. It stays at least 5 seconds, then zooms into the
+   emblem while the ERP zooms in behind it. Plays even with Windows animation effects off (the app switches every animation off there, so these
+   rules use !important). */
+html body #boot { display: none !important; }
+#fs-intro { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; background: #fff; overflow: hidden; font-family: Poppins, system-ui, sans-serif; transform-origin: 50% 42%; }
+#fs-intro::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(15, 23, 42, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(15, 23, 42, .035) 1px, transparent 1px); background-size: 44px 44px; -webkit-mask: radial-gradient(circle at 50% 45%, #000 0, transparent 70%); mask: radial-gradient(circle at 50% 45%, #000 0, transparent 70%); }
+#fs-intro::after { content: ""; position: absolute; left: 50%; top: 42%; width: 640px; height: 640px; margin: -320px 0 0 -320px; border-radius: 50%; background: radial-gradient(circle, rgba(30, 158, 58, .10), rgba(37, 99, 235, .05) 45%, transparent 70%); animation: fsbGlow 6s ease-in-out infinite !important; }
+#fs-intro .fsb-corner { position: absolute; width: 38px; height: 38px; border: 1.5px solid rgba(30, 158, 58, .45); animation: fsbFade 1s .2s both !important; }
+#fs-intro .c1 { left: 16px; top: 16px; border-right: 0; border-bottom: 0; }
+#fs-intro .c2 { right: 16px; top: 16px; border-left: 0; border-bottom: 0; }
+#fs-intro .c3 { left: 16px; bottom: 16px; border-right: 0; border-top: 0; }
+#fs-intro .c4 { right: 16px; bottom: 16px; border-left: 0; border-top: 0; }
+#fs-intro .fsb-tag { position: absolute; left: 30px; top: 26px; font: 600 11px/1 Poppins, system-ui, sans-serif; letter-spacing: .3em; color: #1E9E3A; animation: fsbFade 1s .3s both !important; }
+#fs-intro .fsb-stage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+#fs-intro .fsb-core { position: relative; display: grid; place-items: center; width: 220px; height: 220px; margin-bottom: 26px; animation: fsbIn 1.1s cubic-bezier(.2, 1.2, .4, 1) both !important; }
+#fs-intro .fsb-core i { position: absolute; border-radius: 50%; border: 1px solid; }
+#fs-intro .fsb-core i.r1 { inset: 0; border-color: rgba(30, 158, 58, .30); animation: fsbSpin 14s linear infinite !important; }
+#fs-intro .fsb-core i.r2 { inset: 22px; border: 1px dashed rgba(37, 99, 235, .35); animation: fsbSpin 9s linear infinite reverse !important; }
+#fs-intro .fsb-core i.r3 { inset: 46px; border-color: rgba(220, 38, 38, .25); animation: fsbSpin 6s linear infinite !important; }
+#fs-intro .fsb-core i b { position: absolute; left: 50%; top: -5px; width: 9px; height: 9px; margin-left: -4.5px; border-radius: 50%; }
+#fs-intro .r1 b { background: #1E9E3A; box-shadow: 0 0 12px #1E9E3A; }
+#fs-intro .r2 b { background: #2563EB; box-shadow: 0 0 12px #2563EB; width: 7px; height: 7px; top: -4px; }
+#fs-intro .r3 b { background: #DC2626; box-shadow: 0 0 10px #DC2626; width: 6px; height: 6px; top: -3px; }
+#fs-intro .r1 b + b { top: auto; bottom: -3px; width: 5px; height: 5px; background: #F59E0B; box-shadow: 0 0 8px #F59E0B; }
+#fs-intro .fsb-core::after { content: ""; position: absolute; inset: 68px; border-radius: 50%; border: 2px solid rgba(30, 158, 58, .5); animation: fsbPing 2.4s 1s ease-out infinite !important; }
+#fs-intro .fsb-logo { position: relative; z-index: 1; display: grid; place-items: center; width: 84px; height: 84px; border-radius: 50%; background: #fff; padding: 12px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .06), 0 14px 34px rgba(30, 158, 58, .22); animation: fsbPop .8s .3s cubic-bezier(.3, 1.6, .5, 1) both, fsbBreath 3s 1.2s ease-in-out infinite !important; }
+#fs-intro .fsb-logo img { width: 100%; height: 100%; object-fit: contain; }
+#fs-intro .fsb-name { display: flex; gap: .5em; margin: 0; padding-left: .5em; font: 700 40px/1 Poppins, system-ui, sans-serif; color: #0F172A; }
+#fs-intro .fsb-name span { display: inline-block; animation: fsbLetter .7s cubic-bezier(.2, .8, .2, 1) both !important; animation-delay: calc(.9s + var(--i) * .28s); }
+#fs-intro .fsb-sub { min-height: 1em; margin-top: 16px; font: 600 11px/1 Poppins, system-ui, sans-serif; letter-spacing: .42em; text-indent: .42em; text-transform: uppercase; color: #1E9E3A; white-space: pre; }
+#fs-intro .fsb-sub::after { content: "|"; margin-left: 2px; color: #1E9E3A; animation: fsbBlink .8s steps(1) infinite !important; }
+#fs-intro .fsb-sub.is-done::after { content: none; }
+#fs-intro .fsb-bar { position: relative; width: 380px; max-width: 70vw; height: 2px; margin-top: 34px; background: rgba(15, 23, 42, .08); overflow: hidden; animation: fsbFade .6s 1.4s both !important; }
+#fs-intro .fsb-bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #1E9E3A, #2563EB); box-shadow: 0 0 10px rgba(37, 99, 235, .5); transition: width .4s ease !important; }
+#fs-intro .fsb-msg { margin-top: 16px; min-height: 1em; font: 500 11px/1 Poppins, system-ui, sans-serif; letter-spacing: .3em; text-transform: uppercase; color: #64748B; animation: fsbFade .6s 1.6s both !important; }
+#fs-intro .fsb-msg.is-new { animation: fsbUp .45s both !important; }
+/* The hand-over: the screen zooms through the emblem and fades while the ERP grows in behind it. */
+#fs-intro.is-leaving { animation: fsbZoomOut .95s cubic-bezier(.6, 0, .3, 1) forwards !important; pointer-events: none; }
+html.fs-zoom .app { animation: fsbZoomIn 1s cubic-bezier(.2, .8, .2, 1) both !important; }
+@keyframes fsbIn { from { opacity: 0; transform: scale(.6) rotate(-30deg); } to { opacity: 1; transform: none; } }
+@keyframes fsbPop { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: none; } }
+@keyframes fsbLetter { from { opacity: 0; transform: translateY(14px) scale(.8); filter: blur(8px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes fsbFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fsbUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes fsbBlink { 50% { opacity: 0; } }
 @keyframes fsbSpin { to { transform: rotate(360deg); } }
 @keyframes fsbPing { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.9); opacity: 0; } }
 @keyframes fsbBreath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
-@keyframes fsbRun { 0% { transform: translateX(-110%); } 100% { transform: translateX(230%); } }
 @keyframes fsbGlow { 0%, 100% { transform: scale(1); opacity: .8; } 50% { transform: scale(1.12); opacity: 1; } }
-@media (max-width: 560px) { html body #boot .bt-name { font-size: 24px !important; } #boot .fsb-core { width: 180px; height: 180px; } #boot .fsb-core::after { inset: 48px; } }
+@keyframes fsbZoomOut { 0% { transform: scale(1); opacity: 1; } 60% { opacity: 1; } 100% { transform: scale(6); opacity: 0; } }
+@keyframes fsbZoomIn { from { transform: scale(.86); opacity: 0; filter: blur(6px); } to { transform: none; opacity: 1; filter: none; } }
+@media (max-width: 560px) { #fs-intro .fsb-name { font-size: 28px; } #fs-intro .fsb-core { width: 180px; height: 180px; } #fs-intro .fsb-core::after { inset: 48px; } }
