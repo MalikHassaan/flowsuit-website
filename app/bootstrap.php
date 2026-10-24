@@ -2,6 +2,10 @@
 // Shared helpers used by the front controller and the views.
 
 $config = require __DIR__ . '/config.php';
+// Do not tell visitors which PHP version runs the site.
+if (!headers_sent()) {
+    header_remove('X-Powered-By');
+}
 require_once __DIR__ . '/analytics.php';
 
 function config(string $key)

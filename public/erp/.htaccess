@@ -6,4 +6,13 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.php [L]
 <IfModule mod_headers.c>
   Header set X-Robots-Tag "noindex, nofollow"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+  Header always set Content-Security-Policy "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'"
+  Header always set Strict-Transport-Security "max-age=15552000" env=HTTPS
+  Header always unset X-Powered-By
+  Header unset X-Powered-By
 </IfModule>
+<FilesMatch "(^\.|\.(sqlite|sqlite3|db|sql|bak|old|orig|log|ini|env|zip|tar|gz|7z|rar|sh|ps1|bat)$)">
+  Require all denied
+</FilesMatch>

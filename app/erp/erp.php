@@ -12,6 +12,7 @@ require_once __DIR__ . '/auth.php';
 
 const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
+const ERP_ACCOUNT_LIMIT = 10;           // failed logins per account per 15 minutes, from any number of IPs
 const ERP_MAX_UPLOAD = 8 * 1024 * 1024; // bytes
 
 // Every module the ERP knows about. 'ready' modules have screens; the rest show "not set up yet".
@@ -76,6 +77,9 @@ function erp_db(): PDO
         columns TEXT NOT NULL, rows TEXT NOT NULL, row_count INTEGER NOT NULL,
         uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL, uploaded_at TEXT NOT NULL)');
     $db->exec('CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT NOT NULL, at INTEGER NOT NULL)');
+    if (!in_array('email', array_column($db->query('PRAGMA table_info(login_attempts)')->fetchAll(), 'name'), true)) {
+        $db->exec('ALTER TABLE login_attempts ADD COLUMN email TEXT');
+    }
     erp_auth_schema($db);
     return $db;
 }
@@ -293,13 +297,29 @@ function erp_ip(): string
     return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 }
 
-function erp_too_many_attempts(): bool
+// Too many failures from this IP, or (when $email is given) against this account from anywhere: the
+// account limit stops a password guesser that spreads its tries over many addresses.
+function erp_too_many_attempts(string $email = ''): bool
 {
     $db = erp_db();
     $db->prepare('DELETE FROM login_attempts WHERE at < ?')->execute([time() - 900]);
     $st = $db->prepare('SELECT COUNT(*) FROM login_attempts WHERE ip = ?');
     $st->execute([erp_ip()]);
-    return (int) $st->fetchColumn() >= ERP_LOGIN_LIMIT;
+    if ((int) $st->fetchColumn() >= ERP_LOGIN_LIMIT) {
+        return true;
+    }
+    if ($email === '') {
+        return false;
+    }
+    $st = $db->prepare('SELECT COUNT(*) FROM login_attempts WHERE email = ?');
+    $st->execute([strtolower($email)]);
+    return (int) $st->fetchColumn() >= ERP_ACCOUNT_LIMIT;
+}
+
+function erp_failed_attempt(string $email = ''): void
+{
+    erp_db()->prepare('INSERT INTO login_attempts (ip, at, email) VALUES (?, ?, ?)')
+        ->execute([erp_ip(), time(), $email === '' ? null : strtolower($email)]);
 }
 
 // ---- Router ----
@@ -449,7 +469,7 @@ function erp_login(bool $post): void
     $email = '';
     if ($post) {
         $email = trim((string) ($_POST['email'] ?? ''));
-        if (erp_too_many_attempts()) {
+        if (erp_too_many_attempts($email)) {
             $error = 'Too many failed sign-ins. Wait 15 minutes and try again.';
         } else {
             $st = erp_db()->prepare('SELECT * FROM users WHERE email = ? AND active = 1');
@@ -470,7 +490,7 @@ function erp_login(bool $post): void
                 }
                 erp_redirect(erp_start_page($row));
             }
-            erp_db()->prepare('INSERT INTO login_attempts (ip, at) VALUES (?, ?)')->execute([erp_ip(), time()]);
+            erp_failed_attempt($email);
             $error = 'That email and password do not match an active account.';
         }
     }
