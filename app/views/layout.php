@@ -33,8 +33,8 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
-  <link rel="stylesheet" href="/assets/css/style.css?v=13">
-  <script src="/assets/js/main.js?v=11" defer></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=14">
+  <script src="/assets/js/main.js?v=12" defer></script>
 <?php foreach ($page['schema'] ?? [] as $schema): ?>
   <script type="application/ld+json"><?= json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?></script>
 <?php endforeach; ?>

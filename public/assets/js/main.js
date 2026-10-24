@@ -398,3 +398,39 @@ document.addEventListener('click', function (e) {
     });
   }, 1400);
 })();
+
+// Dashboard mock-ups look live: every couple of seconds the figures tick up, the bars move and the
+// highlighted menu item changes, but only while the mock-up is on screen.
+(function () {
+  var dashes = Array.prototype.slice.call(document.querySelectorAll('.dash'));
+  if (!dashes.length) return;
+  var onScreen = new Set();
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target); });
+    }, { threshold: 0.2 });
+    dashes.forEach(function (d) { io.observe(d); });
+  } else {
+    dashes.forEach(function (d) { onScreen.add(d); });
+  }
+  var step = 0;
+  setTimeout(function () {
+    setInterval(function () {
+      if (document.hidden) return;
+      step++;
+      onScreen.forEach(function (d) {
+        d.querySelectorAll('.dash-kpis b').forEach(function (b, i) {
+          if ((step + i) % 2) return;   // not every figure moves every time
+          var n = parseInt(b.textContent.replace(/,/g, ''), 10) || 0;
+          b.textContent = (n + Math.ceil(n * (0.002 + Math.random() * 0.01))).toLocaleString('en-US');
+          b.classList.remove('is-up'); void b.offsetWidth; b.classList.add('is-up');
+        });
+        d.querySelectorAll('.dash-chart span').forEach(function (bar) {
+          bar.style.height = Math.round(30 + Math.random() * 68) + '%';
+        });
+        var nav = d.querySelectorAll('.dash-nav i');
+        nav.forEach(function (n, i) { n.classList.toggle('is-on', i === step % nav.length); });
+      });
+    }, 2200);
+  }, 1500);
+})();
