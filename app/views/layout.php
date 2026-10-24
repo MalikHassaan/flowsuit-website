@@ -30,8 +30,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="/assets/css/style.css?v=10">
-  <script src="/assets/js/main.js?v=9" defer></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=11">
+  <script src="/assets/js/main.js?v=10" defer></script>
 <?php foreach ($page['schema'] ?? [] as $schema): ?>
   <script type="application/ld+json"><?= json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?></script>
 <?php endforeach; ?>
