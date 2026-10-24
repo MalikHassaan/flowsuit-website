@@ -38,6 +38,15 @@
   </div>
   <h2>Access</h2>
   <p class="muted">Pick what this person can do in each part of the ERP.</p>
+  <label class="home-pick">Opens after sign-in
+    <select name="home">
+      <option value="">The first system they can open</option>
+<?php foreach (ERP_SYSTEMS as $key => $label): ?>
+      <option value="<?= e($key) ?>" <?= ($target['home'] ?? '') === $key ? 'selected' : '' ?>><?= e($label) ?></option>
+<?php endforeach; ?>
+    </select>
+    <small class="muted">Everyone signs in on the same page. This decides which ERP they land on. They still need access to it below.</small>
+  </label>
   <div class="access-grid" data-access>
 <?php foreach (erp_live_modules() as $key => $mod): $lvl = $target['access'][$key] ?? ''; ?>
     <fieldset class="access-row">

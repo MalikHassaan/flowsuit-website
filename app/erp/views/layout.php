@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/erp.css?v=8">
+  <link rel="stylesheet" href="/assets/css/erp.css?v=9">
 </head>
 <body class="<?= $user ? 'erp-app' : 'erp-auth' ?>">
 <?php if ($user): ?>
@@ -38,7 +38,7 @@
   </aside>
 <?php endif; ?>
 <?php if (!$user): ?>
-  <div class="auth-bg" aria-hidden="true"><b class="glow g1"></b><b class="glow g2"></b><?php for ($k = 0; $k < 14; $k++): ?><i style="--k:<?= $k ?>"></i><?php endfor; ?></div>
+  <div class="auth-bg" aria-hidden="true"><b class="glow g1"></b><b class="glow g2"></b><b class="glow g3"></b><?php foreach ([[8, 12], [22, 70], [35, 25], [48, 82], [62, 15], [74, 60], [86, 30], [92, 78], [15, 45], [55, 48], [80, 8], [28, 90]] as $n => [$x, $y]): ?><b class="tw" style="left:<?= $x ?>%;top:<?= $y ?>%;animation-delay:-<?= $n * .45 ?>s"></b><?php endforeach; ?><?php for ($k = 0; $k < 14; $k++): ?><i style="--k:<?= $k ?>"></i><?php endfor; ?></div>
 <?php endif; ?>
   <main class="erp-main">
 <?php if ($flash): ?>
