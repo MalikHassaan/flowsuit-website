@@ -4,7 +4,7 @@
   root.classList.remove('no-js');
   root.classList.add('js');
 
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var reduce = false;   // animations play everywhere, even with Windows "Animation effects" off (owner's choice)
 
   // Header shadow and the thin progress bar at the top of the page.
   var ticking = false;
@@ -157,7 +157,7 @@
   var track = slider.querySelector('[data-track]');
   var slides = track.querySelectorAll('.slide');
   var tabs = slider.querySelectorAll('[role="tab"]');
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var reduce = false;   // animations play everywhere, even with Windows "Animation effects" off (owner's choice)
   var current = 0;
 
   function show(i, scroll) {
@@ -244,7 +244,7 @@ document.querySelectorAll('[data-video]').forEach(function (btn) {
   var growBar = demo.querySelector('[data-bar]');
   var kpi = {};
   demo.querySelectorAll('[data-k]').forEach(function (el) { kpi[el.getAttribute('data-k')] = el; });
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var reduce = false;   // animations play everywhere, even with Windows "Animation effects" off (owner's choice)
   var TOTAL = 13000, elapsed = 0, paused = false, onScreen = false, running = false;
 
   function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
@@ -327,7 +327,7 @@ document.querySelectorAll('[data-video]').forEach(function (btn) {
 // Live stock table: a sale or a delivery every couple of seconds (sample data).
 (function () {
   var card = document.querySelector('[data-live]');
-  if (!card || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!card) return;
   var rows = card.querySelectorAll('tbody tr');
   var note = card.querySelector('[data-live-note]');
   var visible = false;

@@ -29,6 +29,10 @@ h1 { font-size: clamp(2rem, 5vw, 3.2rem); margin: 0 0 16px; font-weight: 800; }
 h2 { font-size: 1.6rem; margin: 40px 0 12px; }
 h3 { font-size: 1.1rem; margin: 10px 0 6px; }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+/* Wide screens: use more of the width and scale the type up, so the page does not sit in a narrow strip. */
+@media (min-width: 1440px) { html { font-size: 17px; } .wrap { max-width: min(1360px, 90vw); padding: 0 24px; } }
+@media (min-width: 1800px) { html { font-size: 18px; } .wrap { max-width: min(1560px, 88vw); } }
+@media (min-width: 2400px) { html { font-size: 20px; } .wrap { max-width: min(1880px, 86vw); } }
 .narrow { max-width: 760px; }
 .icon { width: 1.2em; height: 1.2em; vertical-align: -0.2em; flex-shrink: 0; }
 
@@ -238,9 +242,10 @@ details p { margin: 10px 0 0; color: var(--muted); }
 .r1 { animation-delay: .5s; } .r2 { animation-delay: .65s; } .r3 { animation-delay: .8s; }
 .js .reveal { opacity: 0; transform: translateY(24px); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.8,.2,1); }
 .js .reveal.is-visible { opacity: 1; transform: none; }
+/* Animations play on every computer, including Windows with "Animation effects" switched off (the owner's
+   choice). Only the endless background loops stop there. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-  .js .reveal { opacity: 1; transform: none; }
+  .float, .blob, .pulse, .mock-arrow { animation-iteration-count: 1 !important; }
 }
 
 @media (max-width: 900px) {
@@ -373,11 +378,6 @@ details p { margin: 10px 0 0; color: var(--muted); }
   .toasts { width: 100%; }
   .node { font-size: .72rem; padding: 8px 10px; }
   .node.hub { padding: 12px 14px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .toast.t1 { opacity: 1; }
-  .rotator span { transform: none; }
-  .scroll-progress { display: none; }
 }
 
 /* Chat assistant */
@@ -639,9 +639,6 @@ details p { margin: 10px 0 0; color: var(--muted); }
   .fin-body ul { width: 100%; }
   .pos-body { grid-template-columns: 1fr; }
   .slide .transform { min-height: 340px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .slider-track { scroll-behavior: auto; }
 }
 
 /* ---- v7: professional blue theme ---- */
