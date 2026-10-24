@@ -829,3 +829,17 @@ tr.is-restock td { animation: row-restock 1.2s ease; }
 .case-links { display: flex; flex-wrap: wrap; gap: 18px; }
 .case-links a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 @media (max-width: 900px) { .case-grid { grid-template-columns: 1fr; } }
+
+/* ---- Tables that look alive (2026-10): rows slide in one after another, then a soft highlight keeps moving down
+   the rows, level bars shimmer and a "today" line walks across the rollout plan. ---- */
+.js .reveal table tr { opacity: 0; transform: translateX(-14px); }
+.js .reveal.is-visible table tr { animation: rowIn .55s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--r, 0) * 70ms + .15s); }
+.data-table tbody td, .compare td { transition: background-color .6s ease, box-shadow .6s ease; }
+.data-table tbody tr.is-hot td, .compare tr.is-hot td { background: #eaf3fc; }
+.data-table tbody tr.is-hot td:first-child, .compare tr.is-hot td:first-child { box-shadow: inset 3px 0 0 var(--brand); }
+.compare tr.is-hot td:nth-child(3) .icon { animation: logo-pop .5s cubic-bezier(.3,1.6,.5,1); }
+.level i { background-size: 200% 100%; background-image: linear-gradient(90deg, var(--brand), var(--brand-2), #7cc3ee, var(--brand)); animation: sweep 3s linear infinite; }
+tr.is-low .level i { background-image: linear-gradient(90deg, #f97316, #f59e0b, #fcd34d, #f97316); }
+.gantt-row::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, .8); animation: gantt-now 9s linear infinite; }
+@keyframes gantt-now { from { left: 0; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } to { left: 100%; opacity: 0; } }
+.data-table td[data-qty].is-changed, .data-table td.num.is-changed { animation: logo-pop .5s cubic-bezier(.3,1.6,.5,1); color: var(--brand); }
