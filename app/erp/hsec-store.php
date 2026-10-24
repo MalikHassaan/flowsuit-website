@@ -53,7 +53,8 @@ function hsec_logo(): void
     exit;
 }
 
-// Script placed before </head>: connects shared storage and adds the account menu to the app's top bar.
+// Script placed before </head>: connects shared storage, restyles the loading screen and adds the account menu
+// to the app's top bar.
 function hsec_inject(array $me): string
 {
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
@@ -61,6 +62,7 @@ function hsec_inject(array $me): string
         'edit' => erp_can($me, 'hsec', 'edit'), 'owner' => (bool) $me['is_admin'], 'assets' => false];
     return '<script>window.FS_BRIDGE=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
+        . '<style>' . file_get_contents(__DIR__ . '/hsec-boot.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-boot.js') . '</script>'
         . '<style>.fs-acct{display:inline-flex;align-items:center;margin-left:10px}.fs-acct>button{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 4px;border:1px solid var(--line,#E3E6EB);border-radius:999px;background:var(--panel,#fff);color:var(--ink,#1F2328);font:600 13px Poppins,system-ui,sans-serif;cursor:pointer}'
         . '.fs-acct>button i{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#1F6FB8;color:#fff;font-style:normal;font-size:12px}'
         . '.fs-menu{position:fixed;z-index:10000;min-width:220px;padding:6px;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(15,23,42,.25);border:1px solid #e2e8f0;font:500 14px system-ui,sans-serif}'
