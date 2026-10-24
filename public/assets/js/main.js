@@ -334,7 +334,9 @@ document.querySelectorAll('[data-video]').forEach(function (btn) {
   if ('IntersectionObserver' in window) new IntersectionObserver(function (e) { visible = e[0].isIntersecting; }).observe(card);
   function paint(tr, qty) {
     var max = +tr.getAttribute('data-max'), low = qty < 25, pill = tr.querySelector('[data-status]');
-    tr.querySelector('[data-qty]').textContent = qty;
+    var cell = tr.querySelector('[data-qty]');
+    if (+cell.textContent !== qty) { cell.classList.remove('is-changed'); void cell.offsetWidth; cell.classList.add('is-changed'); }
+    cell.textContent = qty;
     tr.querySelector('.level i').style.width = Math.round(qty / max * 100) + '%';
     tr.classList.toggle('is-low', low);
     pill.textContent = low ? 'Reorder' : 'OK';
@@ -366,3 +368,33 @@ document.addEventListener('click', function (e) {
   if (!name) return;
   navigator.sendBeacon('/api/event', new Blob([JSON.stringify({ name: name, path: location.pathname })], { type: 'application/json' }));
 });
+
+// Tables look alive: rows slide in one after another, then a soft highlight moves down the rows of every
+// table on screen, a row at a time.
+(function () {
+  var tables = Array.prototype.slice.call(document.querySelectorAll('.data-table, .compare'));
+  document.querySelectorAll('.reveal table').forEach(function (t) {
+    Array.prototype.forEach.call(t.rows, function (tr, i) { tr.style.setProperty('--r', i); });
+  });
+  if (!tables.length) return;
+  var onScreen = new Set();
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) onScreen.add(e.target); else onScreen.delete(e.target); });
+    }, { threshold: 0.3 });
+    tables.forEach(function (t) { io.observe(t); });
+  } else {
+    tables.forEach(function (t) { onScreen.add(t); });
+  }
+  var step = 0;
+  setInterval(function () {
+    if (document.hidden) return;
+    step++;
+    onScreen.forEach(function (t) {
+      var rows = Array.prototype.filter.call(t.rows, function (r) { return !r.querySelector('th'); });
+      if (!rows.length) return;
+      rows.forEach(function (r) { r.classList.remove('is-hot'); });
+      rows[step % rows.length].classList.add('is-hot');
+    });
+  }, 1400);
+})();
