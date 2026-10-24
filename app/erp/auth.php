@@ -214,11 +214,11 @@ function erp_forgot(bool $post): void
         $error = is_array($res) ? 'That code is not right.' : $res;
         $done = !empty($_SESSION['otp_reset']);
     } elseif ($post) {
-        if (erp_too_many_attempts()) {
+        if (erp_too_many_attempts($email)) {
             $error = 'Too many tries. Wait 15 minutes and try again.';
         } else {
-            // Counts toward the same limit as failed sign-ins, so nobody can flood an inbox.
-            erp_db()->prepare('INSERT INTO login_attempts (ip, at) VALUES (?, ?)')->execute([erp_ip(), time()]);
+            // Counts toward the same limits as failed sign-ins, so nobody can flood an inbox.
+            erp_failed_attempt($email);
             $st = erp_db()->prepare('SELECT * FROM users WHERE email = ? AND active = 1');
             $st->execute([$email]);
             if ($row = $st->fetch()) {
