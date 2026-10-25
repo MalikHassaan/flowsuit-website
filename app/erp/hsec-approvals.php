@@ -192,10 +192,20 @@ function hsec_jv_people(): array
 // Why a voucher change is refused, or null. May fill in names, ids and times on $new.
 function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
 {
-    if (!hsec_approvals_on() || $new === null) {
+    if (!hsec_approvals_on()) {
         return null;
     }
     $role = (string) ($me['hsec_jv'] ?? '');
+    // Once a voucher has been sent for approval, only these two may change, cancel or reverse it (hassan, 2026-10-25).
+    $senior = in_array($role, ['senior', 'gmf'], true);
+    $deny = 'Only the Senior Manager or the Group GM Finance can change, cancel or reverse a voucher once it has been sent for approval.';
+    $wasSent = in_array((string) ($old['status'] ?? ''), ['Pending approval', 'Approved', 'Rejected'], true) && !empty($old['maker']);
+    if ($new === null) {
+        return $wasSent && !$senior ? $deny : null;
+    }
+    if (!$senior && (($old === null && !empty($new['reversalOf'])) || ($new['reversedBy'] ?? null) !== ($old['reversedBy'] ?? null))) {
+        return 'Only the Senior Manager or the Group GM Finance can reverse a voucher.';
+    }
     $uid = 'u' . $me['id'];
     $now = gmdate('Y-m-d\TH:i:s.000\Z');
     $oldSt = (string) ($old['status'] ?? '');
@@ -230,11 +240,11 @@ function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
     if (is_array($old['maker'] ?? null)) {
         $new['maker'] = $old['maker'];
     }
-    // A voucher someone has started approving cannot be edited; it has to be returned to the maker first.
-    if ($oldAp && in_array($oldSt, ['Pending approval', 'Approved'], true)) {
-        foreach (['lines', 'date', 'entity', 'narration', 'payee'] as $k) {
+    // A voucher sent for approval can be changed only by the Senior Manager or the Group GM Finance.
+    if (!$senior && in_array($oldSt, ['Pending approval', 'Approved'], true)) {
+        foreach (['lines', 'date', 'entity', 'narration', 'payee', 'dept', 'vtype', 'chequeNo', 'chequeDate', 'costCentre'] as $k) {
             if (($new[$k] ?? null) != ($old[$k] ?? null)) {
-                return 'This voucher is being approved, so it cannot be changed. Return it to the maker first.';
+                return $deny;
             }
         }
     }
