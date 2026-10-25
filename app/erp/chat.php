@@ -43,7 +43,7 @@ function chat_inject(array $me): string
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     $cfg = ['api' => '/erp/chat/api', 'csrf' => $_SESSION['csrf'], 'uid' => (int) $me['id'], 'admin' => (bool) $me['is_admin'], 'max' => CHAT_MAX_FILE];
     return '<style>' . file_get_contents(__DIR__ . '/chat.css') . '</style><script>window.FS_CHAT=' . json_encode($cfg, $flags) . ";\n"
-        . file_get_contents(__DIR__ . '/chat.js') . '</script>';
+        . file_get_contents(__DIR__ . '/chat.js') . '</script>' . att_inject($me);
 }
 
 function chat_json($data, int $status = 200): void
@@ -127,6 +127,7 @@ function chat_api(string $sub): void
     $names = chat_names();
 
     if ($sub === '/poll') {
+        att_reminders_maybe();
         // New messages in this person's conversations since the last poll; the first poll only learns where "now" is.
         $after = (int) ($_GET['after'] ?? 0);
         $max = (int) $db->query('SELECT COALESCE(MAX(id), 0) FROM chat_messages')->fetchColumn();
