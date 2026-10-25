@@ -59,6 +59,7 @@
   function firstIn() { for (var i = S.punches.length - 1; i >= 0; i--) if (S.punches[i].kind === "in") return S.punches[i].at; return ""; }
 
   function openCard(note) {
+    if (gateEl) { err(note); return; }   // while the check-in screen is up, messages go there
     var rows = S.punches.map(function (x) {
       return "<li><b>" + (x.kind === "in" ? "In" : "Out") + " " + esc(x.at) + "</b> " + (x.method === "office" ? "Office" : x.method === "corrected" ? "Corrected" : x.site ? "At " + esc(x.site) : "Not at a known site") + "</li>";
     }).join("");
@@ -74,8 +75,12 @@
     root.classList.add("is-open");
   }
   function closeCard() { card.hidden = true; root.classList.remove("is-open"); }
-  function err(m) { var e = card.querySelector(".fsa-err"); if (e) { e.textContent = m || ""; e.hidden = !m; } }
+  function err(m) {
+    [card.querySelector(".fsa-err"), gateEl && gateEl.querySelector(".fsg-err")].forEach(function (e) { if (e) { e.textContent = m || ""; e.hidden = !m; } });
+  }
   function busy(on, label) {
+    var g = gateEl && gateEl.querySelector(".fsg-btn");
+    if (g) { g.disabled = on; g.textContent = on ? (label || "Saving…") : "Check in now"; }
     var b = card.querySelector(".fsa-go .fsa-btn");
     card.querySelectorAll("button.fsa-btn").forEach(function (x) { x.disabled = on; });
     if (b && label) b.textContent = label;
@@ -93,7 +98,7 @@
     var label = kind === "in" ? "Check in" : "Check out";
     var withoutLocation = function (why) {
       if (S.office) return submit(new FormData(), auto);
-      if (auto) { openCard("Your attendance was not marked yet. " + why); return; }
+      if (auto) { busy(false, label); openCard("Your attendance was not marked yet. " + why); return; }
       busy(false, label);
       err(why);
     };
@@ -120,7 +125,7 @@
       pill.classList.add("is-done");
       setTimeout(function () { pill.classList.remove("is-done"); }, 1500);
     }).catch(function (x) {
-      if (auto) { if (!/already/.test(x.message)) openCard("Your attendance was not marked yet. " + x.message); load(); return; }
+      if (auto) { busy(false, "Check in"); if (!/already/.test(x.message)) openCard("Your attendance was not marked yet. " + x.message); load(); return; }
       busy(false, pending === "in" ? "Check in" : "Check out");
       err(x.message);
     });
@@ -131,7 +136,72 @@
     S = j;
     skew = j.now * 1000 - Date.now();
     paint();
+    gateSync();
     if (!autoTried && S.state === "none" && S.workday) { autoTried = true; check("in", true); }
+  }
+
+  // ---- Check-in screen ----
+  // On a working day nobody uses the ERP until they have checked in: everything behind is blurred and a large
+  // check-in card sits on top. The Attendance page itself stays open so people can ask for a correction.
+  var gateEl = null, gateClock = null;
+  function skipped() { try { return sessionStorage.getItem("fs-att-skip") === new Date().toDateString(); } catch (x) { return false; } }
+  function gateNeeded() {
+    return C.gate && S && S.state === "none" && S.workday && hm(pkNow()) < (S.cutoff || "23:59")
+      && location.pathname.indexOf(C.page) !== 0 && !skipped();
+  }
+  function gateSync() {
+    if (gateNeeded()) { if (!gateEl) gateOpen(); return; }
+    if (gateEl) gateClose(S && S.state === "in");
+  }
+  function gateOpen() {
+    var h = pkNow().getHours(), hello = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+    gateEl = document.createElement("div");
+    gateEl.id = "fs-gate";
+    gateEl.setAttribute("role", "dialog");
+    gateEl.setAttribute("aria-modal", "true");
+    gateEl.innerHTML = '<div class="fsg-card"><div class="fsg-ring"><i></i><i></i><i></i><span><svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span></div>'
+      + '<p class="fsg-hello">' + esc(hello) + (C.name ? ", " + esc(C.name) : "") + "</p>"
+      + "<h2>Check in to start your day</h2>"
+      + '<p class="fsg-time"></p>'
+      + '<p class="fsg-sub">The ERP opens as soon as you check in. ' + (S.office ? "You are on the office internet." : "You are away from the office, so your location is saved with the time.") + "</p>"
+      + '<p class="fsg-late"></p>'
+      + '<button type="button" class="fsg-btn">Check in now</button>'
+      + '<p class="fsg-err" hidden></p>'
+      + '<p class="fsg-help"><a href="' + C.page + '">Can\'t check in? Ask HR for a correction</a>' + (C.admin ? ' · <button type="button" class="fsg-skip">Skip for today (admin)</button>' : "") + "</p></div>";
+    document.body.appendChild(gateEl);
+    document.documentElement.classList.add("fs-gated");
+    gateEl.querySelector(".fsg-btn").addEventListener("click", function () { check("in", false); });
+    var sk = gateEl.querySelector(".fsg-skip");
+    if (sk) sk.addEventListener("click", function () { try { sessionStorage.setItem("fs-att-skip", new Date().toDateString()); } catch (x) {} gateClose(false); });
+    ["keydown", "keyup", "keypress"].forEach(function (t) { gateEl.addEventListener(t, function (e) { e.stopPropagation(); }); });
+    var tick = function () {
+      var n = pkNow(), t = gateEl && gateEl.querySelector(".fsg-time"), l = gateEl && gateEl.querySelector(".fsg-late");
+      if (!t) return;
+      t.textContent = n.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
+      if (l && S.lateAfter) {
+        var isLate = hm(n) > S.lateAfter;
+        l.textContent = isLate ? "It is after " + S.lateAfter + ", so today counts as late." : "On time until " + S.lateAfter + ".";
+        l.className = "fsg-late" + (isLate ? " is-late" : "");
+      }
+    };
+    tick();
+    gateClock = setInterval(tick, 1000);
+    setTimeout(function () { var b = gateEl && gateEl.querySelector(".fsg-btn"); if (b) b.focus(); }, 300);
+  }
+  function gateClose(done) {
+    var g = gateEl;
+    gateEl = null;
+    clearInterval(gateClock);
+    if (!g) return;
+    if (done) {
+      var c = g.querySelector(".fsg-card");
+      c.innerHTML = '<div class="fsg-ok">✓</div><h2>You are checked in</h2><p class="fsg-sub">' + esc(firstIn()) + " · Have a good day" + (C.name ? ", " + esc(C.name) : "") + ".</p>";
+    }
+    setTimeout(function () {
+      g.classList.add("is-leaving");
+      document.documentElement.classList.remove("fs-gated");
+      setTimeout(function () { g.remove(); }, 600);
+    }, done ? 1300 : 0);
   }
   function load() {
     return api("/state").then(take).catch(function (x) { if (/Signed out/.test(x.message)) { root.hidden = true; clearInterval(timer); } });
@@ -141,7 +211,7 @@
     if (!document.body) return setTimeout(start, 50);
     build();
     load();
-    timer = setInterval(function () { document.hidden ? null : paint(); }, 30000);
+    timer = setInterval(function () { if (!document.hidden) { paint(); gateSync(); } }, 30000);
     setInterval(function () { if (!document.hidden && card.hidden) load(); }, 300000);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) load(); });
     page();

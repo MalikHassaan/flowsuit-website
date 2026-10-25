@@ -35,3 +35,37 @@
 #fs-att .fsa-file{display:block;margin-top:8px;font-size:13px;color:#475569}
 @media (max-width:520px){#fs-att{right:12px;bottom:80px}}
 @media print{#fs-att{display:none!important}}
+
+/* Check-in screen: the ERP behind is blurred and cannot be used until the person checks in. */
+html.fs-gated,html.fs-gated body{overflow:hidden!important}
+html.fs-gated body>*:not(#fs-gate):not(script):not(style){filter:blur(9px) saturate(.6)!important;pointer-events:none!important;user-select:none!important;transition:filter .5s}
+#fs-gate{position:fixed;inset:0;z-index:2147483600;display:grid;place-items:center;padding:16px;background:radial-gradient(circle at 50% 40%,rgba(31,111,184,.35),rgba(15,23,42,.72));font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0f172a;animation:fsg-in .45s ease both!important}
+#fs-gate *{box-sizing:border-box}
+#fs-gate.is-leaving{animation:fsg-out .55s ease both!important}
+@keyframes fsg-in{from{opacity:0}}
+@keyframes fsg-out{to{opacity:0;transform:scale(1.04)}}
+#fs-gate .fsg-card{width:min(440px,100%);padding:30px 28px 22px;border-radius:24px;background:#fff;text-align:center;box-shadow:0 40px 90px rgba(2,6,23,.55);animation:fsg-pop .6s cubic-bezier(.3,1.4,.5,1) both .1s!important;border-top:6px solid #16a34a}
+@keyframes fsg-pop{from{opacity:0;transform:translateY(24px) scale(.94)}}
+#fs-gate .fsg-ring{position:relative;width:110px;height:110px;margin:0 auto 10px;display:grid;place-items:center}
+#fs-gate .fsg-ring span{position:relative;z-index:1;width:78px;height:78px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#22c55e,#15803d);box-shadow:0 12px 30px rgba(22,163,74,.45);animation:fsg-tick 2s ease-in-out infinite!important}
+#fs-gate .fsg-ring i{position:absolute;inset:16px;border-radius:50%;border:3px solid #22c55e;animation:fsg-wave 2.4s ease-out infinite!important}
+#fs-gate .fsg-ring i:nth-child(2){animation-delay:.8s!important}#fs-gate .fsg-ring i:nth-child(3){animation-delay:1.6s!important}
+@keyframes fsg-wave{from{transform:scale(.9);opacity:.9}to{transform:scale(1.7);opacity:0}}
+@keyframes fsg-tick{0%,100%{transform:rotate(0)}10%{transform:rotate(-8deg)}20%{transform:rotate(8deg)}30%{transform:rotate(0)}}
+#fs-gate .fsg-hello{margin:0;color:#16a34a;font-weight:700;letter-spacing:.02em}
+#fs-gate h2{margin:2px 0 4px;font-size:26px;line-height:1.2;color:#0f172a}
+#fs-gate .fsg-time{margin:0 0 8px;font-size:34px;font-weight:800;letter-spacing:.02em;font-variant-numeric:tabular-nums;color:#13304f}
+#fs-gate .fsg-sub{margin:0 0 6px;color:#475569;font-size:14px}
+#fs-gate .fsg-late{margin:0 0 14px;font-size:13px;font-weight:600;color:#15803d}
+#fs-gate .fsg-late.is-late{color:#b45309}
+#fs-gate .fsg-btn{width:100%;padding:16px;border:0;border-radius:14px;background:linear-gradient(135deg,#22c55e,#15803d);color:#fff;font:700 18px system-ui,sans-serif;cursor:pointer;box-shadow:0 14px 30px rgba(22,163,74,.45);animation:fsg-glow 1.8s ease-in-out infinite!important}
+#fs-gate .fsg-btn:hover{filter:brightness(1.07)}
+#fs-gate .fsg-btn:disabled{opacity:.7;cursor:default;animation:none!important}
+@keyframes fsg-glow{50%{box-shadow:0 0 0 8px rgba(34,197,94,.2),0 14px 30px rgba(22,163,74,.45)}}
+#fs-gate .fsg-err{margin:10px 0 0;padding:9px 12px;border-radius:10px;background:#fef2f2;color:#b91c1c;font-size:13px;font-weight:600}
+#fs-gate .fsg-err[hidden]{display:none}
+#fs-gate .fsg-help{margin:14px 0 0;font-size:13px;color:#64748b}
+#fs-gate .fsg-help a{color:#1F6FB8;font-weight:600}
+#fs-gate .fsg-skip{border:0;background:none;padding:0;color:#64748b;font:inherit;text-decoration:underline;cursor:pointer}
+#fs-gate .fsg-ok{width:84px;height:84px;margin:4px auto 12px;border-radius:50%;display:grid;place-items:center;font-size:44px;color:#fff;background:linear-gradient(135deg,#22c55e,#15803d);animation:fsg-pop .5s cubic-bezier(.3,1.6,.5,1) both!important}
+@media print{#fs-gate{display:none!important}html.fs-gated body>*{filter:none!important}}

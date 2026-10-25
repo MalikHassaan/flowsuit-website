@@ -135,7 +135,9 @@ function att_workday(string $day): bool
 function att_inject(array $me): string
 {
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
-    $cfg = ['api' => '/erp/attendance/api', 'csrf' => $_SESSION['csrf'], 'page' => '/erp/m/attendance'];
+    // gate: nobody uses the ERP on a working day until they have checked in (hassan, 2026-10-25).
+    $cfg = ['api' => '/erp/attendance/api', 'csrf' => $_SESSION['csrf'], 'page' => '/erp/m/attendance',
+        'name' => (string) strtok($me['name'], ' '), 'admin' => (bool) $me['is_admin'], 'gate' => true];
     return '<style>' . file_get_contents(__DIR__ . '/att.css') . '</style><script>window.FS_ATT=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/att.js') . '</script>';
 }
@@ -147,7 +149,8 @@ function att_state(array $me): array
     $last = end($p) ?: null;
     return ['office' => att_ip_match(erp_ip(), $c['ips']), 'state' => $last ? $last['kind'] : 'none',
         'punches' => array_map(fn($r) => ['kind' => $r['kind'], 'at' => substr($r['at'], 11, 5), 'method' => $r['method'], 'site' => $r['site']], $p),
-        'end' => $c['end'], 'now' => time(), 'workday' => att_workday(date('Y-m-d'))];
+        'end' => $c['end'], 'cutoff' => $c['cutoff'], 'lateAfter' => date('H:i', strtotime($c['start']) + $c['grace'] * 60),
+        'now' => time(), 'workday' => att_workday(date('Y-m-d'))];
 }
 
 function att_api(string $sub): void
