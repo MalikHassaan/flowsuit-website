@@ -1,0 +1,37 @@
+#fs-att{position:fixed;right:20px;bottom:88px;z-index:2147482999;font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0f172a;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+#fs-att *,#fs-att *::before,#fs-att *::after{box-sizing:border-box}
+#fs-att[hidden],#fs-chat.is-open~#fs-att,body.fs-present #fs-att,body.present #fs-att{display:none!important}
+#fs-att [hidden]{display:none!important}
+#fs-att button{font:inherit;cursor:pointer}
+#fs-att .fsa-pill{order:2;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px 0 12px;border:0;border-radius:999px;background:#16a34a;color:#fff;font-weight:600;box-shadow:0 8px 22px rgba(15,23,42,.28);transition:transform .2s!important}
+#fs-att .fsa-pill:hover{transform:translateY(-2px)}
+#fs-att .fsa-pill i{width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.35)}
+#fs-att.is-in .fsa-pill{background:#fff;color:#0f172a;border:1px solid #e2e8f0}
+#fs-att.is-in .fsa-pill i{background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.25);animation:fsa-beat 2s infinite!important}
+#fs-att.is-late .fsa-pill{background:#dc2626;color:#fff;border-color:#dc2626;animation:fsa-shake 3s infinite!important}
+#fs-att.is-late .fsa-pill i{background:#fff}
+#fs-att .fsa-pill.is-done{animation:fsa-pop .6s!important}
+@keyframes fsa-beat{50%{box-shadow:0 0 0 7px rgba(22,163,74,0)}}
+@keyframes fsa-shake{0%,90%,100%{transform:none}92%{transform:rotate(-4deg)}96%{transform:rotate(4deg)}}
+@keyframes fsa-pop{40%{transform:scale(1.15)}}
+#fs-att .fsa-card{order:1;width:min(340px,calc(100vw - 24px));max-height:calc(100vh - 150px);overflow:auto;padding:14px 16px 16px;border-radius:16px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 24px 60px rgba(15,23,42,.3)}
+#fs-att .fsa-card header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#fs-att .fsa-card header b{font-size:16px}
+#fs-att .fsa-card header button{border:0;background:none;font-size:22px;line-height:1;color:#64748b}
+#fs-att .fsa-list{margin:6px 0;padding:0;list-style:none}
+#fs-att .fsa-list li{padding:6px 0;border-bottom:1px solid #eef2f7;font-size:13px;color:#475569}
+#fs-att .fsa-list b{color:#0f172a;margin-right:6px}
+#fs-att .fsa-muted{margin:6px 0;color:#64748b;font-size:13px}
+#fs-att .fsa-warn{margin:6px 0;padding:8px 10px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-weight:600;font-size:13px}
+#fs-att .fsa-err{margin:6px 0;color:#b91c1c;font-size:13px}
+#fs-att .fsa-go{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+#fs-att .fsa-go a{color:#1F6FB8;font-size:13px;font-weight:600}
+#fs-att .fsa-btn{flex:1;padding:11px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:700}
+#fs-att .fsa-btn.is-out{background:#1F6FB8}
+#fs-att .fsa-btn:disabled{opacity:.6;cursor:default}
+#fs-att .fsa-link{border:0;background:none;color:#1F6FB8;font-weight:600}
+#fs-att .fsa-cam video,#fs-att .fsa-cam img{display:block;width:100%;max-height:260px;object-fit:cover;border-radius:12px;background:#0f172a;transform:scaleX(-1)}
+#fs-att .fsa-cam img{transform:none}
+#fs-att .fsa-file{display:block;margin-top:8px;font-size:13px;color:#475569}
+@media (max-width:520px){#fs-att{right:12px;bottom:80px}}
+@media print{#fs-att{display:none!important}}

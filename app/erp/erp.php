@@ -10,6 +10,7 @@ require_once __DIR__ . '/hsec-qb.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/chat.php';
+require_once __DIR__ . '/attendance.php';
 
 const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
@@ -22,6 +23,8 @@ function erp_modules(): array
     return [
         'receivables' => ['name' => 'TAJ Receivables', 'icon' => 'ledger', 'ready' => true, 'about' => 'TAJ Residencia receivable and recovery dashboards.'],
         'hsec'        => ['name' => 'HSEC ERP', 'icon' => 'chart', 'ready' => true, 'about' => 'HSEC restructure finance ERP: vouchers, ledgers, payables, payroll and statements.', 'edit' => 'View and edit'],
+        'attendance'  => ['name' => 'Attendance', 'icon' => 'clock', 'ready' => true, 'about' => 'Check in and out, your month, leave and corrections. HR sees the whole team.',
+                          'none' => 'Own attendance only', 'view' => 'See the whole team', 'edit' => 'HR: manage the team'],
         'reports'     => ['name' => 'Reports',     'icon' => 'sheet',  'ready' => true,  'about' => 'Upload Excel or CSV reports and share them with your team.'],
         'inventory'   => ['name' => 'Inventory',   'icon' => 'boxes',  'ready' => false, 'about' => 'Stock levels, purchases and reorder alerts.'],
         'finance'     => ['name' => 'Finance',     'icon' => 'chart',  'ready' => false, 'about' => 'Expenses, payables and cash flow.'],
@@ -45,7 +48,7 @@ const ERP_LEVELS = ['view' => 'View only', 'edit' => 'View and upload'];
 // What a level is called for one module (HSEC edits records rather than uploading files).
 function erp_level_label(string $module, string $level): string
 {
-    return $level === 'edit' ? (erp_modules()[$module]['edit'] ?? ERP_LEVELS['edit']) : (ERP_LEVELS[$level] ?? $level);
+    return erp_modules()[$module][$level] ?? ERP_LEVELS[$level] ?? $level;
 }
 
 function erp_data_dir(): string
@@ -94,6 +97,7 @@ function erp_db(): PDO
     }
     erp_auth_schema($db);
     chat_schema($db);
+    att_schema($db);
     return $db;
 }
 
@@ -240,6 +244,9 @@ function erp_can(array $user, string $module, string $need = 'view'): bool
     if ($user['is_admin']) {
         return true;
     }
+    if ($module === 'attendance' && $need === 'view') {
+        return true; // everyone keeps their own attendance; the level decides what they see of the team (att_hr)
+    }
     $level = $user['access'][$module] ?? null;
     return $level === 'edit' || ($need === 'view' && $level === 'view');
 }
@@ -368,7 +375,7 @@ function erp_handle(string $path): void
     }
 
     $sub = substr($path, strlen('/erp')) ?: '/';
-    erp_start_session(!in_array($sub, ['/m/receivables/api/sync', '/m/hsec/api/sync', '/chat/api/poll'], true));
+    erp_start_session(!in_array($sub, ['/m/receivables/api/sync', '/m/hsec/api/sync', '/chat/api/poll', '/attendance/api/state'], true));
     $post = $_SERVER['REQUEST_METHOD'] === 'POST';
     if ($post) {
         erp_check_csrf();
@@ -395,6 +402,10 @@ function erp_handle(string $path): void
         } else {
             erp_render('dashboard', ['me' => erp_require_user()]);
         }
+    } elseif (str_starts_with($sub, '/attendance/api/')) {
+        att_api(substr($sub, strlen('/attendance/api')));
+    } elseif ($sub === '/m/attendance') {
+        att_page($post);
     } elseif (str_starts_with($sub, '/chat/api/')) {
         chat_api(substr($sub, strlen('/chat/api')));
     } elseif ($sub === '/chat-log') {

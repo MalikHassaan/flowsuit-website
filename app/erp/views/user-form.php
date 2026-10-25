@@ -51,7 +51,7 @@
 <?php foreach (erp_live_modules() as $key => $mod): $lvl = $target['access'][$key] ?? ''; ?>
     <fieldset class="access-row">
       <legend><?= icon($mod['icon']) ?><?= e($mod['name']) ?></legend>
-      <label><input type="radio" name="access[<?= e($key) ?>]" value="" <?= $lvl === '' ? 'checked' : '' ?>> No access</label>
+      <label><input type="radio" name="access[<?= e($key) ?>]" value="" <?= $lvl === '' ? 'checked' : '' ?>> <?= e($mod['none'] ?? 'No access') ?></label>
 <?php foreach (array_keys(ERP_LEVELS) as $value): $label = erp_level_label($key, $value); ?>
       <label><input type="radio" name="access[<?= e($key) ?>]" value="<?= e($value) ?>" <?= $lvl === $value ? 'checked' : '' ?>> <?= e($label) ?></label>
 <?php endforeach; ?>
