@@ -299,3 +299,10 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 @keyframes tile-dance { 0%, 82%, 100% { transform: none; } 88% { transform: translateY(-5px) scale(1.08); } 94% { transform: translateY(1px) scale(.97); } }
 @keyframes btn-shine { 0%, 70% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 @keyframes twinkle { 0%, 100% { opacity: .15; transform: scale(.6); } 50% { opacity: .9; transform: scale(1.3); } }
+
+/* User form: which HSEC companies a person may see. */
+.hsec-cos { display: grid; gap: 8px; margin: 18px 0 4px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; }
+.hsec-cos legend { padding: 0 6px; font-weight: 700; }
+.hsec-cos p { margin: 0; }
+.co-picks { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-left: 26px; }
+.hsec-cos:has(input[value=all]:checked) .co-picks { opacity: .45; pointer-events: none; }
