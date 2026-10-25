@@ -5,7 +5,7 @@
 <?php foreach ($errors as $err): ?>
 <p class="erp-error"><?= e($err) ?></p>
 <?php endforeach; ?>
-<form method="post" class="panel form user-form">
+<form method="post" class="panel form user-form" enctype="multipart/form-data">
   <?= erp_csrf_field() ?>
   <div class="form-grid">
     <label>Name<input name="name" value="<?= e($target['name']) ?>" required maxlength="80"></label>
@@ -70,6 +70,47 @@
 <?php endforeach; ?>
     </div>
     <p class="muted small">With two or more companies ticked, their "All my companies" view adds those companies together.</p>
+  </fieldset>
+<?php $nav = hsec_nav(); $pickedMods = array_filter(explode(',', (string) ($target['hsec_mods'] ?? ''))); $modScope = $_POST['hsec_mod_scope'] ?? ($pickedMods ? 'some' : 'all'); $tickedMods = $_POST['hsec_mods'] ?? $pickedMods; ?>
+  <fieldset class="hsec-cos hsec-mods" data-hsec-cos>
+    <legend>HSEC ERP: menu areas (left panel)</legend>
+    <p class="muted small">They see and work in the ticked areas only; everything else disappears from their left panel. Home is always there. Admins always see everything.</p>
+    <label class="check"><input type="radio" name="hsec_mod_scope" value="all" <?= $modScope === 'all' ? 'checked' : '' ?>> <b>All menu areas</b></label>
+    <label class="check"><input type="radio" name="hsec_mod_scope" value="some" <?= $modScope === 'some' ? 'checked' : '' ?>> Only these areas:</label>
+<?php if (!$nav): ?>
+    <p class="muted small">Upload the HSEC file first; the list comes from its menu.</p>
+<?php endif; ?>
+    <div class="mod-groups">
+<?php foreach ($nav as [$group, $items]): if (count($items) === 1 && $items[0][0] === 'dashboard') continue; ?>
+      <div class="mod-group">
+        <b><?= e($group) ?></b>
+<?php foreach ($items as [$key, $label]): ?>
+        <label class="check"><input type="checkbox" name="hsec_mods[]" value="<?= e($key) ?>" <?= in_array($key, $tickedMods, true) ? 'checked' : '' ?>> <?= e($label) ?></label>
+<?php endforeach; ?>
+      </div>
+<?php endforeach; ?>
+    </div>
+  </fieldset>
+<?php $jvRole = $_POST['hsec_jv'] ?? ($target['hsec_jv'] ?? ''); $hasSig = $target['id'] && is_file(hsec_sig_file((int) $target['id'])); ?>
+  <fieldset class="hsec-cos hsec-jv" data-hsec-cos>
+    <legend>HSEC ERP: voucher approval</legend>
+    <p class="muted small">Vouchers go Maker, then Senior Manager, then Group GM Finance. Nobody can approve a voucher they prepared, and the server checks every step.</p>
+    <div class="jv-roles">
+      <label class="check"><input type="radio" name="hsec_jv" value="" <?= $jvRole === '' ? 'checked' : '' ?>> No approval role</label>
+<?php foreach (HSEC_JV_ROLES as $k => $label): ?>
+      <label class="check"><input type="radio" name="hsec_jv" value="<?= e($k) ?>" <?= $jvRole === $k ? 'checked' : '' ?>> <b><?= e($label) ?></b> <span class="muted small"><?= ['maker' => 'prepares vouchers and sends them for approval', 'senior' => 'first approval', 'gmf' => 'final approval'][$k] ?></span></label>
+<?php endforeach; ?>
+    </div>
+    <div class="sig-row">
+<?php if ($hasSig): ?>
+      <figure class="sig-now"><img src="/erp/m/hsec/sig/<?= (int) $target['id'] ?>?v=<?= filemtime(hsec_sig_file((int) $target['id'])) ?>" alt="Current signature"><figcaption class="muted small">Current signature</figcaption></figure>
+<?php endif; ?>
+      <label>Digital signature (PNG or JPG, under 1 MB)<input type="file" name="hsec_sig" accept="image/png,image/jpeg"></label>
+<?php if ($hasSig): ?>
+      <label class="check"><input type="checkbox" name="hsec_sig_remove" value="1"> Remove the signature</label>
+<?php endif; ?>
+    </div>
+    <p class="muted small">Sign on white paper in dark ink, take a clear photo, crop it close and upload it. It is printed on the vouchers this person prepares or approves.</p>
   </fieldset>
   <div class="form-actions">
     <button class="btn" type="submit"><?= $isNew ? 'Create user' : 'Save changes' ?></button>

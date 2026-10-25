@@ -6,6 +6,7 @@
 require_once __DIR__ . '/import.php';
 require_once __DIR__ . '/taj-store.php';
 require_once __DIR__ . '/hsec-store.php';
+require_once __DIR__ . '/hsec-approvals.php';
 require_once __DIR__ . '/hsec-qb.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/auth.php';
@@ -96,6 +97,7 @@ function erp_db(): PDO
     if (!in_array('hsec_ents', array_column($db->query('PRAGMA table_info(users)')->fetchAll(), 'name'), true)) {
         $db->exec("ALTER TABLE users ADD COLUMN hsec_ents TEXT NOT NULL DEFAULT ''");
     }
+    hsec_access_schema($db);
     erp_auth_schema($db);
     chat_schema($db);
     att_schema($db);
@@ -446,8 +448,10 @@ function erp_handle(string $path): void
     } elseif ($sub === '/analytics') {
         $days = in_array((int) ($_GET['days'] ?? 30), [7, 30, 90, 365], true) ? (int) ($_GET['days'] ?? 30) : 30;
         erp_render('analytics', ['me' => erp_require_admin(), 'days' => $days, 'r' => stats_report($days)]);
+    } elseif (preg_match('#^/m/hsec/sig/(\d+)$#', $sub, $m)) {
+        hsec_sig_serve((int) $m[1]);
     } elseif ($sub === '/users') {
-        erp_users_list();
+        erp_users_list($post);
     } elseif ($sub === '/users/new' || preg_match('#^/users/(\d+)$#', $sub, $m)) {
         erp_user_form(isset($m[1]) ? (int) $m[1] : null, $post);
     } else {
@@ -623,9 +627,17 @@ function erp_require_admin(): array
     return $me;
 }
 
-function erp_users_list(): void
+function erp_users_list(bool $post = false): void
 {
     $me = erp_require_admin();
+    if ($post && in_array($_POST['action'] ?? '', ['hsec_approvals_on', 'hsec_approvals_off'], true)) {
+        $on = $_POST['action'] === 'hsec_approvals_on';
+        erp_setting_set('hsec_approvals', $on ? 'on' : null);
+        hsec_touch_settings($me);
+        erp_flash($on ? 'HSEC vouchers are now approved in the system: Maker, then Senior Manager, then Group GM Finance.'
+            : 'HSEC voucher approval in the system is off. Vouchers go back to paper signatures.');
+        erp_redirect('/erp/users#hsec-approvals');
+    }
     $users = erp_db()->query('SELECT * FROM users ORDER BY is_admin DESC, name')->fetchAll();
     foreach ($users as &$u) {
         $u['access'] = erp_access_for((int) $u['id']);
@@ -633,14 +645,14 @@ function erp_users_list(): void
     unset($u);
     $share = $_SESSION['share_link'] ?? null;
     unset($_SESSION['share_link']);
-    erp_render('users', ['me' => $me, 'users' => $users, 'share' => $share]);
+    erp_render('users', ['me' => $me, 'users' => $users, 'share' => $share, 'jvOn' => hsec_approvals_on(), 'jvPeople' => hsec_jv_people()]);
 }
 
 function erp_user_form(?int $id, bool $post): void
 {
     $me = erp_require_admin();
     $db = erp_db();
-    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1, 'home' => '', 'hsec_ents' => ''];
+    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1, 'home' => '', 'hsec_ents' => '', 'hsec_mods' => '', 'hsec_jv' => ''];
     if ($id !== null) {
         $st = $db->prepare('SELECT * FROM users WHERE id = ?');
         $st->execute([$id]);
@@ -673,6 +685,12 @@ function erp_user_form(?int $id, bool $post): void
         $companies = array_keys(hsec_companies());
         $ents = ($_POST['hsec_scope'] ?? 'all') === 'some'
             ? array_values(array_intersect($companies, (array) ($_POST['hsec_ents'] ?? []))) : [];
+        // HSEC menu areas (empty: all of them) and voucher approval role.
+        $mods = ($_POST['hsec_mod_scope'] ?? 'all') === 'some'
+            ? array_values(array_intersect(hsec_nav_keys(), (array) ($_POST['hsec_mods'] ?? []))) : [];
+        $jv = isset(HSEC_JV_ROLES[$_POST['hsec_jv'] ?? '']) ? $_POST['hsec_jv'] : '';
+        $sigUp = $_FILES['hsec_sig'] ?? null;
+        $sigUp = $sigUp && $sigUp['error'] !== UPLOAD_ERR_NO_FILE ? $sigUp : null;
         $access = [];
         foreach (array_keys(erp_modules()) as $key) {
             $level = $_POST['access'][$key] ?? '';
@@ -683,6 +701,20 @@ function erp_user_form(?int $id, bool $post): void
         $errors = erp_validate_user($name, $email, $password, $id === null && !$invite, $id);
         if (($_POST['hsec_scope'] ?? 'all') === 'some' && !$ents && !$isAdmin && isset($access['hsec'])) {
             $errors[] = 'Tick at least one HSEC company, or choose All companies.';
+        }
+        if (($_POST['hsec_mod_scope'] ?? 'all') === 'some' && !$mods && !$isAdmin && isset($access['hsec'])) {
+            $errors[] = 'Tick at least one HSEC menu area, or choose All menu areas.';
+        }
+        if ($sigUp && !$errors) {
+            try {
+                // Checked before saving the rest; written once the user exists.
+                $probe = @getimagesize($sigUp['tmp_name']);
+                if ($sigUp['error'] !== UPLOAD_ERR_OK || $sigUp['size'] > HSEC_SIG_MAX || !$probe || !in_array($probe[2], [IMAGETYPE_PNG, IMAGETYPE_JPEG], true)) {
+                    throw new RuntimeException('The signature must be a PNG or JPG picture under 1 MB.');
+                }
+            } catch (RuntimeException $ex) {
+                $errors[] = $ex->getMessage();
+            }
         }
         if (!$errors) {
             $db->beginTransaction();
@@ -699,6 +731,11 @@ function erp_user_form(?int $id, bool $post): void
             } else {
                 $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ?, home = ?, hsec_ents = ? WHERE id = ?')
                     ->execute([$name, $email, $isAdmin, $active, $mustChange, $home, implode(',', $ents), $id]);
+                $st = $db->prepare('SELECT hsec_jv FROM users WHERE id = ?');
+                $st->execute([$id]);
+                if ((string) $st->fetchColumn() !== $jv) {
+                    erp_user_event($id, 'HSEC approval role: ' . (HSEC_JV_ROLES[$jv] ?? 'none'), $me['name']);
+                }
                 if ($password !== '') {
                     erp_set_password($id, $password, (bool) $mustChange, 'Set by admin', $me['name']);
                 }
@@ -706,12 +743,25 @@ function erp_user_form(?int $id, bool $post): void
                     $db->prepare('DELETE FROM auth_tokens WHERE user_id = ?')->execute([$id]);
                 }
             }
+            $db->prepare('UPDATE users SET hsec_mods = ?, hsec_jv = ? WHERE id = ?')->execute([implode(',', $mods), $jv, $id]);
             $db->prepare('DELETE FROM access WHERE user_id = ?')->execute([$id]);
             $ins = $db->prepare('INSERT INTO access (user_id, module, level) VALUES (?, ?, ?)');
             foreach ($access as $key => $level) {
                 $ins->execute([$id, $key, $level]);
             }
             $db->commit();
+            if ($sigUp) {
+                try {
+                    hsec_sig_save($id, $sigUp);
+                    erp_user_event($id, 'Signature uploaded', $me['name']);
+                } catch (RuntimeException $ex) {
+                    erp_flash('Saved ' . $name . ', but not the signature: ' . $ex->getMessage());
+                    erp_redirect('/erp/users/' . $id);
+                }
+            } elseif (!empty($_POST['hsec_sig_remove']) && is_file(hsec_sig_file($id))) {
+                unlink(hsec_sig_file($id));
+                erp_user_event($id, 'Signature removed', $me['name']);
+            }
             erp_flash('Saved ' . $name . '.');
             if ($invite || $sendLink) {
                 $res = erp_send_password_link(['id' => $id, 'name' => $name, 'email' => $email], $invite ? 'invite' : 'reset');
@@ -720,7 +770,7 @@ function erp_user_form(?int $id, bool $post): void
             }
             erp_redirect('/erp/users');
         }
-        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange, 'home' => $home, 'hsec_ents' => implode(',', $ents)];
+        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange, 'home' => $home, 'hsec_ents' => implode(',', $ents), 'hsec_mods' => implode(',', $mods), 'hsec_jv' => $jv];
     }
     erp_render('user-form', ['me' => $me, 'target' => $target, 'isSelf' => $isSelf, 'errors' => $errors,
         'events' => $target['id'] ? erp_user_events((int) $target['id']) : []]);
