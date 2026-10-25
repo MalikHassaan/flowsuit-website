@@ -89,7 +89,7 @@ function chat_out(array $m, array $names, bool $withDeleted = false): array
         $ext = strtolower(pathinfo($m['fname'], PATHINFO_EXTENSION));
         $file = ['id' => (int) $m['file_id'], 'name' => $m['fname'], 'size' => (int) $m['fsize'], 'image' => isset(CHAT_IMAGES[$ext])];
     }
-    return ['id' => (int) $m['id'], 'room' => (int) $m['room_id'], 'uid' => (int) $m['user_id'], 'name' => $names[$m['user_id']] ?? 'Removed user',
+    return ['id' => (int) $m['id'], 'room' => (int) $m['room_id'], 'uid' => (int) $m['user_id'], 'name' => (int) $m['user_id'] === 0 ? 'FlowSuit ERP' : ($names[$m['user_id']] ?? 'Removed user'),
         'body' => $m['deleted_at'] && !$withDeleted ? '' : $m['body'], 'file' => $file, 'at' => $m['created_at'], 'del' => (bool) $m['deleted_at']];
 }
 
@@ -246,6 +246,11 @@ function chat_api(string $sub): void
     }
 
     if ($sub === '/send') {
+        $st = $db->prepare('SELECT kind FROM chat_rooms WHERE id = ?');
+        $st->execute([$room]);
+        if ($st->fetchColumn() === 'system') {
+            chat_json(['error' => 'This chat only shows messages from the ERP.'], 400);
+        }
         $body = trim(mb_substr((string) ($in['body'] ?? ''), 0, 4000));
         $fileId = null;
         if (!empty($_FILES['file']) && $_FILES['file']['error'] !== UPLOAD_ERR_NO_FILE) {

@@ -86,12 +86,14 @@
   // blocked location is fine (the IP proves where they are); anywhere else the location is required.
   var pending = null;
 
-  function check(kind) {
+  // auto: the first time the ERP is opened on a working day, check in without a press.
+  function check(kind, auto) {
     err("");
     pending = kind;
     var label = kind === "in" ? "Check in" : "Check out";
     var withoutLocation = function (why) {
-      if (S.office) return submit(new FormData());
+      if (S.office) return submit(new FormData(), auto);
+      if (auto) { openCard("Your attendance was not marked yet. " + why); return; }
       busy(false, label);
       err(why);
     };
@@ -102,13 +104,14 @@
       fd.append("lat", pos.coords.latitude);
       fd.append("lng", pos.coords.longitude);
       fd.append("acc", pos.coords.accuracy);
-      submit(fd);
+      submit(fd, auto);
     }, function (x) {
       withoutLocation(x.code === 1 ? "Location is blocked. Allow location for flowsuit.net in your browser settings, then try again." : "Your location could not be found. Turn on GPS and try again.");
     }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   }
-  function submit(fd) {
+  function submit(fd, auto) {
     fd.append("kind", pending);
+    if (auto) fd.append("auto", "1");
     busy(true, "Saving…");
     api("/check", fd).then(function (j) {
       take(j);
@@ -116,10 +119,20 @@
       closeCard();
       pill.classList.add("is-done");
       setTimeout(function () { pill.classList.remove("is-done"); }, 1500);
-    }).catch(function (x) { busy(false, pending === "in" ? "Check in" : "Check out"); err(x.message); });
+    }).catch(function (x) {
+      if (auto) { if (!/already/.test(x.message)) openCard("Your attendance was not marked yet. " + x.message); load(); return; }
+      busy(false, pending === "in" ? "Check in" : "Check out");
+      err(x.message);
+    });
   }
 
-  function take(j) { S = j; skew = j.now * 1000 - Date.now(); paint(); }
+  var autoTried = false;
+  function take(j) {
+    S = j;
+    skew = j.now * 1000 - Date.now();
+    paint();
+    if (!autoTried && S.state === "none" && S.workday) { autoTried = true; check("in", true); }
+  }
   function load() {
     return api("/state").then(take).catch(function (x) { if (/Signed out/.test(x.message)) { root.hidden = true; clearInterval(timer); } });
   }

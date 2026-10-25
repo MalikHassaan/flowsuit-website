@@ -35,7 +35,7 @@ function att_cfg(): array
     }
     static $cfg = null;
     return $cfg ??= [
-        'start' => erp_setting('att_start') ?? '09:00',
+        'start' => erp_setting('att_start') ?? '10:00',
         'grace' => (int) (erp_setting('att_grace') ?? 15),
         'end' => erp_setting('att_end') ?? '18:00',
         'cutoff' => erp_setting('att_cutoff') ?? '20:00',
@@ -224,12 +224,47 @@ function att_api(string $sub): void
             }
             $dist = $dist === null ? null : max(0, $dist);
         }
-        $db->prepare('INSERT INTO att_punches (user_id, kind, day, at, method, ip, lat, lng, acc, site, site_dist, photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-            ->execute([$uid, $kind, date('Y-m-d'), erp_now(), $office ? 'office' : 'remote', erp_ip(), $lat, $lng, $acc, $site, $dist, $photo]);
+        $auto = ($_POST['auto'] ?? '') === '1';
+        $db->prepare('INSERT INTO att_punches (user_id, kind, day, at, method, ip, lat, lng, acc, site, site_dist, photo, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$uid, $kind, date('Y-m-d'), erp_now(), $office ? 'office' : 'remote', erp_ip(), $lat, $lng, $acc, $site, $dist, $photo, $auto ? 'Checked in on opening the ERP' : null]);
+        if ($kind === 'in' && !$p) {
+            att_tell($uid, att_first_in_message($office, $site));
+        }
         chat_json(att_state($me) + ['done' => $kind]);
     }
 
     chat_json(['error' => 'Not found'], 404);
+}
+
+// The day's first check-in: on time or late, said in the person's "Attendance" chat.
+function att_first_in_message(bool $office, ?string $site): string
+{
+    $c = att_cfg();
+    $lateAfter = date('H:i', strtotime($c['start']) + $c['grace'] * 60);
+    $now = date('H:i');
+    $where = $office ? 'from the office' : ($site ? 'at ' . $site : 'away from the office and every saved site');
+    if (!att_workday(date('Y-m-d'))) {
+        return 'Your attendance was marked at ' . date('g:i a') . ' ' . $where . '. Today is a day off.';
+    }
+    return $now > $lateAfter
+        ? 'Your attendance was marked LATE at ' . date('g:i a') . ' ' . $where . '. The day starts at ' . date('g:i a', strtotime($c['start'])) . ' and counts as late after ' . date('g:i a', strtotime($lateAfter)) . '. If this is wrong, ask for a correction under Attendance.'
+        : 'Your attendance was marked present at ' . date('g:i a') . ' ' . $where . '. Have a good day.';
+}
+
+// A message from "FlowSuit ERP" in the person's own Attendance chat (one per person, read-only for them).
+function att_tell(int $uid, string $text): void
+{
+    $db = erp_db();
+    $key = 'sys-att-' . $uid;
+    $st = $db->prepare('SELECT id FROM chat_rooms WHERE dm_key = ?');
+    $st->execute([$key]);
+    $room = (int) $st->fetchColumn();
+    if (!$room) {
+        $db->prepare("INSERT INTO chat_rooms (kind, name, dm_key, created_by, created_at) VALUES ('system', 'Attendance', ?, 0, ?)")->execute([$key, erp_now()]);
+        $room = (int) $db->lastInsertId();
+        $db->prepare('INSERT INTO chat_members (room_id, user_id) VALUES (?, ?)')->execute([$room, $uid]);
+    }
+    $db->prepare('INSERT INTO chat_messages (room_id, user_id, body, created_at) VALUES (?, 0, ?, ?)')->execute([$room, $text, erp_now()]);
 }
 
 // ---- Day status ----

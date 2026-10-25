@@ -99,7 +99,7 @@
     if (!S.rooms.length) h += '<p class="fsc-empty">No conversations yet. Press <b>+ New</b> to message a colleague or start a group.</p>';
     S.rooms.forEach(function (r) {
       var l = r.last, pre = !l ? "No messages yet" : l.del ? "Message deleted" : (l.uid === C.uid ? "You: " : r.kind === "group" ? l.name.split(" ")[0] + ": " : "") + (l.body || (l.file ? "📎 " + l.file.name : ""));
-      h += '<button type="button" class="fsc-row' + (r.unread ? " is-unread" : "") + '" data-room="' + r.id + '"><i class="fsc-av' + (r.kind === "group" ? " is-group" : "") + '">' + (r.kind === "group" ? "#" : initial(r.name)) + "</i>"
+      h += '<button type="button" class="fsc-row' + (r.unread ? " is-unread" : "") + '" data-room="' + r.id + '"><i class="fsc-av' + (r.kind === "group" ? " is-group" : r.kind === "system" ? " is-sys" : "") + '">' + (r.kind === "group" ? "#" : r.kind === "system" ? "⏱" : initial(r.name)) + "</i>"
         + '<span class="fsc-meta"><b>' + esc(r.name) + "</b><small>" + esc(pre) + "</small></span>"
         + '<span class="fsc-side">' + (l ? "<small>" + (day(l.at) === "Today" ? when(l.at) : esc(day(l.at))) + "</small>" : "") + (r.unread ? "<em>" + r.unread + "</em>" : "") + "</span></button>";
     });
@@ -131,7 +131,7 @@
     var r = roomById(S.room), list = S.msgs[S.room], old = panel.querySelector(".fsc-msgs");
     var stick = !old || old.scrollHeight - old.scrollTop - old.clientHeight < 60, draft = panel.querySelector(".fsc-input");
     var keep = draft && panel.getAttribute("data-shown") === String(S.room) ? draft.value : "";
-    var sub = r.kind === "group" ? r.members.length + " people" : "One-to-one chat";
+    var sub = r.kind === "group" ? r.members.length + " people" : r.kind === "system" ? "Messages from FlowSuit ERP" : "One-to-one chat";
     var calls = r.kind === "dm" && window.RTCPeerConnection && navigator.mediaDevices
       ? '<button type="button" class="fsc-icon" data-act="call" data-video="0" title="Voice call" aria-label="Voice call">' + ICON.phone + '</button>'
         + '<button type="button" class="fsc-icon" data-act="call" data-video="1" title="Video call" aria-label="Video call">' + ICON.video + "</button>" : "";
@@ -159,7 +159,7 @@
         h += '<small class="fsc-time">' + (mine && !m.del ? '<button type="button" data-del="' + m.id + '">Delete ·</button> ' : "") + when(m.at) + (mine && !m.del ? tick(m.id, r) : "") + "</small></div>";
       });
     }
-    h += '</div><div class="fsc-compose"><div class="fsc-chip" hidden></div><p class="fsc-err" hidden></p><div class="fsc-bar">'
+    h += r.kind === "system" ? '</div><p class="fsc-note">Automatic messages. Questions about them go to HR.</p>' : '</div><div class="fsc-compose"><div class="fsc-chip" hidden></div><p class="fsc-err" hidden></p><div class="fsc-bar">'
       + '<button type="button" class="fsc-icon fsc-attach" data-act="attach" title="Attach a file (up to ' + Math.round(C.max / 1048576) + ' MB)" aria-label="Attach a file">'
       + '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>'
       + '<textarea class="fsc-input" rows="1" maxlength="4000" placeholder="Write a message"></textarea>'
@@ -168,10 +168,11 @@
     panel.innerHTML = h;
     panel.setAttribute("data-shown", S.room);
     var box = panel.querySelector(".fsc-msgs"), input = panel.querySelector(".fsc-input");
+    if (stick) box.scrollTop = box.scrollHeight; else if (old) box.scrollTop = old.scrollTop;
+    if (!input) return;
     input.value = keep;
     grow(input);
     showFile();
-    if (stick) box.scrollTop = box.scrollHeight; else if (old) box.scrollTop = old.scrollTop;
     if (focused || !keep) input.focus();
   }
 
