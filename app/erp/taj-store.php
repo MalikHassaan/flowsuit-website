@@ -105,6 +105,9 @@ function taj_inject(array $me): string
         . 'line-height:19px;text-align:center;font:600 15px system-ui,sans-serif;color:#b91c1c;background:#fff;box-shadow:0 1px 4px rgba(15,23,42,.25);cursor:pointer}'
         . '.nav-i:hover .fs-hide,.nav-i:focus-within .fs-hide{display:block}.fs-hide:hover{background:#b91c1c;color:#fff}body.navmin .fs-hide{display:none!important}</style>'
         . '<style>body.present .card:has(>.chart){display:flex;flex-direction:column}body.present .card>.chart{flex:1 1 auto}</style>'
+        // Any screen size: the app stops at 1480px wide, so big monitors get the full width and larger text.
+        . '<style>@media (min-width:1700px){.topin,.shell{max-width:min(94vw,2600px)!important}}'
+        . '@media (min-width:2200px){html:not(:has(body.present)){zoom:1.15}}@media (min-width:3200px){html:not(:has(body.present)){zoom:1.45}}</style>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-present.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-targets.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-hide.js') . '</script>'
