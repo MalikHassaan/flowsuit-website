@@ -23,6 +23,15 @@ function chat_schema(PDO $db): void
         id INTEGER PRIMARY KEY, room_id INTEGER NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
         user_id INTEGER NOT NULL, body TEXT NOT NULL DEFAULT \'\', file_id INTEGER, created_at TEXT NOT NULL, deleted_at TEXT)');
     $db->exec('CREATE INDEX IF NOT EXISTS chat_messages_room ON chat_messages (room_id, id)');
+    // The newest message each member's ERP has received: with last_read it gives the sent/delivered/read ticks.
+    if (!in_array('last_delivered', array_column($db->query('PRAGMA table_info(chat_members)')->fetchAll(), 'name'), true)) {
+        $db->exec('ALTER TABLE chat_members ADD COLUMN last_delivered INTEGER NOT NULL DEFAULT 0');
+    }
+    // Call set-up messages between two browsers (ring, answer, network details); kept for two minutes.
+    $db->exec('CREATE TABLE IF NOT EXISTS chat_signals (
+        id INTEGER PRIMARY KEY, room_id INTEGER NOT NULL, from_user INTEGER NOT NULL, to_user INTEGER NOT NULL,
+        call TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL DEFAULT \'\', at INTEGER NOT NULL)');
+    $db->exec('CREATE INDEX IF NOT EXISTS chat_signals_to ON chat_signals (to_user, id)');
 }
 
 function chat_files_dir(): string
@@ -41,7 +50,12 @@ function chat_inject(array $me): string
         return '';
     }
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
-    $cfg = ['api' => '/erp/chat/api', 'csrf' => $_SESSION['csrf'], 'uid' => (int) $me['id'], 'admin' => (bool) $me['is_admin'], 'max' => CHAT_MAX_FILE];
+    // Calls connect directly between browsers; a TURN relay (optional, in ~/flowsuit-secrets.php) helps on strict mobile networks.
+    $ice = [['urls' => ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']]];
+    if ($turn = erp_secret('turn_url')) {
+        $ice[] = ['urls' => array_map('trim', explode(',', $turn)), 'username' => (string) erp_secret('turn_user'), 'credential' => (string) erp_secret('turn_pass')];
+    }
+    $cfg = ['api' => '/erp/chat/api', 'csrf' => $_SESSION['csrf'], 'uid' => (int) $me['id'], 'admin' => (bool) $me['is_admin'], 'max' => CHAT_MAX_FILE, 'ice' => $ice];
     return '<style>' . file_get_contents(__DIR__ . '/chat.css') . '</style><script>window.FS_CHAT=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/chat.js') . '</script>' . att_inject($me);
 }
@@ -91,6 +105,7 @@ function chat_rooms_for(int $uid, array $names): array
     $st->execute([$uid]);
     $rooms = $st->fetchAll();
     $mem = erp_db()->prepare('SELECT user_id FROM chat_members WHERE room_id = ?');
+    $seen = erp_db()->prepare('SELECT MIN(last_delivered) AS d, MIN(last_read) AS r FROM chat_members WHERE room_id = ? AND user_id <> ?');
     $last = erp_db()->prepare(CHAT_MSG_SQL . ' WHERE m.id = ?');
     $out = [];
     foreach ($rooms as $r) {
@@ -106,8 +121,10 @@ function chat_rooms_for(int $uid, array $names): array
             $last->execute([$r['last_id']]);
             $preview = chat_out($last->fetch(), $names);
         }
+        $seen->execute([$r['id'], $uid]);
+        $sr = $seen->fetch();
         $out[] = ['id' => (int) $r['id'], 'kind' => $r['kind'], 'name' => $name, 'members' => $members,
-            'unread' => (int) $r['unread'], 'last' => $preview];
+            'unread' => (int) $r['unread'], 'last' => $preview, 'seen' => ['d' => (int) $sr['d'], 'r' => max((int) $sr['r'], 0)]];
     }
     return $out;
 }
@@ -143,6 +160,9 @@ function chat_api(string $sub): void
                 $msgs[] = chat_out($m, $names);
             }
         }
+        // Everything in this person's chats has now reached their ERP ("delivered").
+        $db->prepare('UPDATE chat_members SET last_delivered = (SELECT COALESCE(MAX(id), 0) FROM chat_messages WHERE room_id = chat_members.room_id) WHERE user_id = ?')
+            ->execute([$uid]);
         $people = $db->query('SELECT id, name FROM users WHERE active = 1 ORDER BY name COLLATE NOCASE')->fetchAll();
         chat_json(['max' => $max, 'msgs' => $msgs, 'rooms' => chat_rooms_for($uid, $names),
             'people' => array_values(array_filter(array_map(fn($p) => ['id' => (int) $p['id'], 'name' => $p['name']], $people), fn($p) => $p['id'] !== $uid))]);
@@ -157,6 +177,20 @@ function chat_api(string $sub): void
         $st = $db->prepare(CHAT_MSG_SQL . ' WHERE m.room_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT 60');
         $st->execute([$room, $before]);
         chat_json(['msgs' => array_reverse(array_map(fn($m) => chat_out($m, $names), $st->fetchAll()))]);
+    }
+
+    if ($sub === '/sig') {
+        // Call set-up messages for this person, polled every few seconds so a call rings quickly.
+        $db->prepare('DELETE FROM chat_signals WHERE at < ?')->execute([time() - 120]);
+        $after = (int) ($_GET['after'] ?? -1);
+        if ($after < 0) { // first look: only learn where "now" is, so old signals are never replayed
+            chat_json(['last' => (int) $db->query('SELECT COALESCE(MAX(id), 0) FROM chat_signals')->fetchColumn(), 'sigs' => []]);
+        }
+        $st = $db->prepare('SELECT * FROM chat_signals WHERE to_user = ? AND id > ? ORDER BY id');
+        $st->execute([$uid, $after]);
+        $sigs = array_map(fn($g) => ['id' => (int) $g['id'], 'room' => (int) $g['room_id'], 'from' => (int) $g['from_user'], 'name' => $names[$g['from_user']] ?? '',
+            'call' => $g['call'], 'kind' => $g['kind'], 'payload' => $g['payload']], $st->fetchAll());
+        chat_json(['last' => $sigs ? end($sigs)['id'] : $after, 'sigs' => $sigs]);
     }
 
     if (preg_match('#^/file/(\d+)$#', $sub, $m)) {
@@ -244,6 +278,20 @@ function chat_api(string $sub): void
         $st = $db->prepare(CHAT_MSG_SQL . ' WHERE m.id = ?');
         $st->execute([$id]);
         chat_json(['msg' => chat_out($st->fetch(), $names)]);
+    }
+
+    if ($sub === '/signal') {
+        // Calls are one-to-one only: the signal goes to the other person in this chat.
+        $st = $db->prepare("SELECT cm.user_id FROM chat_members cm JOIN chat_rooms r ON r.id = cm.room_id AND r.kind = 'dm' WHERE cm.room_id = ? AND cm.user_id <> ?");
+        $st->execute([$room, $uid]);
+        $to = (int) $st->fetchColumn();
+        $kind = (string) ($in['kind'] ?? '');
+        if (!$to || !in_array($kind, ['ring', 'accept', 'decline', 'busy', 'offer', 'answer', 'ice', 'hangup'], true)) {
+            chat_json(['error' => 'Calls work in one-to-one chats only.'], 400);
+        }
+        $db->prepare('INSERT INTO chat_signals (room_id, from_user, to_user, call, kind, payload, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$room, $uid, $to, mb_substr((string) ($in['call'] ?? ''), 0, 40), $kind, mb_substr((string) ($in['payload'] ?? ''), 0, 20000), time()]);
+        chat_json(['ok' => true]);
     }
 
     if ($sub === '/read') {
