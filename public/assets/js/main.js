@@ -413,6 +413,11 @@ document.addEventListener('click', function (e) {
   } else {
     dashes.forEach(function (d) { onScreen.add(d); });
   }
+  dashes.forEach(function (d) {
+    var line = d.querySelector('.dash-line'), donut = d.querySelector('.dash-donut');
+    if (line) d._line = dashLine(line);
+    if (donut) d._donut = dashDonut(donut);
+  });
   var step = 0;
   setTimeout(function () {
     setInterval(function () {
@@ -425,15 +430,102 @@ document.addEventListener('click', function (e) {
           b.textContent = (n + Math.ceil(n * (0.002 + Math.random() * 0.01))).toLocaleString('en-US');
           b.classList.remove('is-up'); void b.offsetWidth; b.classList.add('is-up');
         });
-        d.querySelectorAll('.dash-chart span').forEach(function (bar) {
-          bar.style.height = Math.round(30 + Math.random() * 68) + '%';
-        });
+        if (d._line) d._line.next();
+        if (d._donut) d._donut.next(step);
         var nav = d.querySelectorAll('.dash-nav i');
         nav.forEach(function (n, i) { n.classList.toggle('is-on', i === step % nav.length); });
       });
     }, 2200);
   }, 1500);
 })();
+
+// Sales line with a forecast: 9 past points in solid blue up to "today", then 5 forecast points as a
+// dashed amber line inside a range that widens with time. Each tick a new day arrives and everything
+// slides smoothly to the left.
+function dashLine(card) {
+  var W = 300, H = 120, PAST = 9, AHEAD = 5, N = PAST + AHEAD, X = W / (N - 1);
+  var act = card.querySelector('.dl-act'), area = card.querySelector('.dl-area'), fc = card.querySelector('.dl-fc'),
+    band = card.querySelector('.dl-band'), today = card.querySelector('.dl-today'), dot = card.querySelector('.dl-dot'),
+    tag = card.querySelector('.dl-tag'), svg = card.querySelector('svg');
+  var v = [], level = 52;
+  for (var i = 0; i < PAST; i++) { level = walk(level); v.push(level); }
+  var shown = forecast(v), from = shown, t0 = 0;
+  function walk(l) { return Math.max(22, Math.min(88, l + (Math.random() - .42) * 16)); }
+  // Forecast: carry on the recent trend, flattened a little, plus a range that grows each day.
+  function forecast(past) {
+    var n = past.length, slope = (past[n - 1] - past[n - 4]) / 3 * .6, out = past.slice();
+    for (var k = 1; k <= AHEAD; k++) out.push(Math.max(15, Math.min(95, past[n - 1] + slope * k)));
+    return out;
+  }
+  function y(val) { return H - 8 - val / 100 * (H - 16); }
+  function smooth(pts) {
+    var dd = 'M' + pts[0][0].toFixed(1) + ' ' + pts[0][1].toFixed(1);
+    for (var i = 1; i < pts.length; i++) {
+      var p0 = pts[i - 2] || pts[i - 1], p1 = pts[i - 1], p2 = pts[i], p3 = pts[i + 1] || p2;
+      dd += ' C' + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + ' ' + (p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)
+        + ' ' + (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + ' ' + (p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)
+        + ' ' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1);
+    }
+    return dd;
+  }
+  function draw(vals) {
+    var pts = vals.map(function (val, i) { return [i * X, y(val)]; });
+    var past = pts.slice(0, PAST), ahead = pts.slice(PAST - 1), tx = (PAST - 1) * X;
+    act.setAttribute('d', smooth(past));
+    area.setAttribute('d', smooth(past) + ' L' + tx.toFixed(1) + ' ' + H + ' L0 ' + H + ' Z');
+    fc.setAttribute('d', smooth(ahead));
+    var up = [], down = [];
+    ahead.forEach(function (p, k) { var w = k * 4.2; up.push([p[0], p[1] - w]); down.unshift([p[0], p[1] + w]); });
+    band.setAttribute('d', smooth(up) + ' L' + down.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' L') + ' Z');
+    today.setAttribute('x1', tx); today.setAttribute('x2', tx);
+    var box = svg.getBoundingClientRect(), cb = card.getBoundingClientRect();
+    if (box.width) {
+      var left = box.left - cb.left + tx / W * box.width;
+      dot.style.left = left + 'px'; tag.style.left = left + 'px';
+      dot.style.top = (box.top - cb.top + past[PAST - 1][1] / H * box.height) + 'px';
+    }
+  }
+  function frame(now) {
+    if (!t0) t0 = now;
+    var k = Math.min(1, (now - t0) / 900), e = 1 - Math.pow(1 - k, 3);
+    // Slide left by one day while the values ease from the old shape to the new one.
+    var vals = shown.map(function (val, i) { return from[i + 1] === undefined ? val : from[i + 1] + (val - from[i + 1]) * e; });
+    draw(vals);
+    if (k < 1) requestAnimationFrame(frame);
+  }
+  draw(shown);
+  window.addEventListener('resize', function () { draw(shown); });
+  return {
+    next: function () {
+      from = shown;
+      v.shift(); v.push(walk(v[v.length - 1]));
+      shown = forecast(v);
+      // "from" is the old picture moved one day left, so the line slides in rather than jumping.
+      t0 = 0; requestAnimationFrame(frame);
+    }
+  };
+}
+
+// Revenue-mix donut: the shares shift a little each tick, one slice is highlighted in turn and the
+// "collected" figure in the middle moves with them.
+function dashDonut(card) {
+  var segs = Array.prototype.slice.call(card.querySelectorAll('.dd-seg')), labels = card.querySelectorAll('.dd-legend b'),
+    mid = card.querySelector('.dd-mid b'), base = segs.map(function (s) { return parseFloat(s.style.getPropertyValue('--p')); });
+  return {
+    next: function (step) {
+      var raw = base.map(function (b) { return Math.max(4, b + (Math.random() - .5) * 10); }), sum = raw.reduce(function (a, b) { return a + b; }, 0);
+      var pct = raw.map(function (r) { return Math.round(r / sum * 100); });
+      pct[0] += 100 - pct.reduce(function (a, b) { return a + b; }, 0);
+      var off = 0;
+      segs.forEach(function (s, i) {
+        s.style.setProperty('--p', pct[i]); s.style.setProperty('--o', off); off += pct[i];
+        s.classList.toggle('is-hot', i === step % segs.length);
+        if (labels[i]) labels[i].textContent = pct[i] + '%';
+      });
+      if (mid) mid.textContent = (72 + Math.round(Math.random() * 14)) + '%';
+    }
+  };
+}
 
 // Slideshow pictures look live too: stock goes down with sales and up with deliveries, invoices get paid
 // and new ones arrive, and the till rings up items and takes payment. Each runs only while it is on screen.

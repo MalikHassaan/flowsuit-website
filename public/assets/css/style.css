@@ -858,6 +858,46 @@ main > section:not(:first-child) { content-visibility: auto; contain-intrinsic-s
 @keyframes tick-up { 0% { transform: translateY(6px); opacity: .4; } 100% { transform: none; opacity: 1; } }
 .dash-nav i { transition: background .4s; }
 
+/* ---- Dashboard charts: a sales line that runs into a dashed forecast with a widening range, and a
+   revenue-mix donut. main.js moves both every couple of seconds while the mock-up is on screen. ---- */
+.dash-kpis em.dash-trend { display: block; font-style: normal; font-size: .66rem; font-weight: 600; color: #16a34a; margin-top: 2px; }
+.dash-kpis em.dash-trend.is-down { color: #dc2626; }
+.dash-charts { display: grid; grid-template-columns: 1.55fr 1fr; gap: 10px; }
+.dash-card { position: relative; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--white); min-width: 0; }
+.dash-card-h { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; font-size: .7rem; }
+.dash-card-h b { font-weight: 600; color: var(--ink, #0f172a); white-space: nowrap; }
+.dash-card-h span { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: .62rem; white-space: nowrap; }
+.dash-card-h span i { width: 12px; height: 0; border-top: 2px solid #1F6FB8; margin-left: 4px; }
+.dash-card-h span i.k-fc { border-top: 2px dashed #f59e0b; }
+.dash-line svg { display: block; width: 100%; height: 118px; overflow: visible; animation: dl-in 1.6s cubic-bezier(.2,.8,.2,1) both .4s; }
+@keyframes dl-in { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.dl-grid line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 3 4; }
+.dl-act { fill: none; stroke: #1F6FB8; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.dl-fc { fill: none; stroke: #f59e0b; stroke-width: 2.2; stroke-dasharray: 5 4; stroke-linecap: round; animation: dl-march 1s linear infinite; }
+@keyframes dl-march { to { stroke-dashoffset: -9; } }
+.dl-band { fill: rgba(245, 158, 11, .16); }
+.dl-today { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+.dl-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #1F6FB8; border: 2px solid #fff; box-shadow: 0 0 0 0 rgba(31, 111, 184, .5); animation: dl-pulse 1.6s ease-out infinite, dl-fade .5s ease both 1.6s; pointer-events: none; }
+@keyframes dl-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dl-pulse { 0% { box-shadow: 0 0 0 0 rgba(31, 111, 184, .55); } 100% { box-shadow: 0 0 0 10px rgba(31, 111, 184, 0); } }
+.dl-tag { position: absolute; bottom: 4px; transform: translateX(-50%); font-size: .58rem; font-weight: 600; color: #64748b; background: var(--white); padding: 0 3px; pointer-events: none; animation: dl-fade .5s ease both 1.6s; }
+.dash-donut { display: grid; grid-template-rows: auto 1fr auto; justify-items: center; }
+.dash-donut .dash-card-h { justify-self: stretch; }
+.dd-ring { position: relative; width: 100%; max-width: 104px; aspect-ratio: 1; }
+.dd-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); animation: dd-spin 1.4s cubic-bezier(.2,.8,.2,1) both .3s; }
+@keyframes dd-spin { from { transform: rotate(-270deg) scale(.6); opacity: 0; } to { transform: rotate(-90deg); opacity: 1; } }
+.dd-track { fill: none; stroke: #eef2f7; stroke-width: 6; }
+.dd-seg { fill: none; stroke-width: 6; stroke-dasharray: calc(var(--p) - .8) calc(100.8 - var(--p)); stroke-dashoffset: calc(0px - var(--o) * 1px); transition: stroke-dasharray .9s cubic-bezier(.2,.8,.2,1), stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1), stroke-width .3s; }
+.dd-seg.is-hot { stroke-width: 7.6; }
+.dd-mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1.1; }
+.dd-mid b { font-size: .95rem; }
+.dd-mid small { font-size: .55rem; color: var(--muted); }
+.dd-legend { list-style: none; margin: 6px 0 0; padding: 0; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: .6rem; color: var(--muted); }
+.dd-legend li { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.dd-legend i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.dd-legend b { margin-left: auto; color: var(--ink, #0f172a); font-weight: 600; }
+@media (max-width: 420px) { .dash-charts { grid-template-columns: 1fr; } .dash-line svg { height: 100px; } }
+
 /* ---- Slideshow pictures look live (main.js): rows and invoices flash as they change, the till's tiles
    press in, the donut turns smoothly and the Pay button confirms the sale. ---- */
 @property --p { syntax: "<number>"; inherits: false; initial-value: 0; }
