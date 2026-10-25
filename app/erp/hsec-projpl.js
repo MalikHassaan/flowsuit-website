@@ -112,16 +112,40 @@
     if (box && r) { box.innerHTML = detail(r); box.scrollIntoView({ behavior: "smooth", block: "start" }); }
   });
 
-  // New project: the hand-typed "to date" boxes go, since vouchers and invoices fill those in. A project
-  // that already has a typed figure keeps its box so the number can still be seen and cleared.
+  // The project form asks only for what is known when the contract is signed. The "to date" boxes are hidden
+  // while empty, because posted vouchers and customer invoices give those figures. The engineer's % complete
+  // shows once the project exists, and the AMC boxes only for a maintenance contract. A box that already
+  // holds a value always stays, so nothing typed earlier is hidden.
+  var TO_DATE = ["costToDate", "billed", "received"], AMC = ["amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd"];
   function trimForm() {
     var rec = null;
     try { rec = typeof F !== "undefined" && F && F.c === "projects" ? F.rec : null; } catch (x) {} // eslint-disable-line no-undef
     if (!rec) return;
-    ["costToDate", "billed", "received"].forEach(function (k) {
+    var type = document.getElementById("f_type"), amc = /AMC/.test(type ? type.value : rec.type || "");
+    function show(k, on) {
       var el = document.getElementById("f_" + k), box = el && el.closest(".f");
-      if (box && !n(rec[k]) && !box.hidden) box.hidden = true;
-    });
+      if (!box) return;
+      on = !!(on || (rec[k] && n(rec[k])) || (el.value && el.value !== "Monthly" && n(el.value)));
+      if (box.hidden === on) box.hidden = !on;
+    }
+    TO_DATE.forEach(function (k) { show(k, false); });
+    show("physPct", !!rec.id);
+    AMC.forEach(function (k) { show(k, amc || (k !== "amcFreq" && !!rec[k])); });
+    if (type && !type.dataset.fsTrim) { type.dataset.fsTrim = "1"; type.addEventListener("change", trimForm); }
+    // A site often has both an installation and a maintenance contract. They stay two projects, so each has
+    // its own profit and AMC billing keeps working; this button starts the AMC from the installation's details.
+    var st = document.getElementById("f_status"), stBox = st && st.closest(".f");
+    if (rec.id && !amc && stBox && !document.getElementById("fsAddAmc")) {
+      var d = document.createElement("div");
+      d.className = "f w";
+      d.innerHTML = '<button type="button" class="btn" id="fsAddAmc">+ Add maintenance contract (AMC) for this site</button>'
+        + '<span class="muted small" style="display:block;margin-top:4px">Opens a new maintenance project with this customer, company and site filled in.</span>';
+      stBox.after(d);
+      d.querySelector("button").addEventListener("click", function () {
+        openForm("projects", null, { type: "Maintenance contract (AMC)", name: rec.name + " – maintenance", customer: rec.customer || "", // eslint-disable-line no-undef
+          entity: rec.entity, province: rec.province || "", pm: rec.pm || "", amcStart: rec.end || "" });
+      });
+    }
   }
 
   function hook() {
@@ -134,6 +158,10 @@
     if (/projpl/.test(location.hash) && typeof render === "function") render();
     return true;
   }
+  // The app's form grid sets display on .f, which beats the hidden attribute.
+  var css = document.createElement("style");
+  css.textContent = ".f[hidden]{display:none!important}";
+  document.head.appendChild(css);
   function start() { if (!hook()) setTimeout(start, 300); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
