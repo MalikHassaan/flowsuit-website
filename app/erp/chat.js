@@ -132,7 +132,10 @@
     var stick = !old || old.scrollHeight - old.scrollTop - old.clientHeight < 60, draft = panel.querySelector(".fsc-input");
     var keep = draft && panel.getAttribute("data-shown") === String(S.room) ? draft.value : "";
     var sub = r.kind === "group" ? r.members.length + " people" : "One-to-one chat";
-    var h = head(esc(r.name) + "<small>" + sub + "</small>", true) + '<div class="fsc-msgs">';
+    var calls = r.kind === "dm" && window.RTCPeerConnection && navigator.mediaDevices
+      ? '<button type="button" class="fsc-icon" data-act="call" data-video="0" title="Voice call" aria-label="Voice call">' + ICON.phone + '</button>'
+        + '<button type="button" class="fsc-icon" data-act="call" data-video="1" title="Video call" aria-label="Video call">' + ICON.video + "</button>" : "";
+    var h = head(esc(r.name) + "<small>" + sub + "</small>", true, calls) + '<div class="fsc-msgs">';
     if (!list) h += '<p class="fsc-empty">Loading…</p>';
     else {
       if (S.more[S.room]) h += '<button type="button" class="fsc-older" data-act="older">Show earlier messages</button>';
@@ -153,7 +156,7 @@
           }
           if (m.body) h += "<p>" + text(m.body) + "</p>";
         }
-        h += '<small class="fsc-time">' + when(m.at) + (mine && !m.del ? ' · <button type="button" data-del="' + m.id + '">Delete</button>' : "") + "</small></div>";
+        h += '<small class="fsc-time">' + (mine && !m.del ? '<button type="button" data-del="' + m.id + '">Delete ·</button> ' : "") + when(m.at) + (mine && !m.del ? tick(m.id, r) : "") + "</small></div>";
       });
     }
     h += '</div><div class="fsc-compose"><div class="fsc-chip" hidden></div><p class="fsc-err" hidden></p><div class="fsc-bar">'
@@ -171,6 +174,18 @@
     if (stick) box.scrollTop = box.scrollHeight; else if (old) box.scrollTop = old.scrollTop;
     if (focused || !keep) input.focus();
   }
+
+  // ✓ sent, ✓✓ grey delivered to their ERP, ✓✓ blue read (in a group: by everyone).
+  function tick(id, r) {
+    var seen = r.seen || { d: 0, r: 0 };
+    if (id <= seen.r) return ' <i class="fsc-tick is-read" title="Read">✓✓</i>';
+    if (id <= Math.max(seen.d, seen.r)) return ' <i class="fsc-tick" title="Delivered">✓✓</i>';
+    return ' <i class="fsc-tick" title="Sent">✓</i>';
+  }
+  var ICON = {
+    phone: '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
+    video: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>'
+  };
 
   function grow(t) { t.style.height = "auto"; t.style.height = Math.min(120, t.scrollHeight) + "px"; }
   function showFile() {
@@ -194,6 +209,7 @@
     if (act === "new") return show("new");
     if (act === "mode") { S.group = t.getAttribute("data-g") === "1"; S.picked = {}; return renderNew(); }
     if (act === "send") return send();
+    if (act === "call") return Call.start(S.room, t.getAttribute("data-video") === "1");
     if (act === "attach") { root.querySelector(".fsc-pick").click(); return; }
     if (act === "unfile") { S.file = null; showFile(); return; }
     if (act === "older") return loadHistory(S.room, true);
@@ -328,12 +344,14 @@
       var fresh = S.first ? [] : j.msgs.filter(function (m) { return !m.del; });
       S.first = false;
       S.max = Math.max(S.max, j.max);
+      var before = roomById(S.room), was = before && JSON.stringify(before.seen);
       S.rooms = j.rooms;
+      var now = roomById(S.room), seenMoved = now && JSON.stringify(now.seen) !== was;
       S.people = j.people;
       j.msgs.forEach(add);
       alertFor(fresh);
       if (S.open && S.view === "room" && S.room) {
-        if (j.msgs.some(function (m) { return m.room === S.room; })) renderRoom();
+        if (seenMoved || j.msgs.some(function (m) { return m.room === S.room; })) renderRoom();
         markRead();
       } else if (S.open && S.view === "list") render();
       updateBadge();
@@ -351,10 +369,201 @@
     }, ms);
   }
 
+  // ---- Voice and video calls (one-to-one) ----
+  // The browsers talk directly (WebRTC). The server only passes the set-up messages: ring, accept, offer/answer,
+  // network details. Those are polled every 2.5 seconds, so a call rings only where the ERP is open.
+  var Call = (function () {
+    var SIG_MS = 2500, FAST_MS = 700, RING_MS = 40000;
+    var last = -1, c = null, sigTimer, ui, ringTone;
+    function sig(kind, payload) {
+      if (!c) return Promise.resolve();
+      return api("/signal", { room: c.room, call: c.id, kind: kind, payload: payload ? JSON.stringify(payload) : "" }).catch(function () {});
+    }
+    function pollSig() {
+      clearTimeout(sigTimer);
+      api("/sig?after=" + last).then(function (j) {
+        last = j.last;
+        j.sigs.forEach(handle);
+      }).catch(function () {}).then(function () { sigTimer = setTimeout(pollSig, c ? FAST_MS : document.hidden ? SIG_MS * 2 : SIG_MS); });
+    }
+    function handle(g) {
+      var p = g.payload ? JSON.parse(g.payload) : {};
+      if (g.kind === "ring") {
+        if (c) { api("/signal", { room: g.room, call: g.call, kind: "busy" }); return; }
+        c = { id: g.call, room: g.room, peer: g.name, video: !!p.video, incoming: true, state: "ringing", queue: [] };
+        draw();
+        ring(true);
+        notify(g.name + (c.video ? " is video calling you" : " is calling you"));
+        c.timeout = setTimeout(function () { if (c && c.state === "ringing") end("Missed call", false); }, RING_MS);
+        return;
+      }
+      if (!c || g.call !== c.id) return;
+      if (g.kind === "accept") { c.state = "connecting"; ring(false); draw(); offer(); }
+      else if (g.kind === "decline") end("Call declined", true, "declined");
+      else if (g.kind === "busy") end(c.peer + " is on another call", true, "busy");
+      else if (g.kind === "hangup") end(c.state === "ringing" && c.incoming ? "Missed call" : "Call ended", false);
+      else if (g.kind === "offer") answer(p);
+      else if (g.kind === "answer") c.pc.setRemoteDescription(p).then(flush).catch(fail);
+      else if (g.kind === "ice") { if (c.pc && c.pc.remoteDescription) c.pc.addIceCandidate(p).catch(function () {}); else c.queue.push(p); }
+    }
+    function flush() { c.queue.splice(0).forEach(function (x) { c.pc.addIceCandidate(x).catch(function () {}); }); }
+    function media() {
+      return navigator.mediaDevices.getUserMedia({ audio: true, video: c.video ? { facingMode: "user", width: { ideal: 640 } } : false }).then(function (s) {
+        c.local = s;
+        return s;
+      });
+    }
+    function peer() {
+      var pc = new RTCPeerConnection({ iceServers: C.ice || [] });
+      c.pc = pc;
+      c.local.getTracks().forEach(function (t) { pc.addTrack(t, c.local); });
+      pc.onicecandidate = function (e) { if (e.candidate) sig("ice", e.candidate.toJSON()); };
+      pc.ontrack = function (e) {
+        c.remote = e.streams[0];
+        var v = ui && ui.querySelector(".fsk-remote");
+        if (v) v.srcObject = c.remote;
+      };
+      pc.onconnectionstatechange = function () {
+        if (!c) return;
+        if (pc.connectionState === "connected" && c.state !== "live") { c.state = "live"; c.began = Date.now(); draw(); }
+        if (pc.connectionState === "failed") end("The call could not connect. One of the networks blocks direct calls.", true, "failed");
+      };
+      return pc;
+    }
+    function offer() {
+      peer();
+      c.pc.createOffer().then(function (o) { return c.pc.setLocalDescription(o); }).then(function () { sig("offer", c.pc.localDescription.toJSON()); }).catch(fail);
+    }
+    function answer(o) {
+      c.pc.setRemoteDescription(o).then(flush).then(function () { return c.pc.createAnswer(); })
+        .then(function (a) { return c.pc.setLocalDescription(a); }).then(function () { sig("answer", c.pc.localDescription.toJSON()); }).catch(fail);
+    }
+    function fail() { end("The call could not connect.", true, "failed"); }
+
+    function start(room, video) {
+      if (c) return;
+      var r = roomById(room);
+      c = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), room: room, peer: r ? r.name : "", video: video, incoming: false, state: "calling", queue: [] };
+      draw();
+      media().then(function () {
+        draw();
+        return sig("ring", { video: video });
+      }).then(function () {
+        pollSig();
+        c.timeout = setTimeout(function () { if (c && c.state === "calling") { sig("hangup"); end("No answer", true, "missed"); } }, RING_MS);
+      }).catch(function () { end(video ? "Your camera or microphone is blocked. Allow them for this site and try again." : "Your microphone is blocked. Allow it for this site and try again.", false); });
+    }
+    function accept() {
+      ring(false);
+      c.state = "connecting";
+      draw();
+      media().then(function () { peer(); sig("accept"); pollSig(); })
+        .catch(function () { sig("decline"); end("Your microphone or camera is blocked. Allow them for this site.", false); });
+    }
+
+    // Ends the call. The caller writes one line in the chat, so both sides and the Chat log see it.
+    function end(msg, log, how) {
+      if (!c) return;
+      var call = c;
+      c = null;
+      ring(false);
+      clearTimeout(call.timeout);
+      clearInterval(call.clock);
+      if (call.pc) call.pc.close();
+      if (call.local) call.local.getTracks().forEach(function (t) { t.stop(); });
+      var kind = call.video ? "video call" : "voice call";
+      if (!call.incoming && (log || call.began)) {
+        var line = call.began ? (call.video ? "🎥 " : "📞 ") + kind.charAt(0).toUpperCase() + kind.slice(1) + ", " + dur(Date.now() - call.began)
+          : (call.video ? "🎥 " : "📞 ") + (how === "declined" ? "Declined " : how === "failed" ? "Failed " : "Missed ") + kind;
+        var fd = new FormData();
+        fd.append("room", call.room);
+        fd.append("body", line);
+        api("/send", fd).then(function () { schedule(0); }).catch(function () {});
+      }
+      if (ui) {
+        ui.innerHTML = '<div class="fsk-box"><p class="fsk-end">' + esc(msg) + '</p></div>';
+        setTimeout(function () { if (!c && ui) { ui.remove(); ui = null; } }, 2200);
+      }
+    }
+    function hang() {
+      if (!c) return;
+      if (c.incoming && c.state === "ringing") { sig("decline"); end("Call declined", false); return; }
+      sig("hangup");
+      end("Call ended", c.state !== "live");
+    }
+    function dur(ms) { var s = Math.round(ms / 1000); return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2); }
+
+    function draw() {
+      if (!c) return;
+      if (!ui) {
+        ui = document.createElement("div");
+        ui.id = "fs-call";
+        document.body.appendChild(ui);
+        ui.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-k]");
+          if (!b || !c) return;
+          var k = b.getAttribute("data-k");
+          if (k === "accept") accept();
+          if (k === "hang") hang();
+          if (k === "mute" && c.local) { var a = c.local.getAudioTracks()[0]; a.enabled = !a.enabled; b.classList.toggle("is-off", !a.enabled); }
+          if (k === "cam" && c.local) { var v = c.local.getVideoTracks()[0]; if (v) { v.enabled = !v.enabled; b.classList.toggle("is-off", !v.enabled); } }
+        });
+      }
+      var label = { calling: "Calling…", ringing: c.video ? "Incoming video call" : "Incoming voice call", connecting: "Connecting…", live: "" }[c.state];
+      ui.className = (c.video ? "is-video " : "") + "is-" + c.state;
+      ui.innerHTML = '<div class="fsk-box">'
+        + (c.video ? '<video class="fsk-remote" autoplay playsinline></video><video class="fsk-local" autoplay playsinline muted></video>' : '<audio class="fsk-remote" autoplay></audio>')
+        + '<div class="fsk-who"><i>' + esc(String(c.peer).charAt(0).toUpperCase()) + "</i><b>" + esc(c.peer) + '</b><span class="fsk-state">' + esc(label) + "</span></div>"
+        + '<div class="fsk-bar">'
+        + (c.state === "ringing" ? '<button type="button" class="fsk-btn is-go" data-k="accept" title="Answer">' + ICON.phone + "</button>" : '<button type="button" class="fsk-btn" data-k="mute" title="Mute">🎤</button>' + (c.video ? '<button type="button" class="fsk-btn" data-k="cam" title="Camera on/off">' + ICON.video + "</button>" : ""))
+        + '<button type="button" class="fsk-btn is-end" data-k="hang" title="' + (c.state === "ringing" ? "Decline" : "Hang up") + '">' + ICON.phone + "</button></div></div>";
+      if (c.local && c.video) ui.querySelector(".fsk-local").srcObject = c.local;
+      if (c.remote) ui.querySelector(".fsk-remote").srcObject = c.remote;
+      clearInterval(c.clock);
+      if (c.state === "live") {
+        var st = ui.querySelector(".fsk-state");
+        c.clock = setInterval(function () { if (c && c.began) st.textContent = dur(Date.now() - c.began); }, 1000);
+      }
+    }
+
+    // A soft two-tone ring while a call is waiting to be answered.
+    function ring(on) {
+      if (ringTone) { clearInterval(ringTone.t); try { ringTone.ctx.close(); } catch (x) {} ringTone = null; }
+      if (!on) return;
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var beep = function () {
+          [0, 0.25].forEach(function (d, i) {
+            var o = ctx.createOscillator(), g = ctx.createGain();
+            o.frequency.value = i ? 480 : 440;
+            g.gain.setValueAtTime(0.12, ctx.currentTime + d);
+            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d + 0.22);
+            o.connect(g); g.connect(ctx.destination);
+            o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.24);
+          });
+        };
+        beep();
+        ringTone = { ctx: ctx, t: setInterval(beep, 2000) };
+      } catch (x) {}
+    }
+    function notify(text) {
+      if (!("Notification" in window) || Notification.permission !== "granted" || !document.hidden) return;
+      try { var n = new Notification(text, { tag: "fs-call", requireInteraction: true }); n.onclick = function () { window.focus(); n.close(); }; } catch (x) {}
+    }
+    addEventListener("beforeunload", function () {
+      if (!c || !navigator.sendBeacon) return;
+      var fd = new FormData();
+      [["room", c.room], ["call", c.id], ["kind", "hangup"], ["csrf", C.csrf]].forEach(function (x) { fd.append(x[0], x[1]); });
+      navigator.sendBeacon(C.api + "/signal", fd);
+    });
+    return { init: function () { pollSig(); }, start: start };
+  })();
+
   function start() {
     if (!document.body) return setTimeout(start, 50);
     build();
     schedule(0);
+    Call.init();
     document.addEventListener("visibilitychange", function () { if (!document.hidden && timer) schedule(0); });
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
