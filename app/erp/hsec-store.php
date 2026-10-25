@@ -84,6 +84,10 @@ function hsec_inject(array $me): string
         . erp_intro(['name' => 'HSEC', 'sub' => 'Finance & Accounting ERP', 'logo' => '/erp/hsec-logo', 'zoom' => '.app',
             'steps' => ['Securing connection', 'Verifying your access', 'Loading your books', 'Preparing your dashboard']])
         . '<style>' . file_get_contents(__DIR__ . '/hsec-present.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-present.js') . '</script>'
+        // Any screen size: on phones the top bar scrolls sideways and wide tables scroll inside their box; on big
+        // monitors everything is drawn larger (not while presenting, which sizes itself).
+        . '<style>@media (max-width:700px){.topbar{overflow-x:auto!important;scrollbar-width:none}.topbar::-webkit-scrollbar{display:none}.hd-tbl{display:block;overflow-x:auto}}'
+        . '@media (min-width:2200px){html:not(:has(body.fs-present)){zoom:1.2}}@media (min-width:3200px){html:not(:has(body.fs-present)){zoom:1.5}}</style>'
         . hsec_access_inject($me)
         . chat_inject($me, 'hsec')
         . '<style>.fs-acct{display:inline-flex;align-items:center;margin-left:10px}.fs-acct>button{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 4px;border:1px solid var(--line,#E3E6EB);border-radius:999px;background:var(--panel,#fff);color:var(--ink,#1F2328);font:600 13px Poppins,system-ui,sans-serif;cursor:pointer}'
