@@ -108,7 +108,7 @@ function taj_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/taj-present.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-targets.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-hide.js') . '</script>'
-        . chat_inject($me)
+        . chat_inject($me, 'taj')
         // Sign-out and user management happen in the ERP itself.
         . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
         . '#uchip{cursor:pointer}.fs-menu{position:fixed;z-index:10000;min-width:220px;padding:6px;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(15,23,42,.25);border:1px solid #e2e8f0;font:500 14px system-ui,sans-serif}'

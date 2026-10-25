@@ -11,6 +11,7 @@ require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/chat.php';
 require_once __DIR__ . '/attendance.php';
+require_once __DIR__ . '/help.php';
 
 const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
@@ -402,6 +403,10 @@ function erp_handle(string $path): void
         } else {
             erp_render('dashboard', ['me' => erp_require_user()]);
         }
+    } elseif ($sub === '/help/api/ask' && $post) {
+        help_api();
+    } elseif ($sub === '/help-notes') {
+        help_notes_page($post);
     } elseif (str_starts_with($sub, '/attendance/api/')) {
         att_api(substr($sub, strlen('/attendance/api')));
     } elseif ($sub === '/m/attendance') {

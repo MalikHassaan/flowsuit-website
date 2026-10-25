@@ -1,0 +1,34 @@
+#fs-help{position:fixed;right:86px;bottom:24px;z-index:2147483001;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0f172a}
+#fs-help *,#fs-help *::before,#fs-help *::after{box-sizing:border-box}
+#fs-help [hidden]{display:none!important}
+#fs-chat.is-open~#fs-help:not(.is-open),body.fs-present #fs-help,body.present #fs-help{display:none!important}
+#fs-help button{font:inherit;cursor:pointer}
+#fs-help .fsh-fab{display:grid;place-items:center;width:48px;height:48px;border:0;border-radius:50%;background:#f59e0b;color:#fff;font:800 24px/1 system-ui,sans-serif;box-shadow:0 8px 22px rgba(15,23,42,.28);transition:transform .2s!important}
+#fs-help .fsh-fab:hover{transform:scale(1.07)}
+#fs-help.is-open .fsh-fab{display:none}
+#fs-help.is-open{right:20px;bottom:20px}
+#fs-help .fsh-panel{display:flex;flex-direction:column;width:min(400px,calc(100vw - 24px));height:min(580px,calc(100vh - 40px));border-radius:16px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 24px 60px rgba(15,23,42,.3);overflow:hidden;animation:fsc-pop .2s ease-out!important}
+#fs-help header{display:flex;align-items:center;gap:6px;padding:12px 10px 12px 16px;background:linear-gradient(120deg,#13304f,#1F6FB8);color:#fff}
+#fs-help header div{flex:1}
+#fs-help header b{display:block;font-size:16px}
+#fs-help header small{color:#cfe3f7;font-size:12px}
+#fs-help header button{width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:#fff;font-size:20px}
+#fs-help header button:hover{background:rgba(255,255,255,.15)}
+#fs-help .fsh-list{flex:1;overflow:auto;padding:12px;background:#f8fafc}
+#fs-help .fsh-hi{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:#fff7e6;color:#7a4b00;font-size:13px}
+#fs-help .fsh-qs{display:flex;flex-direction:column;gap:6px}
+#fs-help .fsh-qs button{padding:8px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;text-align:left;color:#1F6FB8;font-weight:600}
+#fs-help .fsh-qs button:hover{border-color:#1F6FB8}
+#fs-help .fsh-msg{max-width:88%;margin:6px 0;padding:9px 12px;border-radius:12px;background:#fff;box-shadow:0 1px 1px rgba(15,23,42,.08);overflow-wrap:anywhere}
+#fs-help .fsh-msg.is-user{margin-left:auto;background:#dbeafe}
+#fs-help .fsh-dots{display:flex;gap:4px;width:56px}
+#fs-help .fsh-dots i{width:7px;height:7px;border-radius:50%;background:#94a3b8;animation:fsh-dot 1s infinite!important}
+#fs-help .fsh-dots i:nth-child(2){animation-delay:.15s!important}#fs-help .fsh-dots i:nth-child(3){animation-delay:.3s!important}
+@keyframes fsh-dot{50%{transform:translateY(-4px);opacity:.5}}
+#fs-help .fsh-compose{display:flex;align-items:flex-end;gap:6px;padding:8px 10px 10px;border-top:1px solid #e2e8f0}
+#fs-help textarea{flex:1;min-height:38px;max-height:110px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:19px;font:inherit;resize:none;outline:none}
+#fs-help textarea:focus{border-color:#1F6FB8}
+#fs-help [data-h=send]{width:38px;height:38px;border:0;border-radius:50%;background:#1F6FB8;color:#fff}
+@media (max-width:520px){#fs-help{right:76px;bottom:16px}#fs-help.is-open{right:12px;bottom:12px}}
+@media print{#fs-help{display:none!important}}
+body:has(#fs-help.is-open) #fs-chat .fsc-fab,body:has(#fs-help.is-open) #fs-att{display:none!important}
