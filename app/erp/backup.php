@@ -64,7 +64,7 @@ function erp_backup_send(): void
     $zip = new ZipArchive();
     $zip->open($tmp . '.zip', ZipArchive::CREATE);
     $zip->addFile($tmp . '.sqlite', 'erp.sqlite');
-    foreach (['modules', 'taj-assets'] as $sub) {
+    foreach (['modules', 'taj-assets', 'chat-files'] as $sub) {
         foreach (glob($dir . '/' . $sub . '/*') ?: [] as $file) {
             if (is_file($file)) {
                 $zip->addFile($file, $sub . '/' . basename($file));
@@ -72,7 +72,7 @@ function erp_backup_send(): void
         }
     }
     $zip->addFromString('README.txt', "FlowSuit ERP backup made " . erp_now() . " (Asia/Karachi).\r\n"
-        . "erp.sqlite = users, access, reports and TAJ records. modules = TAJ dashboard file. taj-assets = saved TAJ exports.\r\n"
+        . "erp.sqlite = users, access, reports and TAJ records. modules = TAJ dashboard file. taj-assets = saved TAJ exports. chat-files = files sent in the staff chat.\r\n"
         . "To restore, send this file to whoever looks after the website.\r\n");
     $zip->close();
     @unlink($tmp . '.sqlite');

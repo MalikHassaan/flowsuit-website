@@ -9,6 +9,7 @@ require_once __DIR__ . '/hsec-store.php';
 require_once __DIR__ . '/hsec-qb.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/chat.php';
 
 const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
@@ -92,6 +93,7 @@ function erp_db(): PDO
         $db->exec("ALTER TABLE users ADD COLUMN hsec_ents TEXT NOT NULL DEFAULT ''");
     }
     erp_auth_schema($db);
+    chat_schema($db);
     return $db;
 }
 
@@ -366,7 +368,7 @@ function erp_handle(string $path): void
     }
 
     $sub = substr($path, strlen('/erp')) ?: '/';
-    erp_start_session($sub !== '/m/receivables/api/sync' && $sub !== '/m/hsec/api/sync');
+    erp_start_session(!in_array($sub, ['/m/receivables/api/sync', '/m/hsec/api/sync', '/chat/api/poll'], true));
     $post = $_SERVER['REQUEST_METHOD'] === 'POST';
     if ($post) {
         erp_check_csrf();
@@ -393,6 +395,10 @@ function erp_handle(string $path): void
         } else {
             erp_render('dashboard', ['me' => erp_require_user()]);
         }
+    } elseif (str_starts_with($sub, '/chat/api/')) {
+        chat_api(substr($sub, strlen('/chat/api')));
+    } elseif ($sub === '/chat-log') {
+        chat_log_page();
     } elseif (str_starts_with($sub, '/m/receivables/api/')) {
         taj_api(substr($sub, strlen('/m/receivables/api')));
     } elseif (str_starts_with($sub, '/m/hsec/api/')) {

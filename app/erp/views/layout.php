@@ -26,6 +26,7 @@
 <?php if ($user['is_admin']): ?>
       <a href="/erp/users" class="<?= ($active ?? '') === 'users' ? 'is-on' : '' ?>"><?= icon('users') ?>Users and access</a>
       <a href="/erp/analytics" class="<?= ($active ?? '') === 'analytics' ? 'is-on' : '' ?>"><?= icon('chart') ?>Website visitors</a>
+      <a href="/erp/chat-log" class="<?= ($active ?? '') === 'chat-log' ? 'is-on' : '' ?>"><?= icon('chat') ?>Chat log</a>
       <a href="/erp/backups" class="<?= ($active ?? '') === 'backups' ? 'is-on' : '' ?>"><?= icon('cloud') ?>Backups</a>
       <a href="/erp/security" class="<?= ($active ?? '') === 'security' ? 'is-on' : '' ?>"><?= icon('shield') ?>Security</a>
 <?php endif; ?>
@@ -47,5 +48,8 @@
 <?= $content ?>
   </main>
   <script src="/assets/js/erp.js?v=3" defer></script>
+<?php if ($user): ?>
+  <?= chat_inject($user) ?>
+<?php endif; ?>
 </body>
 </html>
