@@ -31,7 +31,7 @@
     b.title = "Present reports to management, full screen";
     b.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>Present';
     var acct = top.querySelector(".fs-acct");
-    top.insertBefore(b, acct || null);
+    if (acct && acct.parentNode) acct.parentNode.insertBefore(b, acct); else top.appendChild(b);
   }
 
   function chooser() {
