@@ -116,13 +116,13 @@ function taj_inject(array $me): string
         . '.fs-erp-back{position:fixed;left:16px;bottom:44px;z-index:9999;display:flex;gap:6px;font:600 13px system-ui,sans-serif}'
         . '.fs-erp-back a{background:#1F6FB8;color:#fff;text-decoration:none;padding:8px 12px;border-radius:999px;box-shadow:0 4px 14px rgba(15,23,42,.25)}'
         . '.fs-erp-back a+a{background:#fff;color:#3730a3}</style>'
-        // Its own sign-in screen only shows while the data loads (the ERP already signed the person in): show a loader instead.
-        . '<style id="fs-hide-gate">#login .lcard{visibility:hidden}</style><style>.fs-loader{position:fixed;inset:0;z-index:9998;display:grid;place-content:center;justify-items:center;gap:18px;background:radial-gradient(circle at 50% 30%,#1c2850,#0b1430 70%);color:#e8cf8a;font:600 15px system-ui,sans-serif;letter-spacing:.06em;transition:opacity .4s}'
-        . '.fs-loader i{width:40px;height:40px;border-radius:50%;border:3px solid rgba(232,207,138,.25);border-top-color:#e8cf8a;animation:fs-spin .9s linear infinite}.fs-loader.is-done{opacity:0;pointer-events:none}@keyframes fs-spin{to{transform:rotate(360deg)}}</style>'
+        // Its own sign-in screen only shows while the data loads (the ERP already signed the person in): the opening
+        // screen covers it, and hides its card until then.
+        . '<style id="fs-hide-gate">#login .lcard{visibility:hidden}</style>'
+        . erp_intro(['name' => 'TAJ', 'sub' => 'Residencia · Receivable & Recovery ERP', 'logo' => '/erp/brand-logo', 'theme' => 'taj',
+            'wait' => 'login', 'zoom' => 'body', 'steps' => ['Securing connection', 'Verifying your access', 'Loading receivables', 'Preparing your dashboard']])
         // The dashboard opens full screen, so give a way back to the ERP (not needed inside a frame).
-        . '<script>addEventListener("DOMContentLoaded",function(){var l=document.createElement("div");l.className="fs-loader";l.innerHTML="<i></i>Opening your dashboard\u2026";document.body.appendChild(l);'
-        . 'var t0=Date.now();(function check(){var g=document.getElementById("login");if(!g||g.hidden||Date.now()-t0>20000){var h=document.getElementById("fs-hide-gate");if(h)h.remove();l.classList.add("is-done");setTimeout(function(){l.remove();},500);}else setTimeout(check,150);})();});'
-        . 'addEventListener("DOMContentLoaded",function(){if(window.top!==window)return;var d=document.createElement("div");d.className="fs-erp-back";'
+        . '<script>addEventListener("DOMContentLoaded",function(){if(window.top!==window)return;var d=document.createElement("div");d.className="fs-erp-back";'
         . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);'
         // Clicking the name in the top bar opens a menu with Sign out (signs out of the whole ERP).
         . 'var m=document.createElement("div");m.className="fs-menu";m.hidden=true;m.setAttribute("role","menu");'

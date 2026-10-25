@@ -87,6 +87,10 @@ function erp_db(): PDO
     if (!in_array('home', array_column($db->query('PRAGMA table_info(users)')->fetchAll(), 'name'), true)) {
         $db->exec("ALTER TABLE users ADD COLUMN home TEXT NOT NULL DEFAULT ''");
     }
+    // The HSEC companies a user may see, comma separated (empty: all companies, with the consolidated view).
+    if (!in_array('hsec_ents', array_column($db->query('PRAGMA table_info(users)')->fetchAll(), 'name'), true)) {
+        $db->exec("ALTER TABLE users ADD COLUMN hsec_ents TEXT NOT NULL DEFAULT ''");
+    }
     erp_auth_schema($db);
     return $db;
 }
@@ -194,6 +198,14 @@ function erp_start_page(array $row): string
         }
     }
     return '/erp';
+}
+
+// The opening screen played before a client app (HSEC, TAJ) appears: see erp-intro.js for the settings.
+function erp_intro(array $cfg): string
+{
+    return '<style>' . file_get_contents(__DIR__ . '/erp-intro.css') . '</style><script>window.FS_INTRO='
+        . json_encode($cfg, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ";\n"
+        . file_get_contents(__DIR__ . '/erp-intro.js') . '</script>';
 }
 
 // Which name and crest the sign-in screens show: FlowSuit's own, unless an old system link
@@ -606,7 +618,7 @@ function erp_user_form(?int $id, bool $post): void
 {
     $me = erp_require_admin();
     $db = erp_db();
-    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1, 'home' => ''];
+    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1, 'home' => '', 'hsec_ents' => ''];
     if ($id !== null) {
         $st = $db->prepare('SELECT * FROM users WHERE id = ?');
         $st->execute([$id]);
@@ -636,6 +648,9 @@ function erp_user_form(?int $id, bool $post): void
         $active = $isSelf ? 1 : (int) !empty($_POST['active']);
         $home = (string) ($_POST['home'] ?? '');
         $home = isset(ERP_SYSTEMS[$home]) ? $home : '';
+        $companies = array_keys(hsec_companies());
+        $ents = ($_POST['hsec_scope'] ?? 'all') === 'some'
+            ? array_values(array_intersect($companies, (array) ($_POST['hsec_ents'] ?? []))) : [];
         $access = [];
         foreach (array_keys(erp_modules()) as $key) {
             $level = $_POST['access'][$key] ?? '';
@@ -644,12 +659,15 @@ function erp_user_form(?int $id, bool $post): void
             }
         }
         $errors = erp_validate_user($name, $email, $password, $id === null && !$invite, $id);
+        if (($_POST['hsec_scope'] ?? 'all') === 'some' && !$ents && !$isAdmin && isset($access['hsec'])) {
+            $errors[] = 'Tick at least one HSEC company, or choose All companies.';
+        }
         if (!$errors) {
             $db->beginTransaction();
             if ($id === null) {
                 $hash = password_hash($invite ? bin2hex(random_bytes(32)) : $password, PASSWORD_DEFAULT);
-                $db->prepare('INSERT INTO users (name, email, password_hash, is_admin, active, created_at, must_change, home) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                    ->execute([$name, $email, $hash, $isAdmin, $active, erp_now(), $invite ? 0 : $mustChange, $home]);
+                $db->prepare('INSERT INTO users (name, email, password_hash, is_admin, active, created_at, must_change, home, hsec_ents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                    ->execute([$name, $email, $hash, $isAdmin, $active, erp_now(), $invite ? 0 : $mustChange, $home, implode(',', $ents)]);
                 $id = (int) $db->lastInsertId();
                 erp_user_event($id, 'Account created', $me['name']);
                 if (!$invite) {
@@ -657,8 +675,8 @@ function erp_user_form(?int $id, bool $post): void
                     erp_user_event($id, 'Password: set by admin', $me['name']);
                 }
             } else {
-                $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ?, home = ? WHERE id = ?')
-                    ->execute([$name, $email, $isAdmin, $active, $mustChange, $home, $id]);
+                $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ?, home = ?, hsec_ents = ? WHERE id = ?')
+                    ->execute([$name, $email, $isAdmin, $active, $mustChange, $home, implode(',', $ents), $id]);
                 if ($password !== '') {
                     erp_set_password($id, $password, (bool) $mustChange, 'Set by admin', $me['name']);
                 }
@@ -680,7 +698,7 @@ function erp_user_form(?int $id, bool $post): void
             }
             erp_redirect('/erp/users');
         }
-        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange, 'home' => $home];
+        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange, 'home' => $home, 'hsec_ents' => implode(',', $ents)];
     }
     erp_render('user-form', ['me' => $me, 'target' => $target, 'isSelf' => $isSelf, 'errors' => $errors,
         'events' => $target['id'] ? erp_user_events((int) $target['id']) : []]);

@@ -26,6 +26,21 @@ function hsec_db(): PDO
     return $db;
 }
 
+// The HSEC companies this person may see, or null for all of them (admins always see all).
+function hsec_allowed(array $me): ?array
+{
+    $ents = array_values(array_filter(explode(',', (string) ($me['hsec_ents'] ?? ''))));
+    return $me['is_admin'] || !$ents ? null : $ents;
+}
+
+// False when a record belongs to a company this person may not see. Records without a company (shared
+// accounts, vendors, setup) are open to everyone with HSEC access.
+function hsec_visible(?array $allowed, ?array $data): bool
+{
+    return $allowed === null || $data === null || !isset($data['entity']) || !is_string($data['entity'])
+        || $data['entity'] === '' || in_array($data['entity'], $allowed, true);
+}
+
 function hsec_file(): string
 {
     return erp_data_dir() . '/modules/hsec.html';
@@ -60,9 +75,14 @@ function hsec_inject(array $me): string
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     $cfg = ['api' => '/erp/m/hsec/api', 'csrf' => $_SESSION['csrf'], 'uid' => taj_uid($me), 'name' => $me['name'],
         'edit' => erp_can($me, 'hsec', 'edit'), 'owner' => (bool) $me['is_admin'], 'assets' => false];
+    $allowed = hsec_allowed($me);
     return '<script>window.FS_BRIDGE=' . json_encode($cfg, $flags) . ";\n"
+        // The app remembers the last company picked; if that is not one of theirs, start on their companies.
+        . ($allowed === null ? '' : 'try{var fsE=' . json_encode($allowed, $flags) . ',fsC=localStorage.getItem("hsec-erp-ent");'
+            . 'if(fsC!=="All"&&fsE.indexOf(fsC)<0)localStorage.setItem("hsec-erp-ent",fsE.length>1?"All":fsE[0]);}catch(e){}' . "\n")
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
-        . '<style>' . file_get_contents(__DIR__ . '/hsec-boot.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-boot.js') . '</script>'
+        . erp_intro(['name' => 'HSEC', 'sub' => 'Finance & Accounting ERP', 'logo' => '/erp/hsec-logo', 'zoom' => '.app',
+            'steps' => ['Securing connection', 'Verifying your access', 'Loading your books', 'Preparing your dashboard']])
         . '<style>.fs-acct{display:inline-flex;align-items:center;margin-left:10px}.fs-acct>button{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 4px;border:1px solid var(--line,#E3E6EB);border-radius:999px;background:var(--panel,#fff);color:var(--ink,#1F2328);font:600 13px Poppins,system-ui,sans-serif;cursor:pointer}'
         . '.fs-acct>button i{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#1F6FB8;color:#fff;font-style:normal;font-size:12px}'
         . '.fs-menu{position:fixed;z-index:10000;min-width:220px;padding:6px;border-radius:12px;background:#fff;box-shadow:0 18px 40px rgba(15,23,42,.25);border:1px solid #e2e8f0;font:500 14px system-ui,sans-serif}'
@@ -119,9 +139,22 @@ function hsec_sync(int $since): void
         ? $db->prepare('SELECT coll, id, data FROM hsec_docs WHERE ver > ? ORDER BY ver')
         : $db->prepare('SELECT coll, id, data FROM hsec_docs WHERE ver > ? AND data IS NOT NULL');
     $st->execute([$since]);
+    $allowed = hsec_allowed(erp_user());
     $docs = [];
     foreach ($st->fetchAll() as $row) {
-        $docs[] = ['path' => $row['coll'] . '/' . $row['id'], 'data' => $row['data'] === null ? null : json_decode($row['data'])];
+        $data = $row['data'] === null ? null : json_decode($row['data'], true);
+        if (!hsec_visible($allowed, $data)) {
+            // Another company's record: never sent. If it moved out of reach, the browser drops its copy.
+            if ($since) {
+                $docs[] = ['path' => $row['coll'] . '/' . $row['id'], 'data' => null];
+            }
+            continue;
+        }
+        if ($allowed !== null && $row['coll'] === 'settings' && $row['id'] === 'main' && is_array($data['entities'] ?? null)) {
+            // The company picker only offers their companies; "All" is then the total of those.
+            $data['entities'] = array_values(array_intersect($data['entities'], $allowed));
+        }
+        $docs[] = ['path' => $row['coll'] . '/' . $row['id'], 'data' => $row['data'] === null ? null : json_decode(json_encode($data))];
     }
     $out = ['v' => $v, 'docs' => $docs];
     if (!$since) {
@@ -148,6 +181,10 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
     }
     if (!erp_can($me, 'hsec', 'edit')) {
         return 'Your ERP access to HSEC ERP is view only';
+    }
+    $allowed = hsec_allowed($me);
+    if (!hsec_visible($allowed, $old) || !hsec_visible($allowed, $new)) {
+        return 'Your access is limited to ' . implode(', ', $allowed ?? []) . '. This record belongs to another company.';
     }
     if ($coll === 'journals' && $old !== null && ($old['status'] ?? '') === 'Posted') {
         if ($new === null) {
@@ -336,6 +373,11 @@ function hsec_module(bool $raw, bool $post): void
             erp_redirect('/erp/m/hsec');
         }
         $html = hsec_wording(file_get_contents($file));
+        if (hsec_allowed($me) !== null) {
+            // Someone limited to some companies: "All" is the total of their companies, not the whole group.
+            $html = strtr($html, ['"Group – all companies (consolidated)"' => '"All my companies (consolidated)"',
+                '"Group – all companies"' => '"All my companies"', '"Consolidated view, intercompany eliminated"' => '"Your companies added together"']);
+        }
         $add = hsec_inject($me);
         $pos = stripos($html, '</head>');
         // The bridge must run before the app's own scripts, so it goes straight after <head>.

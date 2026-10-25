@@ -58,6 +58,19 @@
     </fieldset>
 <?php endforeach; ?>
   </div>
+<?php $companies = hsec_companies(); $picked = array_filter(explode(',', (string) ($target['hsec_ents'] ?? ''))); $scope = $_POST['hsec_scope'] ?? ($picked ? 'some' : 'all'); ?>
+  <fieldset class="hsec-cos" data-hsec-cos>
+    <legend>HSEC ERP: which companies</legend>
+    <p class="muted small">Only counts when this person has HSEC access. They see the records of these companies only; the server never sends them the others. Admins always see every company.</p>
+    <label class="check"><input type="radio" name="hsec_scope" value="all" <?= $scope === 'all' ? 'checked' : '' ?>> <b>All companies</b> (with the consolidated group view)</label>
+    <label class="check"><input type="radio" name="hsec_scope" value="some" <?= $scope === 'some' ? 'checked' : '' ?>> Only these companies:</label>
+    <div class="co-picks">
+<?php foreach ($companies as $code => $coName): ?>
+      <label class="check"><input type="checkbox" name="hsec_ents[]" value="<?= e($code) ?>" <?= in_array($code, $_POST['hsec_ents'] ?? $picked, true) ? 'checked' : '' ?>> <?= e($coName) ?></label>
+<?php endforeach; ?>
+    </div>
+    <p class="muted small">With two or more companies ticked, their "All my companies" view adds those companies together.</p>
+  </fieldset>
   <div class="form-actions">
     <button class="btn" type="submit"><?= $isNew ? 'Create user' : 'Save changes' ?></button>
 <?php if (!$isNew && !$isSelf): ?>
