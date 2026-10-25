@@ -144,8 +144,11 @@
 
   var downloads = {
     save: function (o) {
-      var url = URL.createObjectURL(o.data), a = document.createElement("a");
-      a.href = url; a.download = o.filename || "download"; document.body.appendChild(a); a.click(); a.remove();
+      // Apps pass either a Blob or plain text (HSEC's backup is a JSON string); createObjectURL needs a Blob.
+      var name = o.filename || "download", data = o.data instanceof Blob ? o.data
+        : new Blob([o.data == null ? "" : o.data], { type: /\.json$/i.test(name) ? "application/json" : /\.csv$/i.test(name) ? "text/csv" : "text/plain" });
+      var url = URL.createObjectURL(data), a = document.createElement("a");
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
       return Promise.resolve();
     }
