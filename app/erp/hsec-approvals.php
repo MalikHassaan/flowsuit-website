@@ -328,5 +328,6 @@ function hsec_access_inject(array $me): string
         . 'window.FS_JV=' . json_encode($cfg['jv']) . ';window.FS_SIGN=' . json_encode($cfg, $flags) . ';'
         . 'try{localStorage.setItem("hsec-erp-name",' . json_encode($me['name'], $flags) . ');}catch(e){}</script>'
         . '<style>' . file_get_contents(__DIR__ . '/hsec-sign.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-sign.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-projpl.js') . '</script>';
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-projpl.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-bgsec.js') . '</script>';
 }

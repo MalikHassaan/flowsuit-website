@@ -130,6 +130,9 @@
     }
     TO_DATE.forEach(function (k) { show(k, false); });
     show("physPct", !!rec.id);
+    var cur = document.getElementById("f_currency"), fc = !!cur && !!cur.value && !/^PKR/.test(cur.value);
+    ["contractFc", "fxRate"].forEach(function (k) { show(k, fc); });
+    if (cur && !cur.dataset.fsTrim) { cur.dataset.fsTrim = "1"; cur.addEventListener("change", trimForm); }
     AMC.forEach(function (k) { show(k, amc || (k !== "amcFreq" && !!rec[k])); });
     if (type && !type.dataset.fsTrim) { type.dataset.fsTrim = "1"; type.addEventListener("change", trimForm); }
     // A site often has both an installation and a maintenance contract. They stay two projects, so each has
