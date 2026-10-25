@@ -7,6 +7,7 @@ require_once __DIR__ . '/import.php';
 require_once __DIR__ . '/taj-store.php';
 require_once __DIR__ . '/hsec-store.php';
 require_once __DIR__ . '/hsec-approvals.php';
+require_once __DIR__ . '/home.php';
 require_once __DIR__ . '/hsec-qb.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/auth.php';
@@ -403,7 +404,8 @@ function erp_handle(string $path): void
         if (!erp_user()) {
             erp_login($post);
         } else {
-            erp_render('dashboard', ['me' => erp_require_user()]);
+            $me = erp_require_user();
+            erp_render('dashboard', ['me' => $me, 'data' => erp_home_data($me)]);
         }
     } elseif ($sub === '/help/api/ask' && $post) {
         help_api();
