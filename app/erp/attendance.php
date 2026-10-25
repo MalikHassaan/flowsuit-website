@@ -1,8 +1,8 @@
 <?php
 // Attendance: staff check in and out from any ERP page (att.js), HR sees the team and the month sheet.
 //   In the office: the check-in comes from one of the office internet addresses (Settings), nothing else needed.
-//   Anywhere else (site engineers): the exact location and a selfie are saved with the time; the check-in is
-//   tagged with the nearest saved site, or flagged "Not at a known site".
+//   Anywhere else (site engineers): the exact location is required. Every check-in saves the location (when the
+//   device allows it) and the IP address; it is tagged with the nearest saved site, or flagged "Not at a known site".
 // Times always come from the server clock. At the end of the day anyone still checked in gets a reminder in
 // the ERP and by e-mail (att_reminders()).
 
@@ -211,9 +211,6 @@ function att_api(string $sub): void
         }
         if (!$office && ($lat === null || $lng === null)) {
             chat_json(['error' => 'You are not on the office internet, so your location is needed. Allow location for this site and try again.'], 400);
-        }
-        if (!$office && !$photo) {
-            chat_json(['error' => 'Take a selfie to check in away from the office.'], 400);
         }
         $site = null;
         $dist = null;
