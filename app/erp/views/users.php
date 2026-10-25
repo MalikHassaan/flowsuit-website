@@ -31,3 +31,27 @@
     </table>
   </div>
 </section>
+<section class="panel" id="hsec-approvals">
+  <h2>HSEC voucher approval</h2>
+  <p class="muted">Maker prepares and sends, Senior Manager approves first, Group GM Finance approves last. Then the voucher can be posted and printed with their signatures. Give people these roles with <b>Edit</b> on each user.</p>
+  <div class="jv-flow">
+<?php foreach (HSEC_JV_ROLES as $k => $label): ?>
+    <div class="jv-step"><b><?= e($label) ?></b>
+<?php if ($jvPeople[$k]): foreach ($jvPeople[$k] as $p): ?>
+      <span><?= e($p['name']) ?><?= $p['sig'] ? '' : ' <em class="tag">no signature</em>' ?></span>
+<?php endforeach; else: ?>
+      <span class="muted">Nobody yet</span>
+<?php endif; ?>
+    </div>
+<?php endforeach; ?>
+  </div>
+  <form method="post" class="jv-switch"><?= erp_csrf_field() ?>
+<?php if ($jvOn): ?>
+    <p><span class="tag tag-ok">On</span> Vouchers are approved in the system.</p>
+    <button class="btn btn-ghost" type="submit" name="action" value="hsec_approvals_off">Switch off (back to paper signatures)</button>
+<?php else: ?>
+    <p><span class="tag">Off</span> Vouchers are printed and signed on paper.<?= !$jvPeople['senior'] || !$jvPeople['gmf'] ? ' Give someone the Senior Manager and Group GM Finance roles before switching on.' : '' ?></p>
+    <button class="btn" type="submit" name="action" value="hsec_approvals_on" <?= !$jvPeople['senior'] || !$jvPeople['gmf'] ? 'disabled' : '' ?>>Switch on approval in the system</button>
+<?php endif; ?>
+  </form>
+</section>

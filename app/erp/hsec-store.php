@@ -84,6 +84,7 @@ function hsec_inject(array $me): string
         . erp_intro(['name' => 'HSEC', 'sub' => 'Finance & Accounting ERP', 'logo' => '/erp/hsec-logo', 'zoom' => '.app',
             'steps' => ['Securing connection', 'Verifying your access', 'Loading your books', 'Preparing your dashboard']])
         . '<style>' . file_get_contents(__DIR__ . '/hsec-present.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-present.js') . '</script>'
+        . hsec_access_inject($me)
         . chat_inject($me, 'hsec')
         . '<style>.fs-acct{display:inline-flex;align-items:center;margin-left:10px}.fs-acct>button{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 4px;border:1px solid var(--line,#E3E6EB);border-radius:999px;background:var(--panel,#fff);color:var(--ink,#1F2328);font:600 13px Poppins,system-ui,sans-serif;cursor:pointer}'
         . '.fs-acct>button i{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#1F6FB8;color:#fff;font-style:normal;font-size:12px}'
@@ -151,6 +152,9 @@ function hsec_sync(int $since): void
                 $docs[] = ['path' => $row['coll'] . '/' . $row['id'], 'data' => null];
             }
             continue;
+        }
+        if ($row['coll'] === 'settings' && $row['id'] === 'main' && is_array($data)) {
+            $data = hsec_settings_override($data);
         }
         if ($allowed !== null && $row['coll'] === 'settings' && $row['id'] === 'main' && is_array($data['entities'] ?? null)) {
             // The company picker only offers their companies; "All" is then the total of those.
@@ -252,7 +256,16 @@ function hsec_write(array $me): void
             $db->exec('ROLLBACK');
             taj_fail(400, 'resource_exhausted', 'This record is too large to save');
         }
-        $why = hsec_refusal($me, $coll, $old, $json === null ? null : json_decode($json, true));
+        $new = $json === null ? null : json_decode($json, true);
+        $why = hsec_refusal($me, $coll, $old, $new);
+        if ($why === null && $coll === 'journals') {
+            // Approval rules; the check also writes the signed-in name, id and time onto the voucher.
+            $before = $new;
+            $why = hsec_jv_check($me, $old, $new);
+            if ($new !== $before) {
+                $json = json_encode($new, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+        }
         if ($why !== null) {
             $db->exec('ROLLBACK');
             taj_fail(403, 'permission_denied', $why);
@@ -374,7 +387,7 @@ function hsec_module(bool $raw, bool $post): void
         if (!is_file($file)) {
             erp_redirect('/erp/m/hsec');
         }
-        $html = hsec_wording(file_get_contents($file));
+        $html = hsec_app_hooks(hsec_wording(file_get_contents($file)));
         if (hsec_allowed($me) !== null) {
             // Someone limited to some companies: "All" is the total of their companies, not the whole group.
             $html = strtr($html, ['"Group – all companies (consolidated)"' => '"All my companies (consolidated)"',

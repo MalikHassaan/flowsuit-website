@@ -306,6 +306,20 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .hsec-cos p { margin: 0; }
 .co-picks { display: flex; flex-wrap: wrap; gap: 8px 18px; padding-left: 26px; }
 .hsec-cos:has(input[value=all]:checked) .co-picks { opacity: .45; pointer-events: none; }
+.mod-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 18px; padding-left: 26px; }
+.mod-group { display: grid; gap: 4px; align-content: start; }
+.mod-group b { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.hsec-mods:has(input[value=all]:checked) .mod-groups { opacity: .45; pointer-events: none; }
+.jv-roles { display: grid; gap: 6px; }
+.sig-row { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 20px; margin-top: 6px; }
+.sig-now { margin: 0; display: grid; gap: 4px; }
+.sig-now img { max-height: 60px; max-width: 220px; padding: 6px 10px; border: 1px dashed var(--line); border-radius: 8px; background: #fff; }
+.jv-flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 14px 0; }
+.jv-step { display: grid; gap: 4px; align-content: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; position: relative; }
+.jv-step:not(:last-child)::after { content: "→"; position: absolute; right: -11px; top: 12px; color: var(--muted); font-weight: 700; }
+.jv-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.jv-switch p { margin: 0; }
+@media (max-width: 640px) { .jv-flow { grid-template-columns: 1fr; } .jv-step::after { display: none; } }
 
 /* Attendance */
 .att-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 18px; }
