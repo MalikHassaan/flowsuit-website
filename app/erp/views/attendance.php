@@ -134,7 +134,7 @@ $monthNav = function (string $tab) use ($month, $company): string {
           <td><?= $st($r['status']) ?><?= $r['late'] && $r['status'] !== 'late' ? ' ' . $st('late') : '' ?><?= $r['note'] ? ' <span class="muted small">' . e($r['note']) . '</span>' : '' ?></td>
           <td>
 <?php foreach ($r['punches'] as $p): ?>
-            <div class="att-punch"><b><?= $p['kind'] === 'in' ? 'In' : 'Out' ?> <?= e(substr($p['at'], 11, 5)) ?></b> <?= $where($p) ?> <?= $map($p) ?>
+            <div class="att-punch"><b><?= $p['kind'] === 'in' ? 'In' : 'Out' ?> <?= e(substr($p['at'], 11, 5)) ?></b> <?= $where($p) ?> <?= $map($p) ?><?= $p['ip'] ? ' <span class="muted small">IP ' . e($p['ip']) . '</span>' : '' ?>
               <?php if ($p['photo']): ?><a href="/erp/attendance/api/photo/<?= (int) $p['id'] ?>" target="_blank" rel="noopener"><img class="att-selfie" src="/erp/attendance/api/photo/<?= (int) $p['id'] ?>" alt="Selfie" loading="lazy"></a><?php endif; ?></div>
 <?php endforeach; ?>
           </td>
@@ -218,7 +218,7 @@ $monthNav = function (string $tab) use ($month, $company): string {
     </fieldset>
     <label>Public holidays, one per line: date then name
       <textarea name="holidays" rows="5" placeholder="2026-12-25 Quaid-e-Azam Day"><?= e(erp_setting('att_holidays') ?? '') ?></textarea></label>
-    <label>Office internet addresses (check-ins from these need no location or selfie)
+    <label>Office internet addresses (check-ins from these work even if the phone blocks location)
       <textarea name="ips" rows="3" data-att-ips><?= e(implode("\n", $cfg['ips'])) ?></textarea>
       <span class="muted small">You are on <b><?= e($myIp) ?></b> right now. If you are in the office, <button type="button" class="linkish" data-att-addip="<?= e($myEntry) ?>">add it</button>. If your internet company changes this address from time to time, ask them for a static IP, or this list will need updating.</span></label>
     <div><button class="btn" type="submit">Save settings</button></div>

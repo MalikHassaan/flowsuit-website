@@ -1,5 +1,5 @@
 // Attendance button (window.FS_ATT): sits above the chat button on every ERP page.
-// On the office internet one press checks in or out. Anywhere else it takes the exact location and a selfie first.
+// One press checks in or out; the device's location and the IP address are saved with the time.
 // After the end of the working day it turns red while the person is still checked in.
 (function () {
   var C = window.FS_ATT;
@@ -39,9 +39,6 @@
       var a = b.getAttribute("data-a");
       if (a === "close") closeCard();
       if (a === "in" || a === "out") check(a);
-      if (a === "snap") snap();
-      if (a === "retake") retake();
-      if (a === "send") send();
     });
   }
 
@@ -69,106 +66,46 @@
     card.innerHTML = '<header><b>Attendance</b><button type="button" data-a="close" aria-label="Close">&#215;</button></header>'
       + (note ? '<p class="fsa-warn">' + esc(note) + "</p>" : "")
       + (rows ? '<ul class="fsa-list">' + rows + "</ul>" : '<p class="fsa-muted">' + (S.workday ? "You have not checked in today." : "Today is a day off.") + "</p>")
-      + '<p class="fsa-muted">' + (S.office ? "You are on the office internet." : "You are away from the office: your location and a selfie are saved with the time.") + "</p>"
-      + '<p class="fsa-err" hidden></p><div class="fsa-cam" hidden></div>'
+      + '<p class="fsa-muted">' + (S.office ? "You are on the office internet." : "You are away from the office: your location is saved with the time.") + "</p>"
+      + '<p class="fsa-err" hidden></p>'
       + '<div class="fsa-go"><button type="button" class="fsa-btn' + (doing === "out" ? " is-out" : "") + '" data-a="' + doing + '">' + (doing === "in" ? "Check in" : "Check out") + "</button>"
       + '<a href="' + C.page + '" target="_top">My attendance</a></div>';
     card.hidden = false;
     root.classList.add("is-open");
   }
-  function closeCard() { stopCam(); card.hidden = true; root.classList.remove("is-open"); }
+  function closeCard() { card.hidden = true; root.classList.remove("is-open"); }
   function err(m) { var e = card.querySelector(".fsa-err"); if (e) { e.textContent = m || ""; e.hidden = !m; } }
   function busy(on, label) {
-    var b = card.querySelector(".fsa-go .fsa-btn, .fsa-cam [data-a=send]");
+    var b = card.querySelector(".fsa-go .fsa-btn");
     card.querySelectorAll("button.fsa-btn").forEach(function (x) { x.disabled = on; });
     if (b && label) b.textContent = label;
   }
 
   // ---- Checking in ----
-  var pending = null, stream = null, shot = null, where = null;
+  // Every check-in asks for the device's location; the server also saves the IP address. On the office internet a
+  // blocked location is fine (the IP proves where they are); anywhere else the location is required.
+  var pending = null;
 
   function check(kind) {
     err("");
     pending = kind;
-    if (S.office) return submit(new FormData());
-    // Away from the office: location and selfie, both taken now.
-    where = null;
-    shot = null;
-    busy(true, "Finding your location…");
-    navigator.geolocation ? navigator.geolocation.getCurrentPosition(function (pos) {
-      where = pos.coords;
-      busy(false);
-      camera();
-    }, function (x) {
-      busy(false, kind === "in" ? "Check in" : "Check out");
-      err(x.code === 1 ? "Location is blocked. Allow location for flowsuit.net in your browser settings, then try again." : "Your location could not be found. Turn on GPS and try again.");
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }) : err("This browser cannot share its location. Use Chrome or Safari on your phone.");
-  }
-
-  function camera() {
-    var cam = card.querySelector(".fsa-cam");
-    card.querySelector(".fsa-go").hidden = true;
-    cam.hidden = false;
-    cam.innerHTML = '<p class="fsa-muted">Location found (±' + Math.round(where.accuracy) + ' m). Now take a selfie.</p><video playsinline muted autoplay></video><canvas hidden></canvas><img hidden alt="Your selfie">'
-      + '<div class="fsa-go"><button type="button" class="fsa-btn" data-a="snap">Take photo</button></div>'
-      + '<div class="fsa-go" hidden><button type="button" class="fsa-btn" data-a="send">' + (pending === "in" ? "Check in" : "Check out") + '</button><button type="button" class="fsa-link" data-a="retake">Retake</button></div>'
-      + '<label class="fsa-file" hidden>Your camera did not open. <input type="file" accept="image/*" capture="user"></label>';
-    var video = cam.querySelector("video");
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 } }, audio: false }).then(function (s) {
-        stream = s;
-        video.srcObject = s;
-      }).catch(fallback);
-    } else fallback();
-  }
-  // No live camera (blocked, or an old browser): the phone's own camera app through a file input.
-  function fallback() {
-    var cam = card.querySelector(".fsa-cam");
-    cam.querySelector("video").hidden = true;
-    cam.querySelector(".fsa-go").hidden = true;
-    var f = cam.querySelector(".fsa-file");
-    f.hidden = false;
-    f.querySelector("input").onchange = function () {
-      var file = this.files[0];
-      if (!file) return;
-      var img = new Image();
-      img.onload = function () { draw(img, img.naturalWidth, img.naturalHeight); URL.revokeObjectURL(img.src); };
-      img.src = URL.createObjectURL(file);
+    var label = kind === "in" ? "Check in" : "Check out";
+    var withoutLocation = function (why) {
+      if (S.office) return submit(new FormData());
+      busy(false, label);
+      err(why);
     };
-  }
-  function draw(src, w, h) {
-    var cam = card.querySelector(".fsa-cam"), cv = cam.querySelector("canvas"), k = Math.min(1, 640 / Math.max(w, h));
-    cv.width = Math.round(w * k);
-    cv.height = Math.round(h * k);
-    cv.getContext("2d").drawImage(src, 0, 0, cv.width, cv.height);
-    cv.toBlob(function (b) {
-      shot = b;
-      var img = cam.querySelector("img");
-      img.src = cv.toDataURL("image/jpeg", 0.6);
-      img.hidden = false;
-      cam.querySelector("video").hidden = true;
-      cam.querySelector(".fsa-file").hidden = true;
-      var gos = cam.querySelectorAll(".fsa-go");
-      gos[0].hidden = true;
-      gos[1].hidden = false;
-      stopCam();
-    }, "image/jpeg", 0.75);
-  }
-  function snap() {
-    var v = card.querySelector(".fsa-cam video");
-    if (!v.videoWidth) return err("The camera is still starting. Try again in a second.");
-    draw(v, v.videoWidth, v.videoHeight);
-  }
-  function retake() { shot = null; camera(); }
-  function stopCam() { if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; } }
-  function send() {
-    if (!shot || !where) return;
-    var fd = new FormData();
-    fd.append("lat", where.latitude);
-    fd.append("lng", where.longitude);
-    fd.append("acc", where.accuracy);
-    fd.append("photo", shot, "selfie.jpg");
-    submit(fd);
+    if (!navigator.geolocation) return withoutLocation("This browser cannot share its location. Use Chrome or Safari on your phone.");
+    busy(true, "Finding your location…");
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      var fd = new FormData();
+      fd.append("lat", pos.coords.latitude);
+      fd.append("lng", pos.coords.longitude);
+      fd.append("acc", pos.coords.accuracy);
+      submit(fd);
+    }, function (x) {
+      withoutLocation(x.code === 1 ? "Location is blocked. Allow location for flowsuit.net in your browser settings, then try again." : "Your location could not be found. Turn on GPS and try again.");
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   }
   function submit(fd) {
     fd.append("kind", pending);

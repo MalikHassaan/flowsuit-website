@@ -20,6 +20,11 @@ function help_inject(string $system): string
     if (!isset(HELP_SYSTEMS[$system])) {
         return '';
     }
+    // No API key yet: no button, rather than one that only says it is switched off.
+    require_once dirname(__DIR__) . '/chat.php';
+    if (!chat_api_key()) {
+        return '';
+    }
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     $cfg = ['api' => '/erp/help/api/ask', 'csrf' => $_SESSION['csrf'], 'system' => $system, 'name' => HELP_SYSTEMS[$system]['name']];
     return '<style>' . file_get_contents(__DIR__ . '/help.css') . '</style><script>window.FS_HELP=' . json_encode($cfg, $flags) . ";\n"
