@@ -15,7 +15,7 @@ $pill = ['Posted' => 'ok', 'Approved' => 'info', 'Pending approval' => 'warn', '
   <div class="hh-text">
     <p class="hh-date"><?= e(date('l, j F Y')) ?> · <span data-clock><?= e(date('g:i:s a')) ?></span></p>
     <h1><?= e($hello) ?>, <?= e(strtok($me['name'], ' ')) ?></h1>
-    <p><?php if (!$att['team']): ?>Today: <b><?= e($attLabel[$att['today']] ?? 'Not checked in yet') ?></b><?= $att['in'] ? ' at ' . e($att['in']) : '' ?>.<?php else: ?><b><?= $att['n']['in'] + $att['n']['late'] ?></b> of <?= (int) $att['total'] ?> people are in today.<?php endif; ?>
+    <p><?php if (!$att): ?>Welcome back.<?php elseif (!$att['team']): ?>Today: <b><?= e($attLabel[$att['today']] ?? 'Not checked in yet') ?></b><?= $att['in'] ? ' at ' . e($att['in']) : '' ?>.<?php else: ?><b><?= $att['n']['in'] + $att['n']['late'] ?></b> of <?= (int) $att['total'] ?> people are in today.<?php endif; ?>
     <?php if ($hs && $hs['mine']): ?> <a class="hh-cta" href="/erp/m/hsec/app#e_jv"><?= (int) $hs['mine'] ?> voucher<?= $hs['mine'] > 1 ? 's' : '' ?> waiting for your approval</a><?php endif; ?></p>
   </div>
   <div class="hh-pulse" aria-hidden="true"><i></i><i></i><i></i><span><?= icon('erp') ?></span></div>
@@ -33,7 +33,9 @@ if ($hs) {
         $tiles[] = ['Drafts', (int) ($hs['status']['Draft'] ?? 0), 'k-sky', 'sheet', 'Not sent yet'];
     }
 }
-if ($att['team']) {
+if (!$att) {
+    // no attendance outside HSEC
+} elseif ($att['team']) {
     $tiles[] = ['In today', $att['n']['in'] + $att['n']['late'], 'k-green', 'users', $att['n']['late'] . ' late · ' . $att['n']['out'] . ' not in'];
 } else {
     $tiles[] = ['Days present', (int) $att['month']['present'], 'k-green', 'clock', 'This month · ' . (int) $att['month']['late'] . ' late'];
@@ -90,7 +92,7 @@ foreach ($tiles as $i => [$label, $n, $cls, $ic, $sub]): ?>
     </ul>
   </section>
 <?php endif; ?>
-<?php if ($att['team']): $n = $att['n']; $all = max(1, array_sum($n)); $segs = [['in', 'On time', '#16a34a'], ['late', 'Late', '#f59e0b'], ['out', 'Not in yet', '#dc2626'], ['leave', 'On leave', '#8b5cf6'], ['off', 'Day off', '#94a3b8']]; $off = 0; ?>
+<?php if ($att && $att['team']): $n = $att['n']; $all = max(1, array_sum($n)); $segs = [['in', 'On time', '#16a34a'], ['late', 'Late', '#f59e0b'], ['out', 'Not in yet', '#dc2626'], ['leave', 'On leave', '#8b5cf6'], ['off', 'Day off', '#94a3b8']]; $off = 0; ?>
   <section class="panel hc-card hc-donut-card">
     <header class="hc-h"><div><h2>Attendance today</h2><p class="muted small"><?= e(date('l j M')) ?></p></div><a class="btn btn-ghost" href="/erp/m/attendance?tab=today">Team today</a></header>
     <div class="hc-donut">

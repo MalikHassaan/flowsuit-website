@@ -28,6 +28,20 @@ function att_schema(PDO $db): void
     $db->exec('CREATE TABLE IF NOT EXISTS att_sent (user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, PRIMARY KEY (user_id, day, kind))');
 }
 
+// Attendance is for HSEC staff only (hassan, 2026-10-26): people who can open HSEC ERP, and admins. TAJ-only
+// users never see check-in, and the TAJ dashboard never shows it.
+function att_on(array $me): bool
+{
+    return erp_can($me, 'hsec');
+}
+
+// Location on check-in, switched by an admin under Attendance > Settings. Off: check-ins from anywhere are
+// accepted with the IP address only, so they cannot be verified.
+function att_geo(): bool
+{
+    return erp_setting('att_geo') !== 'off';
+}
+
 function att_cfg(): array
 {
     if (erp_setting('att_since') === null) {
@@ -132,12 +146,15 @@ function att_workday(string $day): bool
     return !in_array((int) date('w', strtotime($day)), $c['off'], true) && !isset($c['holidays'][$day]);
 }
 
-function att_inject(array $me): string
+function att_inject(array $me, string $system = 'erp'): string
 {
+    if ($system === 'taj' || !att_on($me)) {
+        return '';
+    }
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     // gate: nobody uses the ERP on a working day until they have checked in (hassan, 2026-10-25).
     $cfg = ['api' => '/erp/attendance/api', 'csrf' => $_SESSION['csrf'], 'page' => '/erp/m/attendance',
-        'name' => (string) strtok($me['name'], ' '), 'admin' => (bool) $me['is_admin'], 'gate' => true];
+        'name' => (string) strtok($me['name'], ' '), 'admin' => (bool) $me['is_admin'], 'gate' => true, 'geo' => att_geo()];
     return '<style>' . file_get_contents(__DIR__ . '/att.css') . '</style><script>window.FS_ATT=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/att.js') . '</script>';
 }
@@ -150,7 +167,7 @@ function att_state(array $me): array
     return ['office' => att_ip_match(erp_ip(), $c['ips']), 'state' => $last ? $last['kind'] : 'none',
         'punches' => array_map(fn($r) => ['kind' => $r['kind'], 'at' => substr($r['at'], 11, 5), 'method' => $r['method'], 'site' => $r['site']], $p),
         'end' => $c['end'], 'cutoff' => $c['cutoff'], 'lateAfter' => date('H:i', strtotime($c['start']) + $c['grace'] * 60),
-        'now' => time(), 'workday' => att_workday(date('Y-m-d'))];
+        'now' => time(), 'workday' => att_workday(date('Y-m-d')), 'geo' => att_geo()];
 }
 
 function att_api(string $sub): void
@@ -160,6 +177,9 @@ function att_api(string $sub): void
         chat_json(['error' => 'Signed out'], 401);
     }
     session_write_close();
+    if (!att_on($me)) {
+        chat_json(['error' => 'Attendance is only for HSEC staff.'], 403);
+    }
     $uid = (int) $me['id'];
     $db = erp_db();
 
@@ -212,7 +232,11 @@ function att_api(string $sub): void
                 move_uploaded_file($f['tmp_name'], att_photos_dir() . '/' . $photo) || $photo = null;
             }
         }
-        if (!$office && ($lat === null || $lng === null)) {
+        $geo = att_geo();
+        if (!$geo) {
+            $lat = $lng = $acc = null;
+        }
+        if ($geo && !$office && ($lat === null || $lng === null)) {
             chat_json(['error' => 'You are not on the office internet, so your location is needed. Allow location for this site and try again.'], 400);
         }
         $site = null;
@@ -229,7 +253,7 @@ function att_api(string $sub): void
         }
         $auto = ($_POST['auto'] ?? '') === '1';
         $db->prepare('INSERT INTO att_punches (user_id, kind, day, at, method, ip, lat, lng, acc, site, site_dist, photo, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-            ->execute([$uid, $kind, date('Y-m-d'), erp_now(), $office ? 'office' : 'remote', erp_ip(), $lat, $lng, $acc, $site, $dist, $photo, $auto ? 'Checked in on opening the ERP' : null]);
+            ->execute([$uid, $kind, date('Y-m-d'), erp_now(), $office ? 'office' : ($geo ? 'remote' : 'nogeo'), erp_ip(), $lat, $lng, $acc, $site, $dist, $photo, $auto ? 'Checked in on opening the ERP' : null]);
         if ($kind === 'in' && !$p) {
             att_tell($uid, att_first_in_message($office, $site));
         }
@@ -245,7 +269,7 @@ function att_first_in_message(bool $office, ?string $site): string
     $c = att_cfg();
     $lateAfter = date('H:i', strtotime($c['start']) + $c['grace'] * 60);
     $now = date('H:i');
-    $where = $office ? 'from the office' : ($site ? 'at ' . $site : 'away from the office and every saved site');
+    $where = $office ? 'from the office' : ($site ? 'at ' . $site : (att_geo() ? 'away from the office and every saved site' : 'away from the office (location is switched off)'));
     if (!att_workday(date('Y-m-d'))) {
         return 'Your attendance was marked at ' . date('g:i a') . ' ' . $where . '. Today is a day off.';
     }
@@ -371,7 +395,8 @@ function att_totals(array $days): array
 // People HR sees, optionally only those assigned to one HSEC company.
 function att_people(string $company = ''): array
 {
-    $users = erp_db()->query('SELECT id, name, email, created_at, hsec_ents FROM users WHERE active = 1 ORDER BY name COLLATE NOCASE')->fetchAll();
+    $users = erp_db()->query("SELECT id, name, email, created_at, hsec_ents FROM users WHERE active = 1
+        AND (is_admin = 1 OR id IN (SELECT user_id FROM access WHERE module = 'hsec' AND level IN ('view', 'edit'))) ORDER BY name COLLATE NOCASE")->fetchAll();
     if ($company !== '') {
         $users = array_values(array_filter($users, fn($u) => in_array($company, array_filter(explode(',', $u['hsec_ents'])), true)));
     }
@@ -383,6 +408,10 @@ function att_people(string $company = ''): array
 function att_page(bool $post): void
 {
     $me = erp_require_user();
+    if (!erp_can($me, 'attendance')) {
+        erp_flash('Attendance is only for HSEC staff.');
+        erp_redirect('/erp');
+    }
     $hr = att_hr($me);
     $db = erp_db();
     $tab = (string) ($_GET['tab'] ?? 'me');
@@ -454,6 +483,11 @@ function att_page(bool $post): void
             $ips = array_filter(array_map('trim', preg_split('/[\s,]+/', (string) ($_POST['ips'] ?? ''))), fn($ip) => @inet_pton(explode('/', $ip)[0]) !== false);
             erp_setting_set('att_ips', implode("\n", array_unique($ips)));
             erp_flash('Attendance settings saved.');
+            erp_redirect('/erp/m/attendance?tab=settings');
+        } elseif ($action === 'geo' && $hr === 'edit') {
+            $on = ($_POST['geo'] ?? '') === 'on';
+            erp_setting_set('att_geo', $on ? 'on' : 'off');
+            erp_flash($on ? 'Location is on: check-ins away from the office need the phone\'s location again.' : 'Location is off: check-ins are accepted from anywhere with the IP address only.');
             erp_redirect('/erp/m/attendance?tab=settings');
         } elseif ($action === 'test-mail') {
             erp_flash(att_remind_mail($me) ? 'A test reminder was sent to ' . $me['email'] . '. If it is not in your inbox or spam within a few minutes, e-mail from the ERP is not arriving yet.'

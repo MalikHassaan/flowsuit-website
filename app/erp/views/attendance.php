@@ -7,6 +7,9 @@ $where = function (array $p): string {
     if ($p['method'] === 'office') {
         return '<span class="tag tag-ok">Office</span>';
     }
+    if ($p['method'] === 'nogeo') {
+        return '<span class="tag">Location off</span>';
+    }
     if ($p['method'] === 'corrected') {
         return '<span class="tag">Corrected</span>';
     }
@@ -198,7 +201,21 @@ $monthNav = function (string $tab) use ($month, $company): string {
   </div>
 </section>
 
-<?php elseif ($tab === 'settings'): ?>
+<?php elseif ($tab === 'settings'): $geo = att_geo(); ?>
+<section class="panel att-geo">
+  <h2>Location on check-in</h2>
+  <form method="post" class="att-geo-row">
+    <?= erp_csrf_field() ?>
+    <input type="hidden" name="action" value="geo">
+    <input type="hidden" name="geo" value="<?= $geo ? 'off' : 'on' ?>">
+    <span class="tag <?= $geo ? 'tag-ok' : 'att-flag' ?>"><?= $geo ? 'On' : 'Off' ?></span>
+    <button class="btn <?= $geo ? 'btn-ghost' : '' ?>" type="submit"<?= $geo ? ' onclick="return confirm(\'Switch location off? Check-ins away from the office will then be accepted from anywhere, with no way to check where the person was.\')"' : '' ?>><?= $geo ? 'Switch location off' : 'Switch location on' ?></button>
+  </form>
+  <p class="muted"><?= $geo
+    ? 'Away from the office internet, staff must share their phone\'s location to check in, and it is saved with the time.'
+    : 'Check-ins are accepted from anywhere and save only the time and IP address. You cannot tell whether someone was at the office or a site, so switch it back on once the problem is sorted.' ?></p>
+</section>
+
 <section class="panel">
   <h2>Working day and rules</h2>
   <form method="post" class="form">

@@ -4,7 +4,7 @@
 
 function erp_home_data(array $me): array
 {
-    $out = ['att' => erp_home_att($me), 'hsec' => null];
+    $out = ['att' => att_on($me) ? erp_home_att($me) : null, 'hsec' => null];
     if (erp_can($me, 'hsec')) {
         try {
             $out['hsec'] = erp_home_hsec($me);
