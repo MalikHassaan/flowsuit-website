@@ -61,13 +61,13 @@
   function openCard(note) {
     if (gateEl) { err(note); return; }   // while the check-in screen is up, messages go there
     var rows = S.punches.map(function (x) {
-      return "<li><b>" + (x.kind === "in" ? "In" : "Out") + " " + esc(x.at) + "</b> " + (x.method === "office" ? "Office" : x.method === "corrected" ? "Corrected" : x.site ? "At " + esc(x.site) : "Not at a known site") + "</li>";
+      return "<li><b>" + (x.kind === "in" ? "In" : "Out") + " " + esc(x.at) + "</b> " + (x.method === "office" ? "Office" : x.method === "corrected" ? "Corrected" : x.method === "nogeo" ? "Location off" : x.site ? "At " + esc(x.site) : "Not at a known site") + "</li>";
     }).join("");
     var doing = S.state === "in" ? "out" : "in";
     card.innerHTML = '<header><b>Attendance</b><button type="button" data-a="close" aria-label="Close">&#215;</button></header>'
       + (note ? '<p class="fsa-warn">' + esc(note) + "</p>" : "")
       + (rows ? '<ul class="fsa-list">' + rows + "</ul>" : '<p class="fsa-muted">' + (S.workday ? "You have not checked in today." : "Today is a day off.") + "</p>")
-      + '<p class="fsa-muted">' + (S.office ? "You are on the office internet." : "You are away from the office: your location is saved with the time.") + "</p>"
+      + '<p class="fsa-muted">' + (S.office ? "You are on the office internet." : S.geo === false ? "Location is switched off, so only the time is saved." : "You are away from the office: your location is saved with the time.") + "</p>"
       + '<p class="fsa-err" hidden></p>'
       + '<div class="fsa-go"><button type="button" class="fsa-btn' + (doing === "out" ? " is-out" : "") + '" data-a="' + doing + '">' + (doing === "in" ? "Check in" : "Check out") + "</button>"
       + '<a href="' + C.page + '" target="_top">My attendance</a></div>';
@@ -102,6 +102,8 @@
       busy(false, label);
       err(why);
     };
+    // Location switched off by the admin: the server saves the time and IP address only.
+    if ((S && S.geo === false) || C.geo === false) return submit(new FormData(), auto);
     if (!navigator.geolocation) return withoutLocation("This browser cannot share its location. Use Chrome or Safari on your phone.");
     busy(true, "Finding your location…");
     navigator.geolocation.getCurrentPosition(function (pos) {
@@ -163,7 +165,7 @@
       + '<p class="fsg-hello">' + esc(hello) + (C.name ? ", " + esc(C.name) : "") + "</p>"
       + "<h2>Check in to start your day</h2>"
       + '<p class="fsg-time"></p>'
-      + '<p class="fsg-sub">The ERP opens as soon as you check in. ' + (S.office ? "You are on the office internet." : "You are away from the office, so your location is saved with the time.") + "</p>"
+      + '<p class="fsg-sub">The ERP opens as soon as you check in. ' + (S.office ? "You are on the office internet." : S.geo === false ? "Location is switched off, so only the time is saved." : "You are away from the office, so your location is saved with the time.") + "</p>"
       + '<p class="fsg-late"></p>'
       + '<button type="button" class="fsg-btn">Check in now</button>'
       + '<p class="fsg-err" hidden></p>'

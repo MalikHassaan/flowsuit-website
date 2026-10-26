@@ -57,7 +57,7 @@ function chat_inject(array $me, string $system = 'erp'): string
     }
     $cfg = ['api' => '/erp/chat/api', 'csrf' => $_SESSION['csrf'], 'uid' => (int) $me['id'], 'admin' => (bool) $me['is_admin'], 'max' => CHAT_MAX_FILE, 'ice' => $ice];
     return '<style>' . file_get_contents(__DIR__ . '/chat.css') . '</style><script>window.FS_CHAT=' . json_encode($cfg, $flags) . ";\n"
-        . file_get_contents(__DIR__ . '/chat.js') . '</script>' . att_inject($me) . help_inject($system);
+        . file_get_contents(__DIR__ . '/chat.js') . '</script>' . att_inject($me, $system) . help_inject($system);
 }
 
 function chat_json($data, int $status = 200): void

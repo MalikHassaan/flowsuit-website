@@ -249,7 +249,8 @@ function erp_can(array $user, string $module, string $need = 'view'): bool
         return true;
     }
     if ($module === 'attendance' && $need === 'view') {
-        return true; // everyone keeps their own attendance; the level decides what they see of the team (att_hr)
+        // HSEC staff keep their own attendance (att_on); the level decides what they see of the team (att_hr)
+        return erp_can($user, 'hsec') || in_array($user['access']['attendance'] ?? '', ['view', 'edit'], true);
     }
     $level = $user['access'][$module] ?? null;
     return $level === 'edit' || ($need === 'view' && $level === 'view');
