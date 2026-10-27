@@ -71,8 +71,29 @@ function erp_backup_send(): void
             }
         }
     }
+    // Website visitor numbers.
+    if (is_file($dir . '/stats.sqlite')) {
+        $zip->addFile($dir . '/stats.sqlite', 'stats.sqlite');
+    }
+    // The website itself, as it runs on the server (hassan, 2026-10-27): the web root and the app folder beside it.
+    // Secrets live outside both (~/flowsuit-secrets.php) and are never included.
+    $site = ['website/public_html' => defined('WEB_ROOT') ? WEB_ROOT : null, 'website/app' => realpath(__DIR__ . '/..')];
+    foreach ($site as $as => $root) {
+        if (!$root || !is_dir($root)) {
+            continue;
+        }
+        $it = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+            fn($f) => !in_array($f->getFilename(), ['.git', 'cgi-bin', 'node_modules', '.well-known', 'error_log'], true)
+                && ($f->isDir() || $f->getSize() < 25 * 1024 * 1024)));
+        foreach ($it as $f) {
+            if ($f->isFile()) {
+                $zip->addFile($f->getPathname(), $as . '/' . str_replace('\\', '/', substr($f->getPathname(), strlen($root) + 1)));
+            }
+        }
+    }
     $zip->addFromString('README.txt', "FlowSuit ERP backup made " . erp_now() . " (Asia/Karachi).\r\n"
-        . "erp.sqlite = users, access, reports and TAJ records. modules = TAJ dashboard file. taj-assets = saved TAJ exports. chat-files = files sent in the staff chat. att-photos = check-in selfies. signatures = HSEC voucher signatures.\r\n"
+        . "erp.sqlite = users, access, reports and TAJ records. modules = TAJ dashboard file. taj-assets = saved TAJ exports. chat-files = files sent in the staff chat. att-photos = check-in selfies. signatures = HSEC voucher signatures. stats.sqlite = website visitor numbers. website = the website's files as they run on the server.\r\n"
         . "To restore, send this file to whoever looks after the website.\r\n");
     $zip->close();
     @unlink($tmp . '.sqlite');
@@ -95,7 +116,8 @@ function erp_backups_page(bool $post): void
         erp_backup_set('backup_key', hash('sha256', $key));
         $folder = trim((string) ($_POST['folder'] ?? '')) ?: 'C:\\FlowSuit Backups';
         $folder = str_replace(["'", "\r", "\n"], '', $folder);
-        $script = erp_backup_script($key, $folder);
+        $drive = str_replace(["'", "\r", "\n"], '', trim((string) ($_POST['drive'] ?? '')));
+        $script = erp_backup_script($key, $folder, $drive);
         header('Content-Type: text/plain; charset=utf-8');
         header('Content-Disposition: attachment; filename="flowsuit-backup.ps1"');
         header('Cache-Control: private, no-store');
@@ -105,20 +127,77 @@ function erp_backups_page(bool $post): void
     erp_render('backups', ['me' => $me, 'hasKey' => erp_backup_key_hash() !== null, 'last' => erp_backup_last()]);
 }
 
-function erp_backup_script(string $key, string $folder): string
+function erp_backup_script(string $key, string $folder, string $drive = ''): string
 {
     $host = $_SERVER['HTTP_HOST'] ?? 'flowsuit.net';
-    $lines = [
-        '# FlowSuit ERP backup. Saves a copy of the ERP into the folder below and keeps the last 30.',
-        '# Keep this file private: anyone with it can download your ERP data.',
-        '# Made ' . erp_now() . '. Downloading a new script from FlowSuit ERP > Backups switches this one off.',
-        '$folder = \'' . $folder . '\'',
-        '$key = \'' . $key . '\'',
-        '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12',
-        'New-Item -ItemType Directory -Force -Path $folder | Out-Null',
-        '$file = Join-Path $folder (\'flowsuit-erp-backup-\' + (Get-Date -Format \'yyyy-MM-dd\') + \'.zip\')',
-        'Invoke-WebRequest -Uri \'https://' . $host . '/erp/backup\' -Headers @{ \'X-Backup-Key\' = $key } -OutFile $file -UseBasicParsing',
-        'Get-ChildItem -Path $folder -Filter \'flowsuit-erp-backup-*.zip\' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 30 | Remove-Item',
-    ];
-    return implode("\r\n", $lines) . "\r\n";
+    // Run once by hand: it sets up the Windows task (daily 9:00 AM; if the laptop was off or asleep, as soon as
+    // it is back on with internet) and makes the first backup. The task then runs it with -Run.
+    $ps = <<<'PS'
+# FlowSuit backup: the whole ERP and the website, to this laptop and to Google Drive, every day at 9:00 AM.
+# Keep this file private: anyone with it can download your ERP data.
+# Made {MADE}. Downloading a new script from FlowSuit ERP > Backups switches this one off.
+# First time: right-click this file and choose "Run with PowerShell". That sets up the daily backup and makes one now.
+param([switch]$Run)
+$folder = '{FOLDER}'
+$drive = '{DRIVE}'   # Google Drive folder; blank = found automatically (Google Drive for desktop must be installed)
+$key = '{KEY}'
+$keepHere = 30
+$keepDrive = 14
+$log = Join-Path $folder 'backup-log.txt'
+New-Item -ItemType Directory -Force -Path $folder | Out-Null
+function Note($t) { Add-Content -Path $log -Value ((Get-Date -Format 'yyyy-MM-dd HH:mm') + '  ' + $t) }
+
+if (-not $Run) {
+    $me = $MyInvocation.MyCommand.Path
+    $act = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $me + '" -Run')
+    $trg = New-ScheduledTaskTrigger -Daily -At '9:00 AM'
+    $set = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RunOnlyIfNetworkAvailable -RestartCount 6 -RestartInterval (New-TimeSpan -Minutes 10) -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+    Register-ScheduledTask -TaskName 'FlowSuit backup' -Description 'FlowSuit ERP and website backup, daily 9:00 AM' -Action $act -Trigger $trg -Settings $set -Force | Out-Null
+    Write-Host 'Daily backup at 9:00 AM is set up (task "FlowSuit backup"). Making the first backup now...'
+}
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$file = Join-Path $folder ('flowsuit-erp-backup-' + (Get-Date -Format 'yyyy-MM-dd') + '.zip')
+$part = $file + '.part'
+# Three tries, ten minutes apart, in case the internet is not up yet after the laptop wakes.
+$err = ''
+for ($try = 1; $try -le 3; $try++) {
+    try {
+        Invoke-WebRequest -Uri 'https://{HOST}/erp/backup' -Headers @{ 'X-Backup-Key' = $key } -OutFile $part -UseBasicParsing -TimeoutSec 1800
+        Move-Item -Force $part $file
+        $err = ''
+        break
+    } catch {
+        Remove-Item $part -ErrorAction SilentlyContinue
+        $err = $_.Exception.Message
+        if ($try -lt 3 -and $Run) { Start-Sleep -Seconds 600 } elseif (-not $Run) { break }
+    }
+}
+if ($err) {
+    Note ('FAILED: ' + $err)
+    if (-not $Run) { Write-Host ('Backup failed: ' + $err); Read-Host 'Press Enter to close' }
+    exit 1
+}
+$mb = [math]::Round((Get-Item $file).Length / 1MB, 1)
+Get-ChildItem -Path $folder -Filter 'flowsuit-erp-backup-*.zip' | Sort-Object LastWriteTime -Descending | Select-Object -Skip $keepHere | Remove-Item
+
+if (-not $drive) {
+    $places = @()
+    Get-PSDrive -PSProvider FileSystem | ForEach-Object { $places += (Join-Path $_.Root 'My Drive') }
+    $places += (Join-Path $env:USERPROFILE 'Google Drive\My Drive'), (Join-Path $env:USERPROFILE 'My Drive'), (Join-Path $env:USERPROFILE 'Google Drive')
+    $g = $places | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($g) { $drive = Join-Path $g 'FlowSuit Backups' }
+}
+if ($drive) {
+    New-Item -ItemType Directory -Force -Path $drive | Out-Null
+    Copy-Item -Force $file $drive
+    Get-ChildItem -Path $drive -Filter 'flowsuit-erp-backup-*.zip' | Sort-Object LastWriteTime -Descending | Select-Object -Skip $keepDrive | Remove-Item
+    Note ('OK ' + $mb + ' MB, saved here and in Google Drive (' + $drive + ')')
+} else {
+    Note ('OK ' + $mb + ' MB, saved here. Google Drive folder NOT found: install Google Drive for desktop and sign in.')
+}
+if (-not $Run) { Write-Host ('Done: ' + $file + ' (' + $mb + ' MB). ' + ($(if ($drive) { 'Copied to ' + $drive } else { 'Google Drive not found, so no Drive copy.' }))); Read-Host 'Press Enter to close' }
+PS;
+    $ps = strtr($ps, ['{MADE}' => erp_now(), '{FOLDER}' => $folder, '{DRIVE}' => $drive, '{KEY}' => $key, '{HOST}' => $host]);
+    return str_replace("\n", "\r\n", $ps) . "\r\n";
 }
