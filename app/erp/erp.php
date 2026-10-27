@@ -642,6 +642,15 @@ function erp_users_list(bool $post = false): void
         erp_redirect('/erp/users#hsec-approvals');
     }
     $users = erp_db()->query('SELECT * FROM users ORDER BY is_admin DESC, name')->fetchAll();
+    // When and by whom each switched-off account was switched off (hassan, 2026-10-27).
+    $offs = [];
+    foreach (erp_db()->query("SELECT user_id, at, by_name FROM user_events WHERE what = 'Account switched off' ORDER BY id") as $ev) {
+        $offs[(int) $ev['user_id']] = $ev;
+    }
+    foreach ($users as &$u) {
+        $u['off'] = !$u['active'] ? ($offs[(int) $u['id']] ?? null) : null;
+    }
+    unset($u);
     foreach ($users as &$u) {
         $u['access'] = erp_access_for((int) $u['id']);
     }
@@ -732,6 +741,12 @@ function erp_user_form(?int $id, bool $post): void
                     erp_user_event($id, 'Password: set by admin', $me['name']);
                 }
             } else {
+                $st = $db->prepare('SELECT active FROM users WHERE id = ?');
+                $st->execute([$id]);
+                $wasActive = (int) $st->fetchColumn();
+                if ($wasActive !== $active) {
+                    erp_user_event($id, $active ? 'Account switched back on' : 'Account switched off', $me['name']);
+                }
                 $db->prepare('UPDATE users SET name = ?, email = ?, is_admin = ?, active = ?, must_change = ?, home = ?, hsec_ents = ? WHERE id = ?')
                     ->execute([$name, $email, $isAdmin, $active, $mustChange, $home, implode(',', $ents), $id]);
                 $st = $db->prepare('SELECT hsec_jv FROM users WHERE id = ?');
