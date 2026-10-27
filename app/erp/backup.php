@@ -27,6 +27,16 @@ function erp_backup_set(string $name, string $value): void
         ->execute([$name, $value]);
 }
 
+// The password every backup .zip is locked with (AES-256), chosen by an admin on the Backups page (hassan,
+// 2026-10-27). Kept in the ERP database outside the web folder; it is needed here to lock each new backup.
+function erp_backup_zip_pw(): ?string
+{
+    erp_backup_key_hash();
+    $st = erp_db()->prepare("SELECT value FROM settings WHERE name = 'backup_zip_pw'");
+    $st->execute();
+    return $st->fetchColumn() ?: null;
+}
+
 // GET /erp/backup: the .zip, for a signed-in admin or a request carrying the backup key.
 function erp_backup_download(): void
 {
@@ -92,8 +102,20 @@ function erp_backup_send(): void
             }
         }
     }
+    $pw = erp_backup_zip_pw();
+    $locked = false;
+    if ($pw && defined('ZipArchive::EM_AES_256')) {
+        $locked = true;
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $locked = $zip->setEncryptionIndex($i, ZipArchive::EM_AES_256, $pw) && $locked;
+        }
+    }
+    if ($pw && !$locked) {
+        erp_backup_set('backup_unlocked', erp_now());
+    }
     $zip->addFromString('README.txt', "FlowSuit ERP backup made " . erp_now() . " (Asia/Karachi).\r\n"
         . "erp.sqlite = users, access, reports and TAJ records. modules = TAJ dashboard file. taj-assets = saved TAJ exports. chat-files = files sent in the staff chat. att-photos = check-in selfies. signatures = HSEC voucher signatures. stats.sqlite = website visitor numbers. website = the website's files as they run on the server.\r\n"
+        . ($locked ? "The files are locked with your backup password (AES-256). Open this .zip with 7-Zip (7-zip.org); Windows' own zip viewer cannot open AES-locked files.\r\n" : "")
         . "To restore, send this file to whoever looks after the website.\r\n");
     $zip->close();
     @unlink($tmp . '.sqlite');
@@ -124,7 +146,23 @@ function erp_backups_page(bool $post): void
         echo $script;
         exit;
     }
-    erp_render('backups', ['me' => $me, 'hasKey' => erp_backup_key_hash() !== null, 'last' => erp_backup_last()]);
+    $msg = null;
+    if ($post && ($_POST['action'] ?? '') === 'zip_pw') {
+        $a = (string) ($_POST['pw'] ?? '');
+        $b = (string) ($_POST['pw2'] ?? '');
+        if (mb_strlen($a) < 10) {
+            $msg = ['err', 'Use at least 10 characters.'];
+        } elseif ($a !== $b) {
+            $msg = ['err', 'The two passwords do not match.'];
+        } else {
+            $had = erp_backup_zip_pw() !== null;
+            erp_backup_set('backup_zip_pw', $a);
+            erp_user_event((int) $me['id'], 'Backup password ' . ($had ? 'changed' : 'set'), $me['name']);
+            $msg = ['ok', 'Saved. Every backup from now on is locked with this password. Write it down somewhere safe: without it the backups cannot be opened.'];
+        }
+    }
+    erp_render('backups', ['me' => $me, 'hasKey' => erp_backup_key_hash() !== null, 'last' => erp_backup_last(),
+        'hasPw' => erp_backup_zip_pw() !== null, 'canLock' => defined('ZipArchive::EM_AES_256'), 'msg' => $msg]);
 }
 
 function erp_backup_script(string $key, string $folder, string $drive = ''): string
