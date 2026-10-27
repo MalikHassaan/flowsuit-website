@@ -5,7 +5,7 @@
 // for a receipt). The matching voucher follows the payer's: it posts when the payer posts, is updated while neither
 // is posted, and is reversed when the payer is reversed. General ledger > Intercompany then nets to zero.
 (function () {
-  /* global S, F, Store, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
+  /* global S, F, Store, esc, fmt, jvSheet, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
   var busy = {};
 
   function accs() { return Store.data.accounts.filter(function (a) { return a.ic === "Yes" && isPost(a); }); }
@@ -24,6 +24,20 @@
     return (lines || []).reduce(function (s, l) { return ic[l.account] ? s + n(l.debit) - n(l.credit) : s; }, 0);
   }
   function mirrorOf(id) { return Store.data.journals.find(function (j) { return j.icOf === id && !j.reversalOf; }); }
+  // The other company's voucher for this one: the matching voucher for a payer, the payer for a matching voucher.
+  function other(j) { return !j || !j.id ? null : j.icOf ? Store.data.journals.find(function (x) { return x.id === j.icOf; }) : mirrorOf(j.id); }
+  // Both entries side by side: shown on the voucher form and printed on the voucher.
+  function sideHtml(j) {
+    var o = other(j);
+    if (!o) return "";
+    var A = {}; Store.data.accounts.forEach(function (a) { A[a.id] = a; });
+    var row = function (l) { var a = A[l.account] || {}; return "<tr><td>" + esc((a.code || "") + " " + (a.name || "(account missing)")) + "</td><td class=\"num\">" + (n(l.debit) ? fmt(l.debit) : "") + "</td><td class=\"num\">" + (n(l.credit) ? fmt(l.credit) : "") + "</td></tr>"; };
+    var tot = (o.lines || []).reduce(function (s, l) { return s + n(l.debit); }, 0);
+    return "<div class=\"fs-icside\"><h4 style=\"margin:14px 0 6px\">Other company's entry: " + esc(coName(o.entity)) + " · " + esc(o.ref || "(not numbered yet)") + " · " + esc(o.status || "Draft") + "</h4>"
+      + "<p class=\"muted\" style=\"margin:0 0 6px\">" + esc(j.icOf ? "This voucher records the other company's payment or receipt for us." : "Made automatically in " + coName(o.entity) + "'s books from this voucher.") + "</p>"
+      + "<table class=\"vl\" style=\"width:100%\"><thead><tr><th>Account</th><th class=\"num\">Debit</th><th class=\"num\">Credit</th></tr></thead><tbody>"
+      + (o.lines || []).map(row).join("") + "<tr class=\"tot\"><td class=\"num\">Total</td><td class=\"num\">" + fmt(tot) + "</td><td class=\"num\">" + fmt(tot) + "</td></tr></tbody></table></div>";
+  }
 
   function addFields() {
     var f = S.journals.fields;
@@ -52,6 +66,11 @@
       var pay = Store.data.journals.find(function (j) { return j.id === F.rec.icOf; }) || {};
       bn.textContent = bn.textContent.replace("voucher .", "voucher " + (pay.ref || "") + " (" + coName(pay.entity || "") + ").");
     }
+    var lb = document.getElementById("linesBox"), side = document.getElementById("fsIcSide"), h = sideHtml(F.rec);
+    if (lb && h && (!side || side.dataset.h !== h)) {
+      if (!side) { side = document.createElement("div"); side.id = "fsIcSide"; lb.after(side); }
+      side.dataset.h = h; side.innerHTML = h;
+    } else if (side && !h) side.remove();
     if (sel.dataset.fsIc) return;
     sel.dataset.fsIc = "1";
     sel.addEventListener("change", function () {
@@ -130,6 +149,12 @@
         return old.apply(this, arguments);
       };
     })(submitForm); // eslint-disable-line no-undef
+    jvSheet = (function (old) { // eslint-disable-line no-global-assign, no-undef
+      return function (j) {
+        var html = old.apply(this, arguments), h = sideHtml(j), at = html.indexOf("<h4>Finance Document Approval Authority</h4>");
+        return h && at >= 0 ? html.slice(0, at) + h + html.slice(at) : html;
+      };
+    })(jvSheet); // eslint-disable-line no-undef
     var save = Store.save;
     Store.save = async function (c, rec) {
       var id = await save.apply(this, arguments);
