@@ -5,7 +5,7 @@
 // for a receipt). The matching voucher follows the payer's: it posts when the payer posts, is updated while neither
 // is posted, and is reversed when the payer is reversed. General ledger > Intercompany then nets to zero.
 (function () {
-  /* global S, F, Store, esc, fmt, jvSheet, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
+  /* global S, F, Store, esc, coLabel, fmt, jvSheet, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
   var busy = {};
 
   function accs() { return Store.data.accounts.filter(function (a) { return a.ic === "Yes" && isPost(a); }); }
@@ -132,6 +132,20 @@
     if (j.status === "Posted" && (!m || m.status !== "Posted")) toast("Matching voucher " + j.ref + " posted in " + coName(j.entity) + ".");
   }
 
+  // The chart of accounts came with "Due from ENT1".."ENT5". Once the companies have their own codes, those
+  // accounts are renamed to the company (e.g. "Due from JPL") so vouchers and reports show who the balance is with.
+  var named = false;
+  async function nameIcAccounts() {
+    if (named || !Store.data.accounts.length || !(window.FS_BRIDGE && window.FS_BRIDGE.edit)) return;
+    named = true;
+    var ents = ENTS();
+    for (var k = 0; k < Store.data.accounts.length; k++) {
+      var a = Store.data.accounts[k], m = /^Due (from|to) ENT(\d)$/.exec(String(a.name || "").trim()), e = m && ents[+m[2] - 1];
+      if (!e || e === "ENT" + m[2] || a.ic !== "Yes") continue;
+      try { await Store.save("accounts", Object.assign({}, a, { name: "Due " + m[1] + " " + coLabel(e) })); } catch (x) { return; }
+    }
+  }
+
   function hook() {
     if (typeof S === "undefined" || !S.journals || typeof submitForm !== "function" || !Store || !Store.save) return false; // eslint-disable-line no-undef
     addFields();
@@ -173,6 +187,7 @@
       if (m && m.status !== "Posted") await remove.call(this, "journals", m.id);
       return out;
     };
+    var waits = 0, nm = setInterval(function () { if (named || ++waits > 30) { clearInterval(nm); return; } nameIcAccounts(); }, 2000);
     new MutationObserver(trim).observe(document.body, { childList: true, subtree: true });
     return true;
   }
