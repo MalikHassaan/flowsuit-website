@@ -31,7 +31,7 @@
 <?php endif; ?>
   <div class="checks">
     <label class="check"><input type="checkbox" name="is_admin" value="1" data-admin <?= $target['is_admin'] ? 'checked' : '' ?> <?= $isSelf ? 'disabled' : '' ?>> Admin: can open everything and manage users</label>
-    <label class="check"><input type="checkbox" name="active" value="1" <?= $target['active'] ? 'checked' : '' ?> <?= $isSelf ? 'disabled' : '' ?>> Account is switched on</label>
+    <label class="check"><input type="checkbox" name="active" value="1" <?= $target['active'] ? 'checked' : '' ?> <?= $isSelf ? 'disabled' : '' ?>> Account is active. Untick to make it dormant: they are signed out and cannot sign in, and their name stays on past vouchers.</label>
 <?php if ($isSelf): ?>
     <p class="muted small">You can't remove your own admin rights or switch yourself off.</p>
 <?php endif; ?>

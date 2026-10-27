@@ -157,8 +157,10 @@ function hsec_settings_override(array $data): array
 {
     if (hsec_approvals_on()) {
         $data['apprScope'] = 'vouchers';
-        $data['jvChain'] = array_map(fn($role) => ['role' => $role, 'from' => ''], array_values(HSEC_JV_STAGES));
     }
+    // The voucher shows the same sign-offs as Users and access, whether approval is on paper or in the system:
+    // Maker (prepared by), Senior Manager, Group GM Finance (hassan, 2026-10-27).
+    $data['jvChain'] = array_map(fn($role) => ['role' => $role, 'from' => ''], array_values(HSEC_JV_STAGES));
     return $data;
 }
 
