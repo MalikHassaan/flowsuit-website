@@ -1,23 +1,23 @@
 <?php $title = 'Backups | FlowSuit ERP'; $active = 'backups'; ?>
 <header class="page-top">
-  <div><h1>Backups</h1><p class="muted">One .zip with users, access, reports, the TAJ dashboard and every saved TAJ export.<?= $last ? ' Last backup: ' . e($last) . '.' : '' ?></p></div>
+  <div><h1>Backups</h1><p class="muted">One .zip with the whole ERP (users, access, TAJ and HSEC records, files, signatures) and the website's files.<?= $last ? ' Last backup: ' . e($last) . '.' : '' ?></p></div>
   <a class="btn" href="/erp/backup"><?= icon('cloud') ?>Download backup now</a>
 </header>
 <section class="panel">
-  <h2>Back up to your laptop automatically</h2>
-  <p class="muted">Windows can fetch a backup every day with a small script. <?= $hasKey ? 'A script already exists; making a new one switches the old one off.' : '' ?></p>
+  <h2>Back up to your laptop and Google Drive every day at 9:00 AM</h2>
+  <p class="muted">A small script on your laptop fetches the backup every morning, keeps the last 30 on the laptop and copies each one to Google Drive (last 14 kept there). If the laptop is off or asleep at 9:00, it runs as soon as the laptop is back on with internet. <?= $hasKey ? 'A script already exists; making a new one switches the old one off.' : '' ?></p>
   <form method="post" class="form backup-form">
     <?= erp_csrf_field() ?>
     <input type="hidden" name="action" value="script">
     <label>Folder on your laptop<input name="folder" value="C:\FlowSuit Backups" required></label>
-    <button class="btn" type="submit">Download laptop backup script</button>
+    <label>Google Drive folder (leave blank to find it automatically)<input name="drive" value="" placeholder="e.g. G:\My Drive\FlowSuit Backups"></label>
+    <button class="btn" type="submit">Download backup script</button>
   </form>
   <ol class="steps-list">
-    <li>Save <b>flowsuit-backup.ps1</b> in <b>Documents</b>. Keep it private: it can download your ERP data.</li>
-    <li>Open <b>Task Scheduler</b> from the Start menu and click <b>Create Basic Task</b>. Name it <b>FlowSuit backup</b>.</li>
-    <li>Trigger: <b>Daily</b>, at a time your laptop is usually on, for example 1:00 pm.</li>
-    <li>Action: <b>Start a program</b>. Program: <code>powershell.exe</code>. Arguments: <code>-ExecutionPolicy Bypass -WindowStyle Hidden -File "PATH"</code>, where PATH is the script's location (hold Shift, right-click the file, choose <b>Copy as path</b>, and paste it without the extra quotes).</li>
-    <li>Finish, then open the task's <b>Properties &gt; Settings</b> and tick <b>Run task as soon as possible after a scheduled start is missed</b>.</li>
-    <li>Right-click the task and choose <b>Run</b> once. A .zip should appear in the folder. The last 30 days are kept.</li>
+    <li>Install <b>Google Drive for desktop</b> (google.com/drive/download) and sign in with your Google account. A <b>Google Drive</b> drive (usually <b>G:</b>) appears in File Explorer.</li>
+    <li>Click <b>Download backup script</b> above and save <b>flowsuit-backup.ps1</b> in <b>Documents</b>. Keep it private and don't move it later: it can download your ERP data, and the daily task runs it from there.</li>
+    <li>Right-click the file and choose <b>Run with PowerShell</b>. If Windows asks to change the execution policy, answer <b>Y</b>.</li>
+    <li>It sets up a daily 9:00 AM task called <b>FlowSuit backup</b>, makes the first backup now and says where it saved it. Press Enter to close.</li>
+    <li>Check <b>C:\FlowSuit Backups</b> and <b>Google Drive › FlowSuit Backups</b> for today's .zip. Each run is noted in <b>backup-log.txt</b> in the laptop folder.</li>
   </ol>
 </section>
