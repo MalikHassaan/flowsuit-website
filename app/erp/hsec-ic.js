@@ -5,7 +5,7 @@
 // for a receipt). The matching voucher follows the payer's: it posts when the payer posts, is updated while neither
 // is posted, and is reversed when the payer is reversed. General ledger > Intercompany then nets to zero.
 (function () {
-  /* global S, F, Store, esc, coLabel, fmt, jvSheet, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
+  /* global S, F, Store, esc, coLabel, fdate, fmt, jvSheet, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
   var busy = {};
 
   function accs() { return Store.data.accounts.filter(function (a) { return a.ic === "Yes" && isPost(a); }); }
@@ -37,6 +37,35 @@
       + "<p class=\"muted\" style=\"margin:0 0 6px\">" + esc(j.icOf ? "This voucher records the other company's payment or receipt for us." : "Made automatically in " + coName(o.entity) + "'s books from this voucher.") + "</p>"
       + "<table class=\"vl\" style=\"width:100%\"><thead><tr><th>Account</th><th class=\"num\">Debit</th><th class=\"num\">Credit</th></tr></thead><tbody>"
       + (o.lines || []).map(row).join("") + "<tr class=\"tot\"><td class=\"num\">Total</td><td class=\"num\">" + fmt(tot) + "</td><td class=\"num\">" + fmt(tot) + "</td></tr></tbody></table></div>";
+  }
+
+  function accName(id) { var a = Store.data.accounts.find(function (x) { return x.id === id; }); return a ? a.name : ""; }
+
+  // The voucher's description written from what was entered: who was paid or received from, on whose behalf,
+  // for what, against which project and cheque. It fills itself in until someone types their own description.
+  function suggest() {
+    var v = function (k) { var el = document.getElementById("f_" + k); return el ? String(el.value || "").trim() : ""; };
+    var t = v("vtype"), pay = /payment/i.test(t), rec = /receipt/i.test(t), icFor = v("icFor");
+    if (!pay && !rec && !icFor) return "";
+    readLines();
+    var bank = function (id) { var a = Store.data.accounts.find(function (x) { return x.id === id; }) || {}; return /^1210/.test(String(a.code)) || /bank|cash/i.test(a.name || ""); };
+    var line = F.lines.find(function (l) { return l.account && !bank(l.account) && n(rec ? l.credit : l.debit) > 0; }) || F.lines.find(function (l) { return l.account && !bank(l.account); });
+    var what = icFor && v("icCharge") ? accName(v("icCharge")) : line ? accName(line.account) : "";
+    var amt = F.lines.reduce(function (s, l) { return s + (bank(l.account) ? n(rec ? l.debit : l.credit) : 0); }, 0);
+    var proj = v("costCentre") && typeof refName === "function" ? refName("projects", v("costCentre")) : ""; // eslint-disable-line no-undef
+    var out = (rec ? "Received" : "Paid") + (v("payee") ? (rec ? " from " : " to ") + v("payee") : "")
+      + (icFor ? " on behalf of " + coLabel(icFor) : "") + (what ? " for " + what : "") + (proj ? ", " + proj : "")
+      + (amt ? ", Rs " + fmt(amt) : "") + (v("chequeNo") ? ", cheque / TT " + v("chequeNo") + (v("chequeDate") ? " dated " + fdate(v("chequeDate")) : "") : "");
+    return out === "Paid" || out === "Received" ? "" : out;
+  }
+  function narrate() {
+    var el = document.getElementById("f_narration");
+    if (!el || !F || F.c !== "journals" || F.rec.source || F.rec.icOf || F.rec.reversalOf || F.rec.status === "Posted") return;
+    var cur = String(el.value || "").trim();
+    if (cur && cur !== el.dataset.fsAuto) return;
+    var s = suggest();
+    if (!s || s === cur) return;
+    el.value = s; el.dataset.fsAuto = s;
   }
 
   function addFields() {
@@ -118,11 +147,12 @@
     if (why) { toast(why); return; }
     var net = icNet(r.lines), amt = Math.abs(Math.round(net * 100) / 100), back = icAcc(net > 0 ? "2204" : "1207", r.entity, r.icFor);
     var lines = net > 0
-      ? [{ account: r.icCharge, debit: amt, credit: 0, desc: r.payee || "" }, { account: back.id, debit: 0, credit: amt }]
-      : [{ account: back.id, debit: amt, credit: 0 }, { account: r.icCharge, debit: 0, credit: amt, desc: r.payee || "" }];
+      ? [{ account: r.icCharge, debit: amt, credit: 0, desc: accName(r.icCharge) + (r.payee ? " – " + r.payee : "") }, { account: back.id, debit: 0, credit: amt, desc: "Payable to " + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "") }]
+      : [{ account: back.id, debit: amt, credit: 0, desc: "Receivable from " + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "") }, { account: r.icCharge, debit: 0, credit: amt, desc: accName(r.icCharge) + (r.payee ? " – " + r.payee : "") }];
     var j = Object.assign({}, m || {}, {
       entity: r.icFor, dept: r.dept, opening: "No", vtype: "Journal voucher", date: r.date, payee: coName(r.entity),
-      narration: (net > 0 ? "Paid on our behalf by " : "Received on our behalf by ") + coName(r.entity) + (r.ref ? " (" + r.ref + ")" : "") + ": " + (r.narration || ""),
+      narration: (net > 0 ? "Paid on our behalf by " : "Received on our behalf by ") + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "")
+        + (r.payee ? (net > 0 ? " to " : " from ") + r.payee : "") + " for " + accName(r.icCharge) + (r.chequeNo ? ", cheque / TT " + r.chequeNo : "") + (r.date ? ", " + fdate(r.date) : ""),
       status: r.status === "Posted" ? "Posted" : "Draft", icOf: r.id, source: { c: "journals", id: r.id, ev: "ic", key: "ic" }, lines: lines
     });
     if (!m) { j.maker = { name: name, at: now }; j.approvals = []; }
@@ -187,6 +217,9 @@
       if (m && m.status !== "Posted") await remove.call(this, "journals", m.id);
       return out;
     };
+    ["change", "input"].forEach(function (ev) {
+      document.addEventListener(ev, function (e) { if (e.target && e.target.closest && e.target.closest("#frm") && e.target.id !== "f_narration") setTimeout(narrate, 0); }, true);
+    });
     var waits = 0, nm = setInterval(function () { if (named || ++waits > 30) { clearInterval(nm); return; } nameIcAccounts(); }, 2000);
     new MutationObserver(trim).observe(document.body, { childList: true, subtree: true });
     return true;
