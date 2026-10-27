@@ -116,6 +116,8 @@ function hsec_wording(string $html): string
 {
     return strtr($html, [
         'Anyone you share the page with as an editor sees and changes the same data.' => 'Everyone with HSEC access in FlowSuit ERP sees and changes the same data.',
+        // One word for a company everywhere (hassan, 2026-10-27); forms and list columns are renamed by hsec-ux.js.
+        '<th>Entity</th>' => '<th>Company</th>',
     ]);
 }
 

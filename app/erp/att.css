@@ -69,3 +69,8 @@ html.fs-gated body>*:not(#fs-gate):not(script):not(style){filter:blur(9px) satur
 #fs-gate .fsg-skip{border:0;background:none;padding:0;color:#64748b;font:inherit;text-decoration:underline;cursor:pointer}
 #fs-gate .fsg-ok{width:84px;height:84px;margin:4px auto 12px;border-radius:50%;display:grid;place-items:center;font-size:44px;color:#fff;background:linear-gradient(135deg,#22c55e,#15803d);animation:fsg-pop .5s cubic-bezier(.3,1.6,.5,1) both!important}
 @media print{#fs-gate{display:none!important}html.fs-gated body>*{filter:none!important}}
+/* While a form is open (HSEC drawer or an ERP form page on a phone) the button shrinks to a dot and fades, so it
+   does not sit on top of the boxes being filled in; it comes back on hover or tap. */
+html:has(#frm) #fs-att{bottom:76px;opacity:.55;transition:opacity .2s!important}
+html:has(#frm) #fs-att:hover,html:has(#frm) #fs-att:focus-within{opacity:1}
+html:has(#frm) #fs-att .fsa-pill{width:40px;padding:0;justify-content:center;font-size:0;gap:0}

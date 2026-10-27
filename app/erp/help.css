@@ -32,3 +32,4 @@
 @media (max-width:520px){#fs-help{right:76px;bottom:16px}#fs-help.is-open{right:12px;bottom:12px}}
 @media print{#fs-help{display:none!important}}
 body:has(#fs-help.is-open) #fs-chat .fsc-fab,body:has(#fs-help.is-open) #fs-att{display:none!important}
+html:has(#frm) #fs-help{opacity:.55}html:has(#frm) #fs-help:hover{opacity:1}
