@@ -18,7 +18,7 @@
 <?php foreach ($users as $u): ?>
         <tr class="<?= $u['active'] ? '' : 'is-off' ?>">
           <td><b><?= e($u['name']) ?></b><br><span class="muted small"><?= e($u['email']) ?></span></td>
-          <td><?= $u['is_admin'] ? '<span class="tag tag-ok">Admin</span>' : ($u['active'] ? 'Member' : '<span class="tag">Switched off</span>') ?></td>
+          <td><?= $u['is_admin'] ? '<span class="tag tag-ok">Admin</span>' : ($u['active'] ? 'Member' : '<span class="tag">Switched off</span>') ?><?php if (!empty($u['off'])): ?><br><span class="muted small"><?= e(date('j M Y, g:i a', strtotime($u['off']['at']))) ?><?= $u['off']['by_name'] ? ' by ' . e($u['off']['by_name']) : '' ?></span><?php endif; ?></td>
 <?php foreach (array_keys(erp_live_modules()) as $key): $lvl = $u['is_admin'] ? 'edit' : ($u['access'][$key] ?? null); ?>
           <td><span class="lvl lvl-<?= $lvl ?: 'none' ?>"><?= $lvl ? e(erp_level_label($key, $lvl)) : e(erp_modules()[$key]['none'] ?? 'No access') ?></span><?php if ($key === 'hsec' && $lvl): $cos = hsec_allowed($u); ?><br><span class="muted small"><?= $cos === null ? 'All companies' : e(implode(', ', $cos)) ?></span><?php endif; ?></td>
 <?php endforeach; ?>
