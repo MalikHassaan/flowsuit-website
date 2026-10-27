@@ -43,6 +43,17 @@
     // Status: set by the system (Draft, Pending approval, Posted); shown, not chosen.
     var st = document.getElementById("f_status");
     if (st && !st.disabled) { st.disabled = true; st.title = "Set by the system"; }
+    // Without in-system approval, "Save & post" posts the voucher, so say that instead of showing "Draft".
+    var auto = st && !F.rec.source && (F.rec.status || "Draft") !== "Posted" && typeof PAPER === "function" && PAPER(); // eslint-disable-line no-undef
+    var tag = document.getElementById("fsPostTag");
+    if (auto && !tag) {
+      tag = document.createElement("span");
+      tag.id = "fsPostTag";
+      tag.className = "hint";
+      tag.style.cssText = "display:block;color:var(--accent,#0e7c66);font-weight:600";
+      tag.textContent = "Becomes Posted automatically when you press Save & post.";
+      st.after(tag);
+    } else if (tag && !auto) tag.remove();
   }
 
   // The account finder above the lines: pick "1210-001 Meezan Bank" and it fills the first empty line (or a new one).
