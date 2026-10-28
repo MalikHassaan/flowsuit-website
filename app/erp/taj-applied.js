@@ -90,19 +90,13 @@
     if (!a) return '<p class="callout">Upload the Receipt VS Applied detail file (the one with Credit Date, Applied and Account Head columns) under Data sources to see this report.</p>';
     if (!a.months.length) return '<p class="callout">No receipts from ' + esc(a.banksLabel) + " for this selection.</p>";
     return (a.others ? '<p class="callout">Only the Sector filter and the period change this page; other filters do not apply to this file.</p>' : "") + h.kp +
-      '<div class="fs-aprow">' + h.card("Received by month, by account head", h.canvas("c-heads", "tall"), "Top 5 heads; the rest under Other") +
-      h.card("Total by account head, top 10", h.canvas("c-heads2", "tall")) + "</div>" +
+      h.card("Total by account head, top 10", h.canvas("c-heads", "tall")) +
       '<div class="fs-apbig">' + h.card("Account heads by month", h.table(a.table), "Applied amount; where Applied is zero, the receipt amount. Banks " + a.banksLabel) + "</div>";
   }
   function chart(a, h) {
     if (!a || !a.months.length) return;
-    var cols = ["--c1", "--c2", "--c3", "--c4", "--c6"], hd = a.table.rows.filter(function (r) { return r.kind === "row"; });
-    var top = hd.slice(0, 5), rest = hd.slice(5), n = a.months.length;
-    var sets = top.map(function (r, i) { return { label: r.cells[0], data: r.cells.slice(1, n + 1), color: h.css(cols[i]) }; });
-    if (rest.length) sets.push({ label: "Other", data: a.months.map(function (k, i) { return rest.reduce(function (s, r) { return s + r.cells[i + 1]; }, 0); }), color: h.css("--muted") });
-    h.bars("c-heads", { labels: a.labels, keys: [], stacked: true, legend: true, sets: sets });
-    var t10 = hd.slice(0, 10);
-    h.bars("c-heads2", { labels: t10.map(function (r) { return r.cells[0]; }), keys: [], horizontal: true, legend: false,
+    var n = a.months.length, t10 = a.table.rows.filter(function (r) { return r.kind === "row"; }).slice(0, 10);
+    h.bars("c-heads", { labels: t10.map(function (r) { return r.cells[0]; }), keys: [], horizontal: true, legend: false,
       sets: [{ label: "Total", data: t10.map(function (r) { return r.cells[n + 1]; }), color: h.css("--c2") }], fmt: h.money });
   }
   var view = { cols: [["Month", "text"], ["Bank", "text"], ["Account head", "text"], ["Sector", "text"], ["Receipt lines", "count"], ["Amount", "money"]],
@@ -110,8 +104,7 @@
       .map(function (x) { return [label(x.month), x.bank, x.head, x.sector, x.n, x.amount]; }); } };
 
   var css = document.createElement("style");
-  css.textContent = ".fs-aprow{display:grid;grid-template-columns:3fr 2fr;gap:16px}.fs-aprow>.card{margin:0}@media (max-width:900px){.fs-aprow{grid-template-columns:1fr}}" +
-    ".fs-apbig table,.fs-apbig table.dense{font-size:12.5pt!important}.fs-apbig td,.fs-apbig th{padding:8px 10px}.fs-apbig .tw{overflow-x:auto}" +
+  css.textContent = ".fs-apbig table,.fs-apbig table.dense{font-size:12.5pt!important}.fs-apbig td,.fs-apbig th{padding:8px 10px}.fs-apbig .tw{overflow-x:auto}" +
     "body.present .fs-apbig table{font-size:inherit!important}";
   document.head.appendChild(css);
 
