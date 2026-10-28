@@ -12,7 +12,7 @@ const TAJ_MAX_JSON = 80 * 1024 * 1024;   // bytes per export once unzipped
 const TAJ_REPORTS = [
     'Receivables' => ['summary' => 'Summary', 'till' => 'Receivables Till', 'history' => 'Balance History', 'dormant' => 'Dormant / Active',
         'overdue' => 'Overdue Instalments', 'plan' => 'Plan Completion', 'status' => 'By Sector Status', 'property' => 'By Property', 'file' => 'File Status'],
-    'Collections' => ['collection' => 'Collections', 'trend' => 'Year Trend', 'pace' => 'Collection Pace', 'targets' => 'Collection Targets', 'exceptions' => 'Exceptions'],
+    'Collections' => ['collection' => 'Collections', 'trend' => 'Year Trend', 'heads' => 'Account Heads', 'pace' => 'Collection Pace', 'targets' => 'Collection Targets', 'exceptions' => 'Exceptions'],
     'Recovery' => ['desk' => 'Recovery Desk', 'lookup' => 'Customer Statement'],
     'Sales' => ['sales' => 'Sales Trend'],
     'Risk' => ['top' => 'Top Outstanding', 'agents' => 'Agent Performance', 'vintage' => 'Booking Year', 'plotsize' => 'Plot Size', 'possession' => 'Possession vs Dues'],
@@ -59,6 +59,45 @@ function taj_hide(array $me): void
     taj_json(['ok' => true, 'hidden' => taj_hidden()]);
 }
 
+// Order of the slideshow and the PDF export (taj-order.js): report ids, first to last. Empty means each keeps its own order.
+function taj_order(): array
+{
+    $v = json_decode((string) erp_setting('taj_order'), true);
+    return is_array($v) ? array_values(array_intersect($v, taj_report_ids())) : [];
+}
+
+// Reports that can be slides or PDF pages ([id, name]), in the saved order; the Recovery tools are neither.
+function taj_slides(): array
+{
+    $all = [];
+    foreach (TAJ_REPORTS as $group => $reports) {
+        if ($group !== 'Recovery') {
+            $all += $reports;
+        }
+    }
+    $all = array_diff_key($all, array_flip(taj_hidden()));
+    $out = [];
+    foreach (array_merge(array_intersect(taj_order(), array_keys($all)), array_keys($all)) as $id) {
+        $out[$id] ??= [$id, $all[$id]];
+    }
+    return array_values($out);
+}
+
+// POST /api/order {ids}: anyone with View and upload access sets the order for everyone.
+function taj_order_set(array $me): void
+{
+    if (!erp_can($me, 'receivables', 'edit')) {
+        taj_fail(403, 'permission_denied', 'Your ERP access does not allow this change');
+    }
+    $ids = json_decode((string) file_get_contents('php://input'), true)['ids'] ?? null;
+    if (!is_array($ids)) {
+        taj_fail(400, 'invalid_argument', 'Bad request');
+    }
+    $ids = array_values(array_unique(array_intersect(array_filter($ids, 'is_string'), taj_report_ids())));
+    erp_setting_set('taj_order', $ids ? json_encode($ids) : null);
+    taj_json(['ok' => true, 'order' => taj_order()]);
+}
+
 function taj_uid(array $user): string
 {
     return 'u' . $user['id'];
@@ -96,7 +135,8 @@ function taj_inject(array $me): string
 {
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     $cfg = ['api' => '/erp/m/receivables/api', 'csrf' => $_SESSION['csrf'], 'uid' => taj_uid($me),
-        'edit' => erp_can($me, 'receivables', 'edit'), 'name' => $me['name'], 'admin' => (bool) $me['is_admin'], 'hidden' => taj_hidden()];
+        'edit' => erp_can($me, 'receivables', 'edit'), 'name' => $me['name'], 'admin' => (bool) $me['is_admin'], 'hidden' => taj_hidden(),
+        'order' => taj_order(), 'reports' => taj_slides()];
     return '<script>try{sessionStorage.setItem("taj-in",' . json_encode(taj_username($me), $flags) . ')}catch(e){}'
         . 'window.FS_TAJ=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
@@ -110,7 +150,9 @@ function taj_inject(array $me): string
         . '@media (min-width:2200px){html:not(:has(body.present)){zoom:1.15}}@media (min-width:3200px){html:not(:has(body.present)){zoom:1.45}}</style>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-present.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-targets.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/taj-order.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-hide.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/taj-applied.js') . '</script>'
         . chat_inject($me, 'taj')
         // Sign-out and user management happen in the ERP itself.
         . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
@@ -161,10 +203,55 @@ function taj_hide_hooks(string $html): string
     return str_replace('function P(id) { return PAGES.find(', 'function P(id) { return (window.FS_ALLPAGES || PAGES).find(', $html);
 }
 
+// Fifth export and the Account Heads report (taj-applied.js), plus the saved slide order (taj-order.js). Every
+// anchor must be found exactly once, or the file is left as it is: a half-patched dashboard would break.
+function taj_applied_hooks(string $html): string
+{
+    $ap = 'window.FS_AP';
+    $pairs = [
+        '    var h15 = headText(rows, 15);' => "$0\n    if ($ap && FS_AP.is(rows)) return \"applied\";",
+        '    if (kind === "receipt") { out.data = parseReceipts(rows); out.printDate = printDate(rows); out.count = out.data.length; }'
+            => "    if (kind === \"applied\") { out.data = FS_AP.parse(rows); out.printDate = FS_AP.printDate(rows); out.count = FS_AP.count(out.data); }\n$0",
+        'paid: "Paid Percentage" };' => 'paid: "Paid Percentage", applied: "Receipts by Account Head" };',
+        '    model.bank = parts.bank ? parts.bank.data : sample.bank;'
+            => "$0\n    model.applied = parts.applied ? parts.applied.data : null; files.applied = parts.applied ? parts.applied.name : \"\";",
+        '      pace: model.bank ? collectionPace(model.bank, cut) : null' => "$0,\n      applied: $ap ? FS_AP.build(model.applied, cut, pr, F) : null",
+        '    ["pace", "Collection Pace", "Collection control",'
+            => "    [\"heads\", \"Account Heads\", \"Cash\", \"Receipts by account head\", \"Account heads by month for banks \" + ($ap ? FS_AP.BANKS.join(\", \") : \"\") + \". Applied amount; where Applied is zero, the receipt amount.\", \"TAJ Residencia - Receipts by account head\"],\n$0",
+        '"collection", "file", "trend", "plan"' => '"collection", "file", "trend", "heads", "plan"',
+        '    pace: { charts: { "c-pace": [0, 0, 1, .55] }, tables: [[0, .6, 1, .4]] },' => "    heads: { charts: {}, tables: [[0, 0, 1, 1]] },\n$0",
+        '      case "pace": {' => "      case \"heads\": return $ap ? FS_AP.kpis(r.applied, { money: money }) : [];\n$0",
+        "      case \"pace\":\n        if (!r.pace)"
+            => "      case \"heads\": html = $ap ? FS_AP.html(r.applied, { kp: kp, card: card, table: table, canvas: canvas }) : \"\"; break;\n$0",
+        '    if (tab === "pace" && r.pace) {' => "    if (tab === \"heads\" && $ap) FS_AP.chart(r.applied, { bars: bars, css: css });\n$0",
+        '      case "pace": if (r.pace) T("By bank", r.pace.table); p.noDate = true; break;'
+            => "      case \"heads\": if (r.applied && r.applied.months.length) T(\"Account heads by month, banks \" + r.applied.banksLabel, r.applied.table); break;\n$0",
+        'pace: "c-pace", exceptions: "c-exc" };' => 'pace: "c-pace", heads: "c-heads", exceptions: "c-exc" };',
+        'var NEEDS = { collection: "collections", trend: "yearTrend", pace: "pace" };' => 'var NEEDS = { collection: "collections", trend: "yearTrend", pace: "pace", heads: "applied" };',
+        '["collection", "trend", "pace", "targets", "exceptions"]' => '["collection", "trend", "heads", "pace", "targets", "exceptions"]',
+        '  var KINDS = ["bank", "receipt", "installments", "paid"];' => '  var KINDS = ["bank", "receipt", "installments", "paid", "applied"];',
+        '  var VIEW = {' => "$0\n    applied: $ap ? FS_AP.view : { cols: [], rows: function () { return []; } },",
+        '  function presOrder() { return MODULES.filter('
+            => "  function presOrder() { return (window.FS_ORDER || function (l) { return l; })(presOrder0()); }\n  function presOrder0() { return MODULES.filter(",
+        '    if (tab === "pace") return "Pace for the last month of "' => "    if (tab === \"heads\") return \"Receipts credited in \" + n + \".\";\n$0",
+        '" of 4 files uploaded" + (n < 4 ?' => '" of " + KINDS.length + " files uploaded" + (n < KINDS.length ?',
+        '" of 4 exports loaded"' => '" of " + KINDS.length + " exports loaded"',
+    ];
+    foreach ($pairs as $find => $with) {
+        if (substr_count($html, $find) !== 1) {
+            return $html;
+        }
+    }
+    foreach ($pairs as $find => $with) {
+        $html = str_replace($find, str_replace('$0', $find, $with), $html);
+    }
+    return str_replace('not one of the four expected exports', 'not one of the five expected exports', $html);
+}
+
 // The dashboard was written for claude.ai sharing; inside the ERP, access comes from Users and access.
 function taj_wording(string $html): string
 {
-    $html = taj_hide_hooks($html);
+    $html = taj_applied_hooks(taj_hide_hooks($html));
     return strtr($html, [
         'ask the report owner to raise your access in the Share menu.' => 'ask an ERP admin for View and upload access.',
         '>claude.ai account</th>' => '>ERP account</th>',
@@ -213,6 +300,8 @@ function taj_api(string $rest): void
         taj_write($me);
     } elseif ($rest === '/hide' && $method === 'POST') {
         taj_hide($me);
+    } elseif ($rest === '/order' && $method === 'POST') {
+        taj_order_set($me);
     } elseif ($rest === '/asset' && $method === 'POST') {
         taj_asset_upload($me);
     } elseif (preg_match('#^/blob/([a-f0-9]{32})$#', $rest, $m) && $method === 'GET') {
@@ -366,7 +455,7 @@ function taj_asset_send(string $id): void
 }
 
 const TAJ_KIND_NAMES = ['bank' => 'Bank Collection', 'receipt' => 'Receipt vs Applied',
-    'installments' => 'No. of Installments', 'paid' => 'Paid Percentage'];
+    'installments' => 'No. of Installments', 'paid' => 'Paid Percentage', 'applied' => 'Receipts by Account Head'];
 
 function taj_doc(string $path): ?array
 {

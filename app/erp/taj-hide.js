@@ -7,7 +7,8 @@
   var gone = function (id) { return H.indexOf(id) >= 0; };
   window.FS_KEEP = function (list) {
     if (list.length && Array.isArray(list[0]) && !window.FS_ALLPAGES) window.FS_ALLPAGES = list;   // PAGES, kept whole for look-ups
-    return list.filter(function (x) { return !gone(Array.isArray(x) ? x[0] : x); });
+    list = list.filter(function (x) { return !gone(Array.isArray(x) ? x[0] : x); });
+    return list.length && !Array.isArray(list[0]) && window.FS_ORDER ? FS_ORDER(list) : list;   // PDF_ORDER follows the saved report order
   };
   window.FS_MODS = function (mods) {
     return mods.map(function (m) { return [m[0], m[1], m[2], m[3].filter(function (t) { return !gone(t); })]; })
@@ -16,7 +17,7 @@
   if (!window.FS_TAJ || !FS_TAJ.admin) return;
 
   var HIDEABLE = ["summary", "till", "history", "dormant", "overdue", "plan", "status", "property", "file", "collection", "trend", "pace",
-    "targets", "exceptions", "desk", "lookup", "sales", "top", "agents", "vintage", "plotsize", "possession"];
+    "targets", "exceptions", "heads", "desk", "lookup", "sales", "top", "agents", "vintage", "plotsize", "possession"];
   function addButtons() {
     Array.prototype.forEach.call(document.querySelectorAll("#tabs .nav-i[data-tab]"), function (b) {
       if (HIDEABLE.indexOf(b.dataset.tab) < 0 || b.querySelector(".fs-hide")) return;
