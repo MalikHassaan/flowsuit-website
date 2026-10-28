@@ -248,10 +248,27 @@ function taj_applied_hooks(string $html): string
     return str_replace('not one of the four expected exports', 'not one of the five expected exports', $html);
 }
 
+// Collections: the sector-by-month table and its chart count cash receipts only (hassan, 2026-10-28); credit notes and
+// rebates stay in their own Non-cash collection table. All anchors must be found once, or nothing changes.
+function taj_cash_hooks(string $html): string
+{
+    $pairs = [
+        'filter(function (h) { return isCash(h) || isNC(h); }), "collectionGroup", null, last, "Sector")' => 'filter(isCash), "collectionGroup", null, last, "Sector")',
+        '"Cash + non-cash receipts, "' => '"Cash receipts, "',
+        'the sector-by-month table adds credit notes and rebates' => 'so does the sector-by-month table; credit notes and rebates show only under Non-cash collection',
+    ];
+    foreach ($pairs as $find => $with) {
+        if (substr_count($html, $find) !== 1) {
+            return $html;
+        }
+    }
+    return str_replace('"Cash + non-cash receipts by sector, "', '"Cash receipts by sector, "', strtr($html, $pairs));
+}
+
 // The dashboard was written for claude.ai sharing; inside the ERP, access comes from Users and access.
 function taj_wording(string $html): string
 {
-    $html = taj_applied_hooks(taj_hide_hooks($html));
+    $html = taj_cash_hooks(taj_applied_hooks(taj_hide_hooks($html)));
     return strtr($html, [
         'ask the report owner to raise your access in the Share menu.' => 'ask an ERP admin for View and upload access.',
         '>claude.ai account</th>' => '>ERP account</th>',
