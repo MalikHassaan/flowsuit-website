@@ -223,7 +223,7 @@ function taj_applied_hooks(string $html): string
         '      case "pace": {' => "      case \"heads\": return $ap ? FS_AP.kpis(r.applied, { money: money }) : [];\n$0",
         "      case \"pace\":\n        if (!r.pace)"
             => "      case \"heads\": html = $ap ? FS_AP.html(r.applied, { kp: kp, card: card, table: table, canvas: canvas }) : \"\"; break;\n$0",
-        '    if (tab === "pace" && r.pace) {' => "    if (tab === \"heads\" && $ap) FS_AP.chart(r.applied, { bars: bars, css: css });\n$0",
+        '    if (tab === "pace" && r.pace) {' => "    if (tab === \"heads\" && $ap) FS_AP.chart(r.applied, { bars: bars, css: css, money: money });\n$0",
         '      case "pace": if (r.pace) T("By bank", r.pace.table); p.noDate = true; break;'
             => "      case \"heads\": if (r.applied && r.applied.months.length) T(\"Account heads by month, banks \" + r.applied.banksLabel, r.applied.table); break;\n$0",
         'pace: "c-pace", exceptions: "c-exc" };' => 'pace: "c-pace", heads: "c-heads", exceptions: "c-exc" };',
