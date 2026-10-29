@@ -97,7 +97,7 @@ function hsec_inject(array $me): string
         . '.fs-menu a,.fs-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:8px;background:none;color:#0f172a;font:inherit;text-decoration:none;cursor:pointer}.fs-menu a:hover,.fs-menu button:hover{background:#f1f5f9}.fs-menu button{color:#b91c1c}</style>'
         . '<script>addEventListener("DOMContentLoaded",function(){var C=FS_BRIDGE,esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})};'
         . 'var m=document.createElement("div");m.className="fs-menu";m.hidden=true;m.setAttribute("role","menu");'
-        . 'm.innerHTML="<p><b>"+esc(C.name)+"</b>Signed in to FlowSuit ERP</p><a href=\"/erp/account\">Change password</a><a href=\"/erp\">FlowSuit ERP home</a>"+(C.owner?"<a href=\"/erp/users\">Users and access</a><a href=\"/erp/m/hsec?manage=1\">Replace file or import a backup</a>":"")'
+        . 'm.innerHTML="<p><b>"+esc(C.name)+"</b>Signed in to FlowSuit ERP</p><a href=\"/erp/account\">Change password</a><a href=\"/erp\">FlowSuit ERP home</a><a href=\"/erp/switch\" target=\"_blank\" rel=\"noopener\">Use another account (new tab)</a>"+(C.owner?"<a href=\"/erp/users\">Users and access</a><a href=\"/erp/m/hsec?manage=1\">Replace file or import a backup</a>":"")'
         . '+"<button type=\"button\" data-fs-out>Sign out</button>";document.body.appendChild(m);'
         // The app cancels every form submit on its page, so Sign out sends its own form directly.
         . 'm.querySelector("[data-fs-out]").addEventListener("click",function(){var f=document.createElement("form");f.method="post";f.action="/erp/logout";'
@@ -409,6 +409,7 @@ function hsec_module(bool $raw, bool $post): void
         header('X-Frame-Options: SAMEORIGIN', true);
         header('Cache-Control: private, no-store');
         header('Content-Type: text/html; charset=utf-8');
+        $html = erp_slot_html($html);
         if (function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
             ini_set('zlib.output_compression', '0');
             $html = gzencode($html, 6);

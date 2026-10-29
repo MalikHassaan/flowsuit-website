@@ -34,7 +34,7 @@
     </nav>
     <div class="erp-me">
       <span class="avatar"><?= e(mb_strtoupper(mb_substr($user['name'], 0, 1))) ?></span>
-      <div><b><?= e($user['name']) ?></b><small><?= $user['is_admin'] ? 'Admin' : 'Team member' ?> · <a href="/erp/account">Change password</a></small></div>
+      <div><b><?= e($user['name']) ?></b><small><?= $user['is_admin'] ? 'Admin' : 'Team member' ?> · <a href="/erp/account">Change password</a> · <a href="/erp/switch" target="_blank" rel="noopener" title="Sign in to another account in a new tab. This tab stays signed in.">Use another account</a></small></div>
       <form method="post" action="/erp/logout"><?= erp_csrf_field() ?><button type="submit" title="Sign out">Sign out</button></form>
     </div>
   </aside>
