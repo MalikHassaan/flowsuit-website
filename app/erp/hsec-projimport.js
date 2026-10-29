@@ -70,7 +70,7 @@
         var x = plan.rows[i]; if (!x.make) continue;
         var rec = { name: x.name, customer: x.customer, entity: plan.ent, type: type(x.name), contractValue: x.cv, budgetCost: x.lc || "", lcExpected: x.lc || "",
           status: x.pipeline ? "Tendering" : "Active", winPct: x.win || "", paymentTerms: x.terms,
-          billing: x.parts.map(function (p, j) { return { id: "ms" + Date.now().toString(36) + j + Math.random().toString(36).slice(2, 6), m: p.m, pct: p.pct, amt: "", plan: "" }; }) };
+          billing: x.parts.map(function (p, j) { return { id: "ms" + Date.now().toString(36) + j + Math.random().toString(36).slice(2, 6), m: p.m, ev: window.FS_MS ? FS_MS.guess(p.m) : "", pct: p.pct, amt: "", plan: "" }; }) };
         await Store.save("projects", rec); k++; ms += rec.billing.length;
       }
       toast(k + " projects created with " + ms + " billing milestones. Enter the planned dates under Receivables › Billing schedule.");
