@@ -90,25 +90,31 @@ function erp_base_url(): string
     return (erp_https() ? 'https://' : 'http://') . ($_SERVER['HTTP_HOST'] ?? 'flowsuit.net');
 }
 
+// Each account tab (/erp/u/N) has its own "remember me" cookie.
+function erp_remember_name(): string
+{
+    return erp_slot() > 1 ? ERP_REMEMBER_COOKIE . '_u' . erp_slot() : ERP_REMEMBER_COOKIE;
+}
+
 function erp_remember_set(int $userId): void
 {
     $token = erp_token_create($userId, 'remember', ERP_REMEMBER_DAYS * 86400);
-    setcookie(ERP_REMEMBER_COOKIE, $token, ['expires' => time() + ERP_REMEMBER_DAYS * 86400, 'path' => '/erp',
+    setcookie(erp_remember_name(), $token, ['expires' => time() + ERP_REMEMBER_DAYS * 86400, 'path' => erp_slot_base(),
         'secure' => erp_https(), 'httponly' => true, 'samesite' => 'Lax']);
 }
 
 function erp_remember_clear(): void
 {
-    if (!empty($_COOKIE[ERP_REMEMBER_COOKIE])) {
-        erp_token_drop((string) $_COOKIE[ERP_REMEMBER_COOKIE]);
+    if (!empty($_COOKIE[erp_remember_name()])) {
+        erp_token_drop((string) $_COOKIE[erp_remember_name()]);
     }
-    setcookie(ERP_REMEMBER_COOKIE, '', ['expires' => time() - 3600, 'path' => '/erp', 'secure' => erp_https(), 'httponly' => true, 'samesite' => 'Lax']);
+    setcookie(erp_remember_name(), '', ['expires' => time() - 3600, 'path' => erp_slot_base(), 'secure' => erp_https(), 'httponly' => true, 'samesite' => 'Lax']);
 }
 
 // Called when there is no signed-in session: a valid "remember me" cookie signs the person in again.
 function erp_remember_login(): void
 {
-    $token = (string) ($_COOKIE[ERP_REMEMBER_COOKIE] ?? '');
+    $token = (string) ($_COOKIE[erp_remember_name()] ?? '');
     if ($token === '') {
         return;
     }
@@ -277,7 +283,7 @@ function erp_account(bool $post): void
         $errors = array_merge($errors, erp_password_errors($password, (string) ($_POST['confirm'] ?? '')));
         if (!$errors) {
             erp_set_password((int) $me['id'], $password, false, 'Changed by the user');
-            if (!empty($_COOKIE[ERP_REMEMBER_COOKIE])) {
+            if (!empty($_COOKIE[erp_remember_name()])) {
                 erp_remember_set((int) $me['id']); // keep this device remembered
             }
             erp_flash('Your new password is saved.');

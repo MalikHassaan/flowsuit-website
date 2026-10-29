@@ -122,14 +122,105 @@ function erp_now(): string
     return date('Y-m-d H:i:s');
 }
 
+// ---- Several accounts in one browser (hassan, 2026-10-29) ----
+// A tab can be signed in to another account without signing out the others, like Gmail: /erp/u/2/... to /erp/u/5/...
+// is the same ERP with its own session and "remember me" cookies, scoped to that path, so each account's tabs keep
+// their own sign-in and Sign out in one account leaves the others signed in. Pages served under /erp/u/N have
+// every /erp link, form, redirect and API address rewritten to stay in that account, and show which account the
+// tab is. "Use another account" in the name menu opens /erp/switch in a new tab, which picks a free number.
+
+function erp_slot(?int $set = null): int
+{
+    static $slot = 1;
+    if ($set !== null) {
+        $slot = $set;
+    }
+    return $slot;
+}
+
+function erp_slot_base(): string
+{
+    return erp_slot() > 1 ? '/erp/u/' . erp_slot() : '/erp';
+}
+
+// /erp addresses in a page, script or JSON (also written as \/erp) moved under this tab's account.
+function erp_slot_rewrite(string $s): string
+{
+    if (erp_slot() < 2) {
+        return $s;
+    }
+    $b = erp_slot_base();
+    $s = preg_replace('#(?<=["\'(=\s,:])/erp(?!/u/)(?=[/"\'?\#\s)<\\\\])#', $b, $s);
+    return preg_replace('#(?<=["\'])\\\\/erp(?!\\\\/u\\\\/)(?=\\\\/|["\'?])#', str_replace('/', '\\/', $b), $s);
+}
+
+// A whole HTML page for an account tab: addresses rewritten and the account shown on screen.
+function erp_slot_html(string $html): string
+{
+    if (erp_slot() < 2) {
+        return $html;
+    }
+    $html = erp_slot_rewrite($html);
+    try {
+        $u = erp_user();
+    } catch (Throwable $e) {
+        $u = null;
+    }
+    $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+    $tag = '<script>(function(){var n=' . erp_slot() . ',who=' . json_encode($u ? $u['name'] : null, $flags) . ',k="fs-accounts",a={};'
+        . 'try{a=JSON.parse(localStorage.getItem(k)||"{}")||{};}catch(e){}if(who){a[n]={name:who,at:Date.now()};}else{delete a[n];}'
+        . 'try{localStorage.setItem(k,JSON.stringify(a));}catch(e){}'
+        . 'var t=function(){if(!who)return;if(document.title.indexOf(who)<0)document.title=who+" · "+document.title;};t();setTimeout(t,1500);setTimeout(t,6000);'
+        . 'function put(){if(!document.body||document.getElementById("fs-acct-tag"))return;var d=document.createElement("div");d.id="fs-acct-tag";'
+        . 'd.title=who?"This tab is signed in as "+who+" (account "+n+"). Other tabs keep their own sign-in.":"";'
+        . 'd.textContent=who?"Account "+n+": "+who:"Account "+n+": sign in. Your other tabs stay signed in.";'
+        . 'd.style.cssText="position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:2147483000;padding:4px 12px;border-radius:999px;background:#b45309;color:#fff;font:600 12px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);pointer-events:none";'
+        . 'document.body.appendChild(d);var b=document.createElement("div");b.style.cssText="position:fixed;left:0;right:0;top:0;height:3px;background:#b45309;z-index:2147483000;pointer-events:none";document.body.appendChild(b);}'
+        . 'if(document.body)put();else addEventListener("DOMContentLoaded",put);})();</script>';
+    // Added at the very end: apps carry "</body>" inside their own scripts, so that text is not a safe place.
+    return $html . $tag;
+}
+
+// Output filter for account tabs. Files and responses that set their own length or encoding are left alone
+// (the pages among them are rewritten before they are compressed).
+function erp_slot_output(string $buf): string
+{
+    $type = 'text/html';
+    foreach (headers_list() as $h) {
+        if (stripos($h, 'Content-Length:') === 0 || stripos($h, 'Content-Encoding:') === 0) {
+            return $buf;
+        }
+        if (stripos($h, 'Content-Type:') === 0) {
+            $type = strtolower(trim(substr($h, 13)));
+        }
+    }
+    if (str_starts_with($type, 'text/html')) {
+        return stripos($buf, '<html') !== false || stripos($buf, '</body>') !== false ? erp_slot_html($buf) : erp_slot_rewrite($buf);
+    }
+    return preg_match('#^(application/json|text/javascript|application/javascript|text/plain|text/css)#', $type) ? erp_slot_rewrite($buf) : $buf;
+}
+
+// /erp/switch: opens the next free account number in this tab.
+function erp_switch_page(): void
+{
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Use another account · FlowSuit ERP</title>'
+        . '<body style="font:16px system-ui,sans-serif;max-width:520px;margin:60px auto;padding:0 16px;color:#0f172a"><h1 style="font-size:22px">Use another account</h1><div id="l">Opening a free account slot…</div>'
+        . '<script>(function(){var a={};try{a=JSON.parse(localStorage.getItem("fs-accounts")||"{}")||{};}catch(e){}var old=Date.now()-30*864e5,free=0,h="";'
+        . 'for(var n=2;n<=5;n++){var x=a[n];if(x&&x.at>old){h+="<p><a href=\""+"/erp/u/"+n+"\">Account "+n+": "+String(x.name).replace(/[&<>"]/g,"")+"</a></p>";}else if(!free){free=n;}}'
+        . 'if(free&&!/[?&]list/.test(location.search)){location.replace("/erp/u/"+free+"/login");return;}'
+        . 'document.getElementById("l").innerHTML=(free?"":"<p>All four extra accounts are in use. Open one, or sign out of one to free it:</p>")+h+(free?"<p><a href=\"/erp/u/"+free+"/login\">Sign in to another account</a></p>":"")+"<p><a href=\"/erp\">Main account</a></p>";})();</script>';
+}
+
 // ---- Sessions, CSRF, current user ----
 
 // $touch is false for the dashboard's background refresh, so an open tab does not keep an idle session alive.
 function erp_start_session(bool $touch = true): void
 {
     $https = ($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-    session_name('fs_erp');
-    session_set_cookie_params(['path' => '/erp', 'secure' => $https, 'httponly' => true, 'samesite' => 'Lax']);
+    session_name(erp_slot() > 1 ? 'fs_erp_u' . erp_slot() : 'fs_erp');
+    session_set_cookie_params(['path' => erp_slot_base(), 'secure' => $https, 'httponly' => true, 'samesite' => 'Lax']);
     session_start();
     if (isset($_SESSION['seen']) && time() - $_SESSION['seen'] > ERP_SESSION_IDLE) {
         $_SESSION = [];
@@ -258,6 +349,9 @@ function erp_can(array $user, string $module, string $need = 'view'): bool
 
 function erp_redirect(string $to): void
 {
+    if (erp_slot() > 1 && ($to === '/erp' || str_starts_with($to, '/erp/') || str_starts_with($to, '/erp?')) && !str_starts_with($to, '/erp/u/')) {
+        $to = erp_slot_base() . substr($to, 4);
+    }
     header('Location: ' . $to, true, 303);
     exit;
 }
@@ -373,6 +467,17 @@ function erp_handle(string $path): void
     header('Referrer-Policy: same-origin');
     date_default_timezone_set('Asia/Karachi');
     erp_catch_errors();
+    if (preg_match('#^/erp(/u/[2-5])?/switch$#', $path)) {
+        erp_switch_page();
+        return;
+    }
+    if (preg_match('#^/erp/u/([2-5])(/.*)?$#', $path, $m)) {
+        erp_slot((int) $m[1]);
+        $path = '/erp' . ($m[2] ?? '');
+        ob_start('erp_slot_output');
+    } elseif (preg_match('#^/erp/u/#', $path)) {
+        erp_redirect('/erp/switch');
+    }
 
     if (!class_exists('PDO') || !in_array('sqlite', PDO::getAvailableDrivers(), true)) {
         http_response_code(500);
@@ -833,6 +938,7 @@ function erp_dashboard_module(bool $raw, bool $post): void
         header('X-Frame-Options: SAMEORIGIN', true);
         header('Cache-Control: private, no-store');
         header('Content-Type: text/html; charset=utf-8');
+        $html = erp_slot_html($html);
         // Send it compressed (about 4x smaller): some hosts cut off large PHP responses.
         if (function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
             ini_set('zlib.output_compression', '0');

@@ -344,7 +344,10 @@ function hsec_access_inject(array $me): string
         'me' => 'u' . (int) $me['id'], 'people' => hsec_signers()];
     return '<script>' . ($mods !== null ? 'window.FS_MODS=' . json_encode($mods, $flags) . ';' : '')
         . 'window.FS_JV=' . json_encode($cfg['jv']) . ';window.FS_SIGN=' . json_encode($cfg, $flags) . ';'
-        . 'try{localStorage.setItem("hsec-erp-name",' . json_encode($me['name'], $flags) . ');}catch(e){}</script>'
+        // Tabs signed in to different accounts share this browser's storage, so each tab writes its own name back
+        // whenever it is used, for the app's "your name" boxes.
+        . '(function(){var n=' . json_encode($me['name'], $flags) . ',w=function(){try{localStorage.setItem("hsec-erp-name",n);}catch(e){}};w();'
+        . 'addEventListener("focus",w);addEventListener("pointerdown",w,true);addEventListener("keydown",w,true);})();</script>'
         . '<style>' . file_get_contents(__DIR__ . '/hsec-sign.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-sign.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-projpl.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-bgsec.js') . '</script>'

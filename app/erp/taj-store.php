@@ -172,7 +172,7 @@ function taj_inject(array $me): string
         . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);'
         // Clicking the name in the top bar opens a menu with Sign out (signs out of the whole ERP).
         . 'var m=document.createElement("div");m.className="fs-menu";m.hidden=true;m.setAttribute("role","menu");'
-        . 'm.innerHTML=\'<p><b>\'+FS_TAJ.name.replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})+\'</b>Signed in to FlowSuit ERP</p><a href="/erp/account">Change password</a>' . (erp_can($me, 'receivables', 'edit') ? '<a href="/erp/m/receivables?manage=1#saved">Delete saved reports</a>' : '') . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1#reports">Hidden reports</a>' : '') . '<a href="/erp">FlowSuit ERP home</a>'
+        . 'm.innerHTML=\'<p><b>\'+FS_TAJ.name.replace(/[&<>"]/g,function(c){return"&#"+c.charCodeAt(0)+";"})+\'</b>Signed in to FlowSuit ERP</p><a href="/erp/account">Change password</a>' . (erp_can($me, 'receivables', 'edit') ? '<a href="/erp/m/receivables?manage=1#saved">Delete saved reports</a>' : '') . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1#reports">Hidden reports</a>' : '') . '<a href="/erp">FlowSuit ERP home</a><a href="/erp/switch" target="_blank" rel="noopener">Use another account (new tab)</a>'
         . '<form method="post" action="/erp/logout"><input type="hidden" name="csrf" value="\'+FS_TAJ.csrf+\'"><button type="submit">Sign out</button></form>\';'
         . 'm.querySelector("form").addEventListener("submit",function(){try{sessionStorage.removeItem("taj-in")}catch(e){}});document.body.appendChild(m);'
         . 'var chip=document.getElementById("uchip");if(!chip){chip=document.createElement("a");chip.href="#";chip.textContent="Sign out";d.appendChild(chip);}'
@@ -284,7 +284,7 @@ function taj_json($data, int $status = 200): void
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
-    $body = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $body = erp_slot_rewrite(json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     if (strlen($body) > 32768 && function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
         ini_set('zlib.output_compression', '0');
         $body = gzencode($body, 6);
