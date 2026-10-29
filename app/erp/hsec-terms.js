@@ -16,7 +16,7 @@
     return '<div class="calc" id="fsTerms" style="margin:10px 0"><label for="fsTermsTx" style="display:block;font-weight:600;margin-bottom:4px">Paste the payment terms from the contract</label>' +
       '<textarea id="fsTermsTx" rows="2" style="width:100%;box-sizing:border-box" placeholder="e.g. 25% advance; 25% on delivery at site; 25% during installation; 25% after handover"></textarea>' +
       '<div class="actions" style="margin-top:6px"><button class="btn" type="button" id="fsTermsGo">Make milestones from these terms</button>' +
-      '<span class="muted">One milestone per part, split at ";" or a new line. Then enter each planned date and press Save schedule.</span></div><p class="err" id="fsTermsErr"></p></div>';
+      '<span class="muted">One milestone per part, split at ";" or a new line. Each is linked to its business-cycle step by its name; a planned date is only needed when it is not linked. Then press Save schedule.</span></div><p class="err" id="fsTermsErr"></p></div>';
   }
   function hook() {
     if (typeof special !== "function" || typeof bsEdit !== "function") return false;
@@ -35,8 +35,8 @@
       if (parts.some(function (p) { return !p; })) { er.textContent = "Every part needs a %, for example \"10% on T&C\". Check the text and try again."; return; }
       var E = bsEdit(), have = E.rows.reduce(function (s, r) { return s + (+r.pct || 0); }, 0), add = parts.reduce(function (s, p) { return s + p.pct; }, 0);
       if (have + add > 100.001) { er.textContent = "These terms add " + add + "% to the " + have + "% already scheduled, more than 100%. Remove the old rows first."; return; }
-      parts.forEach(function (p) { E.rows.push({ id: "ms" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), m: p.m, pct: p.pct, amt: "", plan: "" }); });
-      toast(parts.length + " milestones made (" + add + "% of the contract). Enter each planned date, then Save schedule.");
+      parts.forEach(function (p) { E.rows.push({ id: "ms" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), m: p.m, ev: window.FS_MS ? FS_MS.guess(p.m) : "", pct: p.pct, amt: "", plan: "" }); });
+      toast(parts.length + " milestones made (" + add + "% of the contract). Press Save schedule.");
       render();
     });
     if (/bsched/.test(location.hash) && typeof render === "function") render();
