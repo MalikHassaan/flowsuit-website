@@ -4,7 +4,7 @@
 (function () {
   /* global special, bsEdit, render, toast, esc, $, V, Store, fmt */
   function parse(text) {
-    return String(text || "").split(/[;\n]+/).map(function (s) { return s.trim(); }).filter(Boolean).map(function (s) {
+    return String(text || "").split(/[;\n]+|,(?=\s*\d+(?:\.\d+)?\s*%)/).map(function (s) { return s.trim(); }).filter(Boolean).map(function (s) {
       var m = s.match(/^(\d+(?:\.\d+)?)\s*%\s*(.*)$/) || s.match(/^(.*?)\s*[-:@]?\s*(\d+(?:\.\d+)?)\s*%$/);
       if (!m) return null;
       var pct = /^\d/.test(m[1]) ? +m[1] : +m[2], name = (/^\d/.test(m[1]) ? m[2] : m[1]).replace(/^[\s,.-]+|[\s,.]+$/g, "");
@@ -42,6 +42,7 @@
     if (/bsched/.test(location.hash) && typeof render === "function") render();
     return true;
   }
+  window.FS_TERMS = { parse: parse };
   function start() { if (!hook()) setTimeout(start, 300); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
