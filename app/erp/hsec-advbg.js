@@ -42,7 +42,7 @@
     document.addEventListener("change", function (e) { if (F && F.c === "projects" && /^f_(advPct|advBg)$/.test(e.target.id)) hint(); });
     new MutationObserver(function () {
       var el = document.getElementById("f_advPct");
-      if (el && !document.getElementById("fsAdvAmt")) { var s = document.createElement("div"); s.id = "fsAdvAmt"; s.className = "hint"; s.style.marginTop = "4px"; s.setAttribute("aria-live", "polite"); el.parentNode.appendChild(s); hint(); }
+      if (el && F && F.c === "projects" && !document.getElementById("fsAdvAmt")) { var s = document.createElement("div"); s.id = "fsAdvAmt"; s.className = "hint"; s.style.marginTop = "4px"; s.setAttribute("aria-live", "polite"); el.parentNode.appendChild(s); hint(); }
     }).observe(document.body, { childList: true, subtree: true });
     // advance milestones of a guarantee-backed project wait for the guarantee step
     Store.save = (function (old) {
@@ -55,6 +55,42 @@
         return id;
       };
     })(Store.save);
+    // customer advance receipt: "Advance % of contract" next to the amount, each one fills the other
+    // (hassan, 2026-10-29: "there should be a percentage as well"). Inserted before the amount so fields[3] stays advType.
+    if (S.custadv && !S.custadv.fields.some(function (x) { return x.k === "advPct"; })) {
+      var cf = S.custadv.fields, ai = cf.findIndex(function (x) { return x.k === "amount"; });
+      cf.splice(ai < 0 ? cf.length : ai, 0, { k: "advPct", l: "Advance % of contract", t: "number", hint: "Fills the amount from the project's contract value." });
+    }
+    var cproj = function () { var x = document.getElementById("f_projectId"); return x && x.value ? Store.data.projects.find(function (p) { return p.id === x.value; }) : null; };
+    var cv = function (id) { var x = document.getElementById(id); return x ? x.value : ""; };
+    var cset = function (id, v) { var x = document.getElementById(id); if (x) { x.value = v; x.dispatchEvent(new Event("input", { bubbles: true })); } };
+    function chint() {
+      var el = document.getElementById("fsCadvPct"), p = cproj(); if (!el) return;
+      if (!p) { el.textContent = "Choose the project first."; return; }
+      var c = n(p.contractValue), g = apgOf(p), due = amtOf(p);
+      el.innerHTML = c ? "Contract Rs " + fmt(c) + (due ? ". Agreed advance Rs " + fmt(due) + " (" + fmt(pctOf(p)) + "%)" : "") +
+        (p.advBg === "Yes" ? ". Backed by advance payment guarantee " + esc((g && (g.bgNo || g.ref)) || "(not made yet)") + (g ? " for Rs " + fmt(g.amount) + ", " + esc(g.status) : "") : "") + "."
+        : "This project has no contract value, so the % cannot work out the amount.";
+    }
+    var busy = false;
+    document.addEventListener("input", function (e) {
+      if (busy || !F || F.c !== "custadv") return;
+      var p = cproj(), c = p ? n(p.contractValue) : 0; if (!c) return;
+      busy = true;
+      try {
+        if (e.target.id === "f_advPct") cset("f_amount", String(e.target.value).trim() === "" ? "" : fmt(c * n(e.target.value) / 100));
+        else if (e.target.id === "f_amount") { var a = n(String(e.target.value).replace(/,/g, "")); cset("f_advPct", a ? String(Math.round(a / c * 10000) / 100) : ""); }
+      } finally { busy = false; }
+    }, true);
+    document.addEventListener("change", function (e) {
+      if (!F || F.c !== "custadv" || e.target.id !== "f_projectId") return;
+      var p = cproj(); chint();
+      if (p && !n(String(cv("f_amount")).replace(/,/g, "")) && pctOf(p)) { busy = true; try { cset("f_advPct", String(pctOf(p))); cset("f_amount", fmt(amtOf(p))); } finally { busy = false; } }
+    });
+    new MutationObserver(function () {
+      var el = document.getElementById("f_advPct");
+      if (el && F && F.c === "custadv" && !document.getElementById("fsCadvPct")) { var s = document.createElement("div"); s.id = "fsCadvPct"; s.className = "hint"; s.style.marginTop = "4px"; s.setAttribute("aria-live", "polite"); el.parentNode.appendChild(s); chint(); }
+    }).observe(document.body, { childList: true, subtree: true });
     window.FS_ADV = { pct: pctOf, amount: amtOf };
     return true;
   }
