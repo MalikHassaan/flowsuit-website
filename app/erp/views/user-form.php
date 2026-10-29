@@ -101,6 +101,7 @@
       <label class="check"><input type="radio" name="hsec_jv" value="<?= e($k) ?>" <?= $jvRole === $k ? 'checked' : '' ?>> <b><?= e($label) ?></b> <span class="muted small"><?= ['maker' => 'prepares vouchers and sends them for approval', 'senior' => 'first approval', 'gmf' => 'final approval'][$k] ?></span></label>
 <?php endforeach; ?>
     </div>
+    <label>Designation (printed with the name on vouchers)<input type="text" name="hsec_title" maxlength="80" placeholder="e.g. Accounts Officer" value="<?= e($_POST['hsec_title'] ?? ($target['hsec_title'] ?? '')) ?>"></label>
     <div class="sig-row">
 <?php if ($hasSig): ?>
       <figure class="sig-now"><img src="/erp/m/hsec/sig/<?= (int) $target['id'] ?>?v=<?= filemtime(hsec_sig_file((int) $target['id'])) ?>" alt="Current signature"><figcaption class="muted small">Current signature</figcaption></figure>

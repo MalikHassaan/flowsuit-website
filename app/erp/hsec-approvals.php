@@ -21,6 +21,9 @@ function hsec_access_schema(PDO $db): void
     if (!in_array('hsec_jv', $cols, true)) {
         $db->exec("ALTER TABLE users ADD COLUMN hsec_jv TEXT NOT NULL DEFAULT ''");
     }
+    if (!in_array('hsec_title', $cols, true)) {
+        $db->exec("ALTER TABLE users ADD COLUMN hsec_title TEXT NOT NULL DEFAULT ''");
+    }
 }
 
 // The app's left panel: [[group, [[key, label], ...]], ...], read from the uploaded file.
@@ -146,6 +149,18 @@ function hsec_sigs(): array
         if (is_file($f)) {
             $out[$u['name']] = '/erp/m/hsec/sig/' . (int) $u['id'] . '?v=' . filemtime($f);
         }
+    }
+    return $out;
+}
+
+// Who can appear on a voucher (prepared by, approvers, posted by): name, designation, e-mail and approval role, by the
+// id the server records on vouchers ('u' + user id). Printed in the voucher's sign-off table (hsec-signoff.js).
+function hsec_signers(): array
+{
+    $out = [];
+    foreach (erp_db()->query("SELECT id, name, email, hsec_jv, hsec_title FROM users WHERE active = 1 ORDER BY name") as $u) {
+        $out['u' . (int) $u['id']] = ['name' => $u['name'], 'email' => $u['email'], 'title' => $u['hsec_title'],
+            'role' => (string) $u['hsec_jv']];
     }
     return $out;
 }
@@ -325,7 +340,8 @@ function hsec_access_inject(array $me): string
 {
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     $mods = hsec_user_mods($me);
-    $cfg = ['jv' => (string) ($me['hsec_jv'] ?? ''), 'on' => hsec_approvals_on(), 'sigs' => hsec_sigs()];
+    $cfg = ['jv' => (string) ($me['hsec_jv'] ?? ''), 'on' => hsec_approvals_on(), 'sigs' => hsec_sigs(),
+        'me' => 'u' . (int) $me['id'], 'people' => hsec_signers()];
     return '<script>' . ($mods !== null ? 'window.FS_MODS=' . json_encode($mods, $flags) . ';' : '')
         . 'window.FS_JV=' . json_encode($cfg['jv']) . ';window.FS_SIGN=' . json_encode($cfg, $flags) . ';'
         . 'try{localStorage.setItem("hsec-erp-name",' . json_encode($me['name'], $flags) . ');}catch(e){}</script>'
@@ -341,5 +357,6 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-qbproj.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-basis.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-ifrs15.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-signoff.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-vlink.js') . '</script>';
 }

@@ -7,15 +7,19 @@
   function fill() {
     document.querySelectorAll(".pvch table.auth tbody tr").forEach(function (tr) {
       var td = tr.children;
-      if (td.length < 5 || td[4].querySelector("img.fs-sig")) return;
-      var who = (td[1].textContent || "").trim(), url = C.sigs[who];
+      // the sign-off table from hsec-signoff.js marks its name, status and signature cells; the app's own has 5 columns
+      var nm = tr.querySelector("[data-signame]"), st = tr.querySelector("[data-sigst]"), cell = tr.querySelector(".fs-sigcell");
+      if (!cell && td.length < 5) return;
+      cell = cell || td[4];
+      if (cell.querySelector("img.fs-sig")) return;
+      var who = (nm ? nm.getAttribute("data-signame") : td[1].textContent || "").trim(), url = C.sigs[who];
       if (!url) return;
-      if (!/approved/i.test(td[2].textContent || "") && !/^prepared by/i.test((td[0].textContent || "").trim())) return;
+      if (st ? st.getAttribute("data-sigst") !== "Approved" : !/approved/i.test(td[2].textContent || "") && !/^prepared by/i.test((td[0].textContent || "").trim())) return;
       var img = document.createElement("img");
       img.className = "fs-sig";
       img.src = url;
       img.alt = "Signature of " + who;
-      td[4].appendChild(img);
+      cell.appendChild(img);
     });
   }
   // Once a voucher is sent for approval, only the Senior Manager and the Group GM Finance may change, cancel or
