@@ -7,6 +7,7 @@ const ERP_REMEMBER_DAYS = 30;
 const ERP_RESET_MINUTES = 60;          // forgot-password links
 const ERP_INVITE_HOURS = 72;           // links an admin sends when creating a user
 const ERP_REMEMBER_COOKIE = 'fs_erp_remember';
+const ERP_REMEMBER_GRACE = 60;         // seconds a used "remember me" token still works, for other tabs sending it at once
 
 function erp_auth_schema(PDO $db): void
 {
@@ -112,7 +113,15 @@ function erp_remember_login(): void
         return;
     }
     $row = erp_token_user($token, ['remember']);
-    erp_token_drop($token);
+    if ($row) {
+        // Other open tabs may send this same cookie at the same moment (several tabs waking up after the session
+        // timed out). The old token stays valid for one more minute so those tabs sign in too, instead of one tab
+        // using it up and the others signing the whole browser out (hassan, 2026-10-29: multiple tabs).
+        erp_db()->prepare('UPDATE auth_tokens SET expires = MIN(expires, ?) WHERE selector = ?')
+            ->execute([time() + ERP_REMEMBER_GRACE, substr($token, 0, 18)]);
+    } else {
+        erp_token_drop($token);
+    }
     if (!$row) {
         erp_remember_clear();
         return;
