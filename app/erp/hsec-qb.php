@@ -161,6 +161,7 @@ function hsec_qb_parse(string $path, string $name, string $dateOrder): array
                 'date' => $find(['date', 'transaction date']),
                 'num' => $find(['num', 'no.', 'number', 'ref no.', 'ref no']),
                 'name' => $find(['name', 'payee', 'customer/vendor']),
+                'job' => $find(['customer:job', 'customer: job', 'customer', 'job', 'project', 'customer/project']),
                 'memo' => $find(['memo', 'memo/description', 'description', 'line description'])];
             break;
         }
@@ -239,7 +240,7 @@ function hsec_qb_parse(string $path, string $name, string $dateOrder): array
             [$dr, $cr] = [max($dr, 0) + max(-$cr, 0), max($cr, 0) + max(-$dr, 0)];
         }
         $cur['lines'][] = ['qb' => $acct, 'qbNum' => $acctNum, 'debit' => round($dr, 2), 'credit' => round($cr, 2),
-            'name' => $cell($r, $col['name']), 'memo' => mb_substr($cell($r, $col['memo']), 0, 300)];
+            'name' => $cell($r, $col['name']), 'job' => $cell($r, $col['job']), 'memo' => mb_substr($cell($r, $col['memo']), 0, 300)];
     }
     $close();
     if (!$txns) {
@@ -311,6 +312,45 @@ function hsec_qb_vtype(string $type, array $lines): array
     return ['Journal voucher', 'JV'];
 }
 
+// The company's projects, for linking QuickBooks lines to them: [['id', 'name', 'code', 'customer'], ...].
+function hsec_qb_projects(PDO $db, string $entity): array
+{
+    $out = [];
+    foreach ($db->query("SELECT id, data FROM hsec_docs WHERE coll = 'projects' AND data IS NOT NULL") as $r) {
+        $p = json_decode($r['data'], true) ?: [];
+        if (($p['entity'] ?? '') === $entity && trim((string) ($p['name'] ?? '')) !== '') {
+            $out[] = ['id' => $r['id'], 'name' => mb_strtolower(trim((string) $p['name'])), 'code' => mb_strtolower(trim((string) ($p['code'] ?? ''))),
+                'customer' => mb_strtolower(trim((string) ($p['customer'] ?? '')))];
+        }
+    }
+    return $out;
+}
+
+// The project a QuickBooks name (Customer:Job, job or customer) belongs to: the same name or code, the last part of
+// "Customer:Job", a name that contains exactly one project's name, or a customer with exactly one project. Same
+// rules as FS_QBP.match in hsec-qbproj.js, which links vouchers imported before this existed.
+function hsec_qb_match(array $projects, string $name): ?string
+{
+    $s = mb_strtolower(trim($name));
+    if ($s === '' || !$projects) {
+        return null;
+    }
+    $parts = array_values(array_filter(array_map('trim', explode(':', $s)), 'strlen'));
+    foreach ([$s, end($parts) ?: $s] as $k) {
+        foreach ($projects as $p) {
+            if ($k === $p['name'] || ($p['code'] !== '' && $k === $p['code'])) {
+                return $p['id'];
+            }
+        }
+    }
+    $in = array_values(array_filter($projects, fn($p) => mb_strlen($p['name']) > 3 && mb_strpos($s, $p['name']) !== false));
+    if (count($in) === 1) {
+        return $in[0]['id'];
+    }
+    $cu = array_values(array_filter($projects, fn($p) => $p['customer'] !== '' && in_array($p['customer'], [$s, $parts[0] ?? ''], true)));
+    return count($cu) === 1 ? $cu[0]['id'] : null;
+}
+
 // Writes the parsed transactions as posted vouchers for one company. Ids come from the QuickBooks
 // transaction, so loading the same report again changes nothing.
 function hsec_qb_import(array $me, array $parsed, string $entity, array $mapping): array
@@ -339,8 +379,9 @@ function hsec_qb_import(array $me, array $parsed, string $entity, array $mapping
             }
         }
         $v = (int) $db->query('SELECT COALESCE(MAX(ver), 0) FROM hsec_docs')->fetchColumn();
-        $done = $same = $kept = 0;
+        $done = $same = $kept = $linked = 0;
         $seen = [];
+        $projects = hsec_qb_projects($db, $entity);
         foreach ($txns as $i => $t) {
             $key = $t['trans'] !== '' ? $t['trans'] : $t['date'] . '-' . ($i + 1);
             $id = 'qb-' . $entity . '-' . preg_replace('/[^A-Za-z0-9_.:-]/', '', $key);
@@ -358,17 +399,30 @@ function hsec_qb_import(array $me, array $parsed, string $entity, array $mapping
                 $memo = $memo !== '' ? $memo : $l['memo'];
                 $payee = $payee !== '' ? $payee : $l['name'];
             }
+            // the voucher goes to a project when its lines name exactly one of the company's projects
+            $pids = [];
+            foreach ($t['lines'] as $l) {
+                $pid = hsec_qb_match($projects, ($l['job'] ?? '') !== '' ? $l['job'] : $l['name']);
+                if ($pid !== null) {
+                    $pids[$pid] = true;
+                }
+            }
+            $cc = count($pids) === 1 ? (string) array_key_first($pids) : (string) ($old['costCentre'] ?? '');
             $ref = $old['ref'] ?? sprintf('%s-%s-%04d', $prefix, $entity, $next[$prefix] = ($next[$prefix] ?? 0) + 1);
             $rec = ['approvals' => [], 'createdAt' => $old['createdAt'] ?? $now, 'date' => $t['date'], 'dept' => $dept, 'entity' => $entity,
                 'lines' => $lines, 'maker' => ['at' => $now, 'name' => 'QuickBooks import'], 'narration' => $memo !== '' ? $memo : trim($t['type'] . ' ' . $t['num']),
                 'opening' => 'No', 'payee' => $payee, 'postedBy' => ['at' => $now, 'auto' => true, 'name' => 'QuickBooks import'],
                 'qbNum' => $t['num'], 'qbTrans' => $t['trans'], 'qbType' => $t['type'], 'ref' => $ref,
                 'source' => ['c' => 'qbimport', 'id' => 'QB-' . $entity . '-' . $key], 'status' => 'Posted', 'updatedAt' => $now, 'vtype' => $vtype];
+            if ($cc !== '') {
+                $rec['costCentre'] = $cc;
+                $linked++;
+            }
             if ($old !== null) {
                 $rec['maker'] = $old['maker'] ?? $rec['maker'];
                 $rec['postedBy'] = $old['postedBy'] ?? $rec['postedBy'];
                 $rec['updatedAt'] = $old['updatedAt'] ?? $now;
-                if (json_encode($old['lines'] ?? null) === json_encode($lines) && ($old['date'] ?? '') === $t['date']) {
+                if (json_encode($old['lines'] ?? null) === json_encode($lines) && ($old['date'] ?? '') === $t['date'] && (string) ($old['costCentre'] ?? '') === $cc) {
                     $same++;
                     continue;
                 }
@@ -388,7 +442,7 @@ function hsec_qb_import(array $me, array $parsed, string $entity, array $mapping
         }
         throw $ex;
     }
-    return ['done' => $done, 'same' => $same, 'kept' => $kept];
+    return ['done' => $done, 'same' => $same, 'kept' => $kept, 'linked' => $linked];
 }
 
 // Whole rupees stay whole numbers, the way the rest of the HSEC books store them.
@@ -497,7 +551,8 @@ function hsec_qb_action(array $me, string $action): ?string
         hsec_qb_drop();
         return 'Imported ' . number_format($r['done']) . ' vouchers for ' . $p['entity']
             . ($r['same'] ? ', ' . number_format($r['same']) . ' were already here' : '')
-            . ($r['kept'] ? ', ' . number_format($r['kept']) . ' posted vouchers kept as they are' : '') . '.';
+            . ($r['kept'] ? ', ' . number_format($r['kept']) . ' posted vouchers kept as they are' : '')
+            . ($r['linked'] ? '; ' . number_format($r['linked']) . ' linked to their project by the QuickBooks name (Customer:Job)' : '') . '.';
     }
     return null;
 }
