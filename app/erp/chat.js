@@ -150,7 +150,9 @@
         else {
           if (m.file) {
             var url = C.api + "/file/" + m.file.id;
-            h += m.file.image
+            h += m.file.audio
+              ? '<div class="fsc-voice"><audio controls preload="metadata" src="' + url + '"></audio><small>' + (/^Voice note/.test(m.file.name) ? "🎤 Voice note" : esc(m.file.name)) + " · " + size(m.file.size) + "</small></div>"
+              : m.file.image
               ? '<a class="fsc-img" href="' + url + '" target="_blank" rel="noopener"><img src="' + url + '" alt="' + esc(m.file.name) + '" loading="lazy"></a>'
               : '<a class="fsc-file" href="' + url + '?dl=1"><span>📎</span><span><b>' + esc(m.file.name) + "</b><small>" + size(m.file.size) + "</small></span></a>";
           }
@@ -162,6 +164,8 @@
     h += r.kind === "system" ? '</div><p class="fsc-note">Automatic messages. Questions about them go to HR.</p>' : '</div><div class="fsc-compose"><div class="fsc-chip" hidden></div><p class="fsc-err" hidden></p><div class="fsc-bar">'
       + '<button type="button" class="fsc-icon fsc-attach" data-act="attach" title="Attach a file (up to ' + Math.round(C.max / 1048576) + ' MB)" aria-label="Attach a file">'
       + '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>'
+      + '<button type="button" class="fsc-icon fsc-mic' + (S.rec ? " is-rec" : "") + '" data-act="voice" title="' + (S.rec ? "Stop and send the voice note" : "Record a voice note") + '" aria-label="' + (S.rec ? "Stop and send the voice note" : "Record a voice note") + '">'
+      + '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></button>'
       + '<textarea class="fsc-input" rows="1" maxlength="4000" placeholder="Write a message"></textarea>'
       + '<button type="button" class="fsc-send" data-act="send" title="Send" aria-label="Send"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3.4 20.4l17.5-7.5a1 1 0 0 0 0-1.8L3.4 3.6a1 1 0 0 0-1.4 1.1L4 11l9 1-9 1-2 6.3a1 1 0 0 0 1.4 1.1z"/></svg></button></div></div>';
     var focused = document.activeElement && document.activeElement.classList.contains("fsc-input");
@@ -173,6 +177,7 @@
     input.value = keep;
     grow(input);
     showFile();
+    showRec();
     if (focused || !keep) input.focus();
   }
 
@@ -195,6 +200,93 @@
     chip.hidden = !S.file;
     if (S.file) chip.innerHTML = "📎 " + esc(S.file.name) + " <small>" + size(S.file.size) + '</small><button type="button" data-act="unfile" aria-label="Remove file">&#215;</button>';
   }
+  // ---- Voice notes: click the microphone to record, click it again to send ----
+  var REC_MAX = 300000;
+  function recType() {
+    var t = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+    for (var i = 0; i < t.length; i++) if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t[i])) return t[i];
+    return "";
+  }
+  function showRec() {
+    var chip = panel.querySelector(".fsc-rec");
+    if (!S.rec) { if (chip) chip.remove(); return; }
+    if (!chip) {
+      var bar = panel.querySelector(".fsc-compose"); if (!bar) return;
+      chip = document.createElement("div"); chip.className = "fsc-rec"; bar.insertBefore(chip, bar.firstChild);
+    }
+    var sec = Math.floor((Date.now() - S.rec.at) / 1000);
+    chip.innerHTML = '<span class="fsc-dot"></span> Recording ' + Math.floor(sec / 60) + ":" + ("0" + sec % 60).slice(-2)
+      + ' <small>Click the microphone again to send</small><button type="button" data-act="voicecancel">Cancel</button>';
+  }
+  function recStart() {
+    if (!window.MediaRecorder || !navigator.mediaDevices) { err("This browser cannot record voice notes. Use Chrome or Edge."); return; }
+    err("");
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      var type = recType(), mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined), chunks = [];
+      mr.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      mr.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        var rec = S.rec; S.rec = null; clearInterval(rec.tick); clearTimeout(rec.cap);
+        var b = panel.querySelector(".fsc-mic"); if (b) b.classList.remove("is-rec");
+        showRec();
+        if (rec.cancel || !chunks.length) return;
+        var mt = (mr.mimeType || type || "audio/webm").split(";")[0], ext = /mp4/.test(mt) ? "m4a" : /ogg/.test(mt) ? "ogg" : "webm", d = new Date();
+        var f = new File(chunks, "Voice note " + d.getHours() + "-" + ("0" + d.getMinutes()).slice(-2) + "." + ext, { type: mt });
+        if (f.size > C.max) { err("That voice note is too long to send."); return; }
+        S.file = f; showFile(); send();
+      };
+      S.rec = { mr: mr, at: Date.now(), cancel: false };
+      S.rec.tick = setInterval(showRec, 500);
+      S.rec.cap = setTimeout(function () { if (S.rec && S.rec.mr === mr) mr.stop(); }, REC_MAX);
+      mr.start();
+      var b = panel.querySelector(".fsc-mic"); if (b) b.classList.add("is-rec");
+      showRec();
+    }).catch(function (x) { Perm.help(false, x, recStart); });
+  }
+  function recStop(cancel) { if (!S.rec) return; S.rec.cancel = !!cancel; S.rec.mr.stop(); }
+
+  // ---- Microphone and camera permission: say what is wrong and how to allow it ----
+  // A website cannot open the browser's own settings, so this asks again where the browser still allows asking,
+  // and otherwise shows where the switch is (the icon left of the address).
+  var Perm = (function () {
+    var box = null;
+    function close() { if (box) { box.remove(); box = null; } }
+    function help(video, x, retry) {
+      var name = x && x.name || "", what = video ? "camera and microphone" : "microphone";
+      var q = navigator.permissions && navigator.permissions.query ? Promise.all([navigator.permissions.query({ name: "microphone" }).catch(function () { return null; }),
+        video ? navigator.permissions.query({ name: "camera" }).catch(function () { return null; }) : null]) : Promise.resolve([]);
+      q.then(function (st) {
+        var denied = (st || []).some(function (p) { return p && p.state === "denied"; });
+        var h = "";
+        if (name === "NotFoundError" || name === "OverconstrainedError") h = "<h3>No " + what + " found</h3><p>Plug in a headset or " + (video ? "webcam" : "microphone") + ", then try again.</p>";
+        else if (name === "NotReadableError") h = "<h3>Your " + what + " is busy</h3><p>Another program (Zoom, Teams, WhatsApp) is using it. Close that program, then try again.</p>";
+        else if (denied || name === "NotAllowedError" || name === "SecurityError") h = "<h3>Allow your " + what + "</h3>"
+          + "<p>Your browser is blocking the " + what + " for flowsuit.net. Turn it on once:</p><ol>"
+          + "<li>Click the <b>icon left of flowsuit.net</b> in the address bar at the top (a lock or two sliders).</li>"
+          + "<li>Set <b>Microphone</b>" + (video ? " and <b>Camera</b>" : "") + " to <b>Allow</b>.</li>"
+          + "<li>Click <b>Reload page</b> below.</li></ol>"
+          + "<p class=\"fsp-small\">On a phone: browser menu, then Settings, Site settings, flowsuit.net, " + (video ? "Camera and Microphone" : "Microphone") + ", Allow.</p>";
+        else h = "<h3>Allow your " + what + "</h3><p>Click <b>Allow " + what + "</b>, then choose <b>Allow</b> in the box your browser shows.</p>";
+        close();
+        box = document.createElement("div"); box.className = "fsp-perm"; box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true");
+        box.innerHTML = '<div class="fsp-card">' + h + '<div class="fsp-act">'
+          + (denied || name === "NotAllowedError" || name === "SecurityError" ? '<button type="button" class="fsp-pri" data-p="reload">Reload page</button><button type="button" data-p="retry">Try again</button>'
+            : '<button type="button" class="fsp-pri" data-p="retry">' + (name === "NotFoundError" || name === "NotReadableError" ? "Try again" : "Allow " + what) + "</button>")
+          + '<button type="button" data-p="close">Close</button></div></div>';
+        box.addEventListener("click", function (e) {
+          var b = e.target.closest("[data-p]"); if (!b && e.target !== box) return;
+          var a = b ? b.getAttribute("data-p") : "close";
+          if (a === "reload") location.reload();
+          else if (a === "retry") { close(); retry && retry(); }
+          else close();
+        });
+        document.body.appendChild(box);
+        var p = box.querySelector(".fsp-pri"); if (p) p.focus();
+      });
+    }
+    return { help: help };
+  })();
+
   function err(msg) {
     var e = panel.querySelector(".fsc-err");
     if (e) { e.textContent = msg || ""; e.hidden = !msg; }
@@ -213,6 +305,8 @@
     if (act === "call") return Call.start(S.room, t.getAttribute("data-video") === "1");
     if (act === "attach") { root.querySelector(".fsc-pick").click(); return; }
     if (act === "unfile") { S.file = null; showFile(); return; }
+    if (act === "voice") { if (S.rec) recStop(false); else recStart(); return; }
+    if (act === "voicecancel") { recStop(true); return; }
     if (act === "older") return loadHistory(S.room, true);
     if (act === "alerts") { Notification.requestPermission().then(render); return; }
     if (act === "mkgroup") {
@@ -452,14 +546,17 @@
       }).then(function () {
         pollSig();
         c.timeout = setTimeout(function () { if (c && c.state === "calling") { sig("hangup"); end("No answer", true, "missed"); } }, RING_MS);
-      }).catch(function () { end(video ? "Your camera or microphone is blocked. Allow them for this site and try again." : "Your microphone is blocked. Allow it for this site and try again.", false); });
+      }).catch(function (x) {
+        end(video ? "Your camera or microphone is not allowed yet." : "Your microphone is not allowed yet.", false);
+        Perm.help(video, x, function () { start(room, video); });
+      });
     }
     function accept() {
       ring(false);
       c.state = "connecting";
       draw();
       media().then(function () { peer(); sig("accept"); pollSig(); })
-        .catch(function () { sig("decline"); end("Your microphone or camera is blocked. Allow them for this site.", false); });
+        .catch(function (x) { var v = c.video; sig("decline"); end("Your microphone or camera is not allowed yet.", false); Perm.help(v, x, null); });
     }
 
     // Ends the call. The caller writes one line in the chat, so both sides and the Chat log see it.
