@@ -4,7 +4,7 @@
   var C = window.FS_CHAT;
   if (!C || window.__fsChat) return;
   window.__fsChat = true;
-  var OPEN_MS = 4000, SHUT_MS = 12000;
+  var OPEN_MS = 4000, SHUT_MS = 6000;
   var S = { max: 0, rooms: [], people: [], msgs: {}, more: {}, room: 0, view: "list", open: false, group: false, picked: {}, file: null, first: true };
   var root, panel, badge, timer, busy = false, baseTitle = document.title;
 
@@ -22,7 +22,12 @@
     var p = d.split("-");
     return new Date(+p[0], p[1] - 1, +p[2]).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   }
-  function initial(n) { return esc(String(n || "?").charAt(0).toUpperCase()); }
+  // Monogram: first letters of the first and last name, on a colour that stays the same for each person.
+  function initial(n) {
+    var w = String(n || "?").trim().split(/\s+/).filter(Boolean);
+    return esc(((w[0] || "?").charAt(0) + (w.length > 1 ? w[w.length - 1].charAt(0) : "")).toUpperCase());
+  }
+  function hue(n) { var h = 0; String(n || "").split("").forEach(function (c) { h = (h * 31 + c.charCodeAt(0)) % 360; }); return ' style="background:hsl(' + h + ',55%,40%)"'; }
   function api(path, body) {
     var o = { credentials: "same-origin", headers: { "X-CSRF-Token": C.csrf } };
     if (body) {
@@ -57,6 +62,26 @@
     panel.addEventListener("change", onChange);
     // The file picker lives outside the redrawn panel, so a new message arriving while it is open does not lose the file.
     root.querySelector(".fsc-pick").addEventListener("change", onChange);
+    // Drag a file onto an open conversation to attach it.
+    var depth = 0;
+    function canDrop(e) { return S.view === "room" && panel.querySelector(".fsc-compose") && e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0; }
+    panel.addEventListener("dragenter", function (e) { if (!canDrop(e)) return; e.preventDefault(); depth++; panel.classList.add("is-drop"); });
+    panel.addEventListener("dragover", function (e) { if (!canDrop(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+    panel.addEventListener("dragleave", function () { if (--depth <= 0) { depth = 0; panel.classList.remove("is-drop"); } });
+    panel.addEventListener("drop", function (e) {
+      depth = 0; panel.classList.remove("is-drop");
+      if (!canDrop(e)) return;
+      e.preventDefault();
+      var f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) takeFile(f);
+      if (f && e.dataTransfer.files.length > 1) err("One file at a time: " + f.name + " is attached.");
+    });
+    // Sound and pop-up alerts need one click on the page first (browser rule); the first click turns them on.
+    document.addEventListener("pointerdown", function once() {
+      document.removeEventListener("pointerdown", once, true);
+      Tone.unlock();
+      try { if ("Notification" in window && Notification.permission === "default" && !localStorage.getItem("fs-chat-asked")) { localStorage.setItem("fs-chat-asked", "1"); Notification.requestPermission(); } } catch (x) {}
+    }, true);
     panel.addEventListener("keydown", function (e) {
       if (e.key === "Escape") { e.preventDefault(); if (S.view !== "list") show("list"); else toggle(false); }
       if (e.key === "Enter" && !e.shiftKey && e.target.matches(".fsc-input")) { e.preventDefault(); send(); }
@@ -99,7 +124,7 @@
     if (!S.rooms.length) h += '<p class="fsc-empty">No conversations yet. Press <b>+ New</b> to message a colleague or start a group.</p>';
     S.rooms.forEach(function (r) {
       var l = r.last, pre = !l ? "No messages yet" : l.del ? "Message deleted" : (l.uid === C.uid ? "You: " : r.kind === "group" ? l.name.split(" ")[0] + ": " : "") + (l.body || (l.file ? "📎 " + l.file.name : ""));
-      h += '<button type="button" class="fsc-row' + (r.unread ? " is-unread" : "") + '" data-room="' + r.id + '"><i class="fsc-av' + (r.kind === "group" ? " is-group" : r.kind === "system" ? " is-sys" : "") + '">' + (r.kind === "group" ? "#" : r.kind === "system" ? "⏱" : initial(r.name)) + "</i>"
+      h += '<button type="button" class="fsc-row' + (r.unread ? " is-unread" : "") + '" data-room="' + r.id + '"><i class="fsc-av' + (r.kind === "group" ? " is-group" : r.kind === "system" ? " is-sys" : "") + '"' + (r.kind === "dm" ? hue(r.name) : "") + '>' + (r.kind === "group" ? "#" : r.kind === "system" ? "⏱" : initial(r.name)) + "</i>"
         + '<span class="fsc-meta"><b>' + esc(r.name) + "</b><small>" + esc(pre) + "</small></span>"
         + '<span class="fsc-side">' + (l ? "<small>" + (day(l.at) === "Today" ? when(l.at) : esc(day(l.at))) + "</small>" : "") + (r.unread ? "<em>" + r.unread + "</em>" : "") + "</span></button>";
     });
@@ -118,8 +143,8 @@
     if (!S.people.length) h += '<p class="fsc-empty">There is nobody else in the ERP yet. Add staff under Users and access.</p>';
     S.people.forEach(function (p) {
       h += S.group
-        ? '<label class="fsc-row" data-name="' + esc(p.name.toLowerCase()) + '"><input type="checkbox" value="' + p.id + '"' + (S.picked[p.id] ? " checked" : "") + '><i class="fsc-av">' + initial(p.name) + "</i><span class=\"fsc-meta\"><b>" + esc(p.name) + "</b></span></label>"
-        : '<button type="button" class="fsc-row" data-person="' + p.id + '" data-name="' + esc(p.name.toLowerCase()) + '"><i class="fsc-av">' + initial(p.name) + "</i><span class=\"fsc-meta\"><b>" + esc(p.name) + "</b></span></button>";
+        ? '<label class="fsc-row" data-name="' + esc(p.name.toLowerCase()) + '"><input type="checkbox" value="' + p.id + '"' + (S.picked[p.id] ? " checked" : "") + '><i class="fsc-av"' + hue(p.name) + '>' + initial(p.name) + "</i><span class=\"fsc-meta\"><b>" + esc(p.name) + "</b></span></label>"
+        : '<button type="button" class="fsc-row" data-person="' + p.id + '" data-name="' + esc(p.name.toLowerCase()) + '"><i class="fsc-av"' + hue(p.name) + '>' + initial(p.name) + "</i><span class=\"fsc-meta\"><b>" + esc(p.name) + "</b></span></button>";
     });
     h += "</div>" + (S.group ? '<div class="fsc-foot"><p class="fsc-err" hidden></p><button type="button" class="fsc-btn" data-act="mkgroup">Create group</button></div>' : "");
     panel.innerHTML = h;
@@ -345,15 +370,35 @@
     if (e.target.matches(".fsc-pick")) {
       var f = e.target.files[0];
       e.target.value = "";
-      if (!f) return;
-      if (f.size > C.max) { err("That file is too big. The limit is " + Math.round(C.max / 1048576) + " MB."); return; }
-      err("");
-      S.file = f;
-      showFile();
-      var input = panel.querySelector(".fsc-input");
-      if (input) input.focus();
+      if (f) takeFile(f);
     }
   }
+  function takeFile(f) {
+    if (f.size > C.max) { err("That file is too big. The limit is " + Math.round(C.max / 1048576) + " MB."); return; }
+    err("");
+    S.file = f;
+    showFile();
+    var input = panel.querySelector(".fsc-input");
+    if (input) input.focus();
+  }
+
+  // ---- New-message sound (two short notes) ----
+  var Tone = (function () {
+    var ctx = null;
+    function unlock() { try { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === "suspended") ctx.resume(); } catch (x) {} }
+    function play() {
+      if (!ctx) return;
+      try {
+        [[880, 0], [1320, 0.12]].forEach(function (n) {
+          var o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + n[1];
+          o.type = "sine"; o.frequency.value = n[0]; o.connect(g); g.connect(ctx.destination);
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+          o.start(t); o.stop(t + 0.2);
+        });
+      } catch (x) {}
+    }
+    return { unlock: unlock, play: play };
+  })();
 
   function send() {
     var input = panel.querySelector(".fsc-input"), btn = panel.querySelector(".fsc-send");
@@ -418,10 +463,13 @@
   }
 
   function alertFor(msgs) {
+    var loud = msgs.some(function (m) { return m.uid !== C.uid && !m.del && !(S.open && !document.hidden && S.view === "room" && S.room === m.room); });
+    // One tab plays the sound, so several open ERP tabs do not all ring at once.
+    if (loud) { try { var last = +localStorage.getItem("fs-chat-tone") || 0; if (Date.now() - last > 3000) { localStorage.setItem("fs-chat-tone", Date.now()); Tone.play(); } } catch (x) { Tone.play(); } }
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     msgs.forEach(function (m) {
       if (m.uid === C.uid || m.del) return;
-      if (S.open && !document.hidden && S.view === "room" && S.room === m.room) return;
+      if (!document.hidden) return; // on screen: the badge, sound and open chat are enough
       var r = roomById(m.room);
       try {
         var n = new Notification(r && r.kind === "group" ? m.name + " in " + r.name : m.name, { body: m.body || (m.file ? "📎 " + m.file.name : ""), tag: "fs-chat-" + m.room });
