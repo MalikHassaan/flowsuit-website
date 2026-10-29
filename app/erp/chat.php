@@ -7,6 +7,8 @@ const CHAT_MAX_FILE = 10 * 1024 * 1024; // bytes
 const CHAT_BLOCKED = ['exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'pif', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'ps1', 'sh', 'jar',
     'php', 'phtml', 'phar', 'htm', 'html', 'xhtml', 'svg', 'shtml', 'hta', 'dll', 'reg', 'lnk'];
 const CHAT_IMAGES = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif', 'webp' => 'image/webp'];
+// Voice notes (recorded in the chat window) and other sound files play inside the chat.
+const CHAT_AUDIO = ['webm' => 'audio/webm', 'ogg' => 'audio/ogg', 'oga' => 'audio/ogg', 'm4a' => 'audio/mp4', 'mp3' => 'audio/mpeg', 'wav' => 'audio/wav', 'aac' => 'audio/aac'];
 
 function chat_schema(PDO $db): void
 {
@@ -87,7 +89,8 @@ function chat_out(array $m, array $names, bool $withDeleted = false): array
     $file = null;
     if ($m['file_id'] && (!$m['deleted_at'] || $withDeleted)) {
         $ext = strtolower(pathinfo($m['fname'], PATHINFO_EXTENSION));
-        $file = ['id' => (int) $m['file_id'], 'name' => $m['fname'], 'size' => (int) $m['fsize'], 'image' => isset(CHAT_IMAGES[$ext])];
+        $file = ['id' => (int) $m['file_id'], 'name' => $m['fname'], 'size' => (int) $m['fsize'], 'image' => isset(CHAT_IMAGES[$ext]),
+            'audio' => isset(CHAT_AUDIO[$ext])];
     }
     return ['id' => (int) $m['id'], 'room' => (int) $m['room_id'], 'uid' => (int) $m['user_id'], 'name' => (int) $m['user_id'] === 0 ? 'FlowSuit ERP' : ($names[$m['user_id']] ?? 'Removed user'),
         'body' => $m['deleted_at'] && !$withDeleted ? '' : $m['body'], 'file' => $file, 'at' => $m['created_at'], 'del' => (bool) $m['deleted_at']];
@@ -329,8 +332,9 @@ function chat_send_file(int $id, array $me): void
         chat_json(['error' => 'File not found'], 404);
     }
     $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
-    $inline = isset(CHAT_IMAGES[$ext]) && empty($_GET['dl']);
-    header('Content-Type: ' . ($inline ? CHAT_IMAGES[$ext] : 'application/octet-stream'));
+    $types = CHAT_IMAGES + CHAT_AUDIO;
+    $inline = isset($types[$ext]) && empty($_GET['dl']);
+    header('Content-Type: ' . ($inline ? $types[$ext] : 'application/octet-stream'));
     header('X-Content-Type-Options: nosniff');
     header("Content-Security-Policy: default-src 'none'; sandbox");
     header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . "; filename*=UTF-8''" . rawurlencode($f['name']));
