@@ -7,7 +7,7 @@
 #fs-chat .fsc-fab:hover{transform:scale(1.06)}
 #fs-chat.is-open .fsc-fab{display:none}
 #fs-chat .fsc-badge{position:absolute;top:-2px;right:-2px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#dc2626;color:#fff;font:700 12px/22px system-ui,sans-serif;text-align:center;box-shadow:0 0 0 2px #fff}
-#fs-chat .fsc-panel{display:flex;flex-direction:column;width:min(380px,calc(100vw - 24px));height:min(560px,calc(100vh - 40px));border-radius:16px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 24px 60px rgba(15,23,42,.3);overflow:hidden;animation:fsc-pop .2s ease-out!important}
+#fs-chat .fsc-panel{position:relative;display:flex;flex-direction:column;width:min(380px,calc(100vw - 24px));height:min(560px,calc(100vh - 40px));border-radius:16px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 24px 60px rgba(15,23,42,.3);overflow:hidden;animation:fsc-pop .2s ease-out!important}
 @keyframes fsc-pop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
 #fs-chat .fsc-head{display:flex;align-items:center;gap:8px;padding:12px 12px 12px 16px;background:#13304f;color:#fff}
 #fs-chat .fsc-head h2{flex:1;margin:0;font:600 16px/1.2 system-ui,sans-serif;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -122,3 +122,6 @@ html:has(#frm) .drawer{padding-bottom:150px!important}
 .fsp-act{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
 .fsp-act button{padding:9px 14px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#0f172a;font:600 14px system-ui,sans-serif;cursor:pointer}
 .fsp-act .fsp-pri{border-color:#1F6FB8;background:#1F6FB8;color:#fff}
+/* drag a file onto a conversation */
+#fs-chat .fsc-panel.is-drop{outline:3px dashed #1F6FB8;outline-offset:-6px}
+#fs-chat .fsc-panel.is-drop::after{content:"Drop the file to attach it";position:absolute;inset:0;display:grid;place-items:center;background:rgba(239,246,255,.92);color:#1F6FB8;font:700 16px system-ui,sans-serif;pointer-events:none;border-radius:inherit;z-index:5}

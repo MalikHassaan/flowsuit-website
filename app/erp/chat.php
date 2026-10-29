@@ -83,6 +83,22 @@ function chat_names(): array
     return array_column(erp_db()->query('SELECT id, name FROM users')->fetchAll(), 'name', 'id');
 }
 
+// Who can be picked for a new chat or group: active users linked to HSEC ERP, and admins (hassan, 2026-10-29).
+// Chats already started stay as they are.
+function chat_people(): array
+{
+    static $out = null;
+    if ($out === null) {
+        $out = [];
+        $q = "SELECT id, name FROM users u WHERE active = 1 AND (is_admin = 1 OR EXISTS (SELECT 1 FROM access a WHERE a.user_id = u.id AND a.module = 'hsec'))"
+            . ' ORDER BY name COLLATE NOCASE';
+        foreach (erp_db()->query($q) as $p) {
+            $out[(int) $p['id']] = $p;
+        }
+    }
+    return $out;
+}
+
 // A message as the chat window shows it. Deleted text is only kept for the Chat log.
 function chat_out(array $m, array $names, bool $withDeleted = false): array
 {
@@ -166,7 +182,7 @@ function chat_api(string $sub): void
         // Everything in this person's chats has now reached their ERP ("delivered").
         $db->prepare('UPDATE chat_members SET last_delivered = (SELECT COALESCE(MAX(id), 0) FROM chat_messages WHERE room_id = chat_members.room_id) WHERE user_id = ?')
             ->execute([$uid]);
-        $people = $db->query('SELECT id, name FROM users WHERE active = 1 ORDER BY name COLLATE NOCASE')->fetchAll();
+        $people = chat_people();
         chat_json(['max' => $max, 'msgs' => $msgs, 'rooms' => chat_rooms_for($uid, $names),
             'people' => array_values(array_filter(array_map(fn($p) => ['id' => (int) $p['id'], 'name' => $p['name']], $people), fn($p) => $p['id'] !== $uid))]);
     }
@@ -207,7 +223,7 @@ function chat_api(string $sub): void
     if ($sub === '/open') {
         // A one-to-one chat with someone, created the first time.
         $other = (int) ($in['user'] ?? 0);
-        if ($other === $uid || !isset($names[$other])) {
+        if ($other === $uid || !isset(chat_people()[$other])) {
             chat_json(['error' => 'Pick someone to chat with.'], 400);
         }
         $key = min($uid, $other) . '-' . max($uid, $other);
@@ -228,7 +244,7 @@ function chat_api(string $sub): void
 
     if ($sub === '/group') {
         $name = trim(mb_substr((string) ($in['name'] ?? ''), 0, 60));
-        $members = array_values(array_unique(array_filter(array_map('intval', (array) ($in['members'] ?? [])), fn($id) => isset($names[$id]) && $id !== $uid)));
+        $members = array_values(array_unique(array_filter(array_map('intval', (array) ($in['members'] ?? [])), fn($id) => isset(chat_people()[$id]) && $id !== $uid)));
         if ($name === '' || !$members) {
             chat_json(['error' => 'Give the group a name and pick at least one person.'], 400);
         }
