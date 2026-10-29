@@ -26,7 +26,7 @@
     rows.slice(h.row + 1).forEach(function (r) {
       r = r || [];
       var name = str(r[h.c.name]), cv = num(r[h.c.cv]);
-      if (!name || /^(sub)?total\b/i.test(name) || /^(sub)?total\b/i.test(str(r[0]))) return;
+      if (!name || /\(delete this row\)/i.test(name) || /^(sub)?total\b/i.test(name) || /^(sub)?total\b/i.test(str(r[0]))) return;
       var st = h.c.status >= 0 ? str(r[h.c.status]) : "", win = (st.match(/(\d+(?:\.\d+)?)\s*%/) || [])[1];
       var terms = h.c.terms >= 0 ? str(r[h.c.terms]) : "", parts = terms ? window.FS_TERMS.parse(terms) : [];
       var bad = parts.some(function (p) { return !p; }), tot = bad ? 0 : parts.reduce(function (s, p) { return s + p.pct; }, 0);
@@ -47,6 +47,7 @@
       '<p class="muted" style="margin-top:0">One row per project with Project, Contract Value, Expected LC, Payment Terms and Status columns. Each payment term becomes a billing milestone.</p>';
     if (V.ent === "All") return p + '<p class="muted">Pick one company at the top right first; the projects are created in that company.</p></div>';
     p += '<div class="actions"><label class="btn" for="fsPiFile" style="cursor:pointer">Choose Excel file</label><input type="file" id="fsPiFile" accept=".xlsx,.xls" style="position:absolute;left:-9999px">' +
+      '<button class="btn line" type="button" id="fsPiTpl">Download template</button>' +
       '<span class="muted">Projects go into ' + esc(coName(V.ent)) + '.</span></div><p class="err" id="fsPiErr">' + (plan && plan.err ? esc(plan.err) : "") + "</p>";
     if (plan && plan.rows && plan.ent === V.ent) {
       var mk = plan.rows.filter(function (x) { return x.make; });
@@ -79,6 +80,27 @@
     render();
   }
 
+  // a blank sheet in the layout read() expects, with two made-up example rows and a notes sheet
+  async function template() {
+    try {
+      var X = await tbLib(), wb = X.utils.book_new();
+      var ws = X.utils.aoa_to_sheet([["Sr.No.", "Project", "Customer", "Contract Value (PKR)", "Expected LC (PKR)", "Payment Terms", "Status"],
+        [1, "Example Tower (delete this row)", "Example Developers", 25000000, 10000000, "25% advance; 25% after LC opening; 25% on delivery at site; 25% after handover", "In hand"],
+        [2, "Example Hospital (delete this row)", "", 40000000, 18000000, "", "Pipeline (90%)"]]);
+      ws["!cols"] = [{ wch: 7 }, { wch: 34 }, { wch: 24 }, { wch: 20 }, { wch: 18 }, { wch: 80 }, { wch: 16 }];
+      X.utils.book_append_sheet(wb, ws, "Projects");
+      X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([["Column", "What to enter"],
+        ["Project", "Required. The project name; a name already in the company is skipped."],
+        ["Customer", "Optional. The client's name."],
+        ["Contract Value (PKR)", "Required. Total contract value, numbers only."],
+        ["Expected LC (PKR)", "Optional. Imported cost; it becomes the starting budget, so add local costs to the budget after import."],
+        ["Payment Terms", "Optional. Each part as 'NN% text', separated by ; or a new line, e.g. 10% on BG; 25% after LC. Each part becomes a milestone linked to its business-cycle step."],
+        ["Status", "'In hand' makes an Active project. 'Pipeline (90%)' makes a Tendering project with a 90% win chance."],
+        ["Totals", "Rows starting with Total or Subtotal are skipped."]]), "How to fill");
+      X.writeFile(wb, "HSEC projects template.xlsx");
+    } catch (er) { toast((er && er.message) || "Could not make the template."); }
+  }
+
   function hook() {
     if (typeof listView !== "function" || typeof S === "undefined" || !S.projects || !window.FS_TERMS || typeof tbLib !== "function") return false;
     var f = S.projects.fields, at = f.findIndex(function (x) { return x.k === "costToDate"; });
@@ -98,6 +120,7 @@
       render();
     });
     document.addEventListener("click", function (e) {
+      if (e.target.id === "fsPiTpl") template();
       if (e.target.id === "fsPiGo") create();
       if (e.target.id === "fsPiX") { plan = null; render(); }
     });
