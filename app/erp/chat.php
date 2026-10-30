@@ -34,6 +34,38 @@ function chat_schema(PDO $db): void
         id INTEGER PRIMARY KEY, room_id INTEGER NOT NULL, from_user INTEGER NOT NULL, to_user INTEGER NOT NULL,
         call TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL DEFAULT \'\', at INTEGER NOT NULL)');
     $db->exec('CREATE INDEX IF NOT EXISTS chat_signals_to ON chat_signals (to_user, id)');
+    // Which system a chat belongs to: 'hsec', 'taj', or '' for chats started before 2026-10-30 or on plain ERP pages.
+    if (!in_array('sys', array_column($db->query('PRAGMA table_info(chat_rooms)')->fetchAll(), 'name'), true)) {
+        $db->exec("ALTER TABLE chat_rooms ADD COLUMN sys TEXT NOT NULL DEFAULT ''");
+    }
+}
+
+// The system the page is in ('hsec', 'taj'), or '' on plain ERP pages, where every chat and person shows.
+function chat_sys(): string
+{
+    $s = (string) ($_SERVER['HTTP_X_FS_SYS'] ?? '');
+    return in_array($s, ['hsec', 'taj'], true) ? $s : '';
+}
+
+// Whether a chat shows in the system the page is in (hassan, 2026-10-30: TAJ shows only TAJ chats and people).
+// A chat started in a system shows only there; an older chat shows where everyone else in it has access;
+// the Attendance chat shows everywhere.
+function chat_room_shows(array $r, array $members, int $uid): bool
+{
+    $sys = chat_sys();
+    if ($sys === '' || $r['kind'] === 'system') {
+        return true;
+    }
+    if ((string) $r['sys'] !== '') {
+        return $r['sys'] === $sys;
+    }
+    $people = chat_people();
+    foreach ($members as $m) {
+        if ($m !== $uid && !isset($people[$m])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 function chat_files_dir(): string
@@ -92,7 +124,7 @@ function chat_people(): array
     static $out = null;
     if ($out === null) {
         $out = [];
-        $module = ['hsec' => 'hsec', 'taj' => 'receivables'][(string) ($_SERVER['HTTP_X_FS_SYS'] ?? '')] ?? null;
+        $module = ['hsec' => 'hsec', 'taj' => 'receivables'][chat_sys()] ?? null;
         $st = erp_db()->prepare('SELECT id, name FROM users u WHERE active = 1'
             . ($module ? ' AND (is_admin = 1 OR EXISTS (SELECT 1 FROM access a WHERE a.user_id = u.id AND a.module = ? AND a.level IN (\'view\', \'edit\')))' : '')
             . ' ORDER BY name COLLATE NOCASE');
@@ -122,7 +154,7 @@ const CHAT_MSG_SQL = 'SELECT m.*, f.name AS fname, f.size AS fsize FROM chat_mes
 // The person's conversations, newest activity first, with unread counts.
 function chat_rooms_for(int $uid, array $names): array
 {
-    $st = erp_db()->prepare('SELECT r.id, r.kind, r.name, cm.last_read,
+    $st = erp_db()->prepare('SELECT r.id, r.kind, r.name, r.sys, cm.last_read,
             (SELECT MAX(id) FROM chat_messages WHERE room_id = r.id) AS last_id,
             (SELECT COUNT(*) FROM chat_messages WHERE room_id = r.id AND id > cm.last_read AND user_id <> cm.user_id) AS unread
         FROM chat_rooms r JOIN chat_members cm ON cm.room_id = r.id AND cm.user_id = ? ORDER BY COALESCE(last_id, 0) DESC, r.id DESC');
@@ -135,6 +167,9 @@ function chat_rooms_for(int $uid, array $names): array
     foreach ($rooms as $r) {
         $mem->execute([$r['id']]);
         $members = array_map('intval', $mem->fetchAll(PDO::FETCH_COLUMN));
+        if (!chat_room_shows($r, $members, $uid)) {
+            continue;
+        }
         $name = $r['name'];
         if ($r['kind'] === 'dm') {
             $other = array_values(array_diff($members, [$uid]))[0] ?? $uid;
@@ -188,7 +223,11 @@ function chat_api(string $sub): void
         $db->prepare('UPDATE chat_members SET last_delivered = (SELECT COALESCE(MAX(id), 0) FROM chat_messages WHERE room_id = chat_members.room_id) WHERE user_id = ?')
             ->execute([$uid]);
         $people = chat_people();
-        chat_json(['max' => $max, 'msgs' => $msgs, 'rooms' => chat_rooms_for($uid, $names),
+        $rooms = chat_rooms_for($uid, $names);
+        // messages in chats that belong to the other system do not ring or show here
+        $shown = array_flip(array_column($rooms, 'id'));
+        $msgs = array_values(array_filter($msgs, fn($m) => isset($shown[$m['room']])));
+        chat_json(['max' => $max, 'msgs' => $msgs, 'rooms' => $rooms,
             'people' => array_values(array_filter(array_map(fn($p) => ['id' => (int) $p['id'], 'name' => $p['name']], $people), fn($p) => $p['id'] !== $uid))]);
     }
 
@@ -231,13 +270,22 @@ function chat_api(string $sub): void
         if ($other === $uid || !isset(chat_people()[$other])) {
             chat_json(['error' => 'Pick someone to chat with.'], 400);
         }
-        $key = min($uid, $other) . '-' . max($uid, $other);
-        $st = $db->prepare('SELECT id FROM chat_rooms WHERE dm_key = ?');
+        // One chat per pair in each system; an older chat between the two is reused while it shows here.
+        $sys = chat_sys();
+        $pair = min($uid, $other) . '-' . max($uid, $other);
+        $key = $sys === '' ? $pair : $sys . ':' . $pair;
+        $st = $db->prepare('SELECT * FROM chat_rooms WHERE dm_key = ?');
         $st->execute([$key]);
-        $room = (int) $st->fetchColumn();
+        $found = $st->fetch();
+        if (!$found && $sys !== '') {
+            $st->execute([$pair]);
+            $old = $st->fetch();
+            $found = $old && chat_room_shows($old, [$uid, $other], $uid) ? $old : null;
+        }
+        $room = $found ? (int) $found['id'] : 0;
         if (!$room) {
             $db->beginTransaction();
-            $db->prepare("INSERT INTO chat_rooms (kind, dm_key, created_by, created_at) VALUES ('dm', ?, ?, ?)")->execute([$key, $uid, erp_now()]);
+            $db->prepare("INSERT INTO chat_rooms (kind, dm_key, sys, created_by, created_at) VALUES ('dm', ?, ?, ?, ?)")->execute([$key, $sys, $uid, erp_now()]);
             $room = (int) $db->lastInsertId();
             $add = $db->prepare('INSERT INTO chat_members (room_id, user_id) VALUES (?, ?)');
             $add->execute([$room, $uid]);
@@ -254,7 +302,7 @@ function chat_api(string $sub): void
             chat_json(['error' => 'Give the group a name and pick at least one person.'], 400);
         }
         $db->beginTransaction();
-        $db->prepare("INSERT INTO chat_rooms (kind, name, created_by, created_at) VALUES ('group', ?, ?, ?)")->execute([$name, $uid, erp_now()]);
+        $db->prepare("INSERT INTO chat_rooms (kind, name, sys, created_by, created_at) VALUES ('group', ?, ?, ?, ?)")->execute([$name, chat_sys(), $uid, erp_now()]);
         $room = (int) $db->lastInsertId();
         $add = $db->prepare('INSERT INTO chat_members (room_id, user_id) VALUES (?, ?)');
         foreach (array_merge([$uid], $members) as $id) {
