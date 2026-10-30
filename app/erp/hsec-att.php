@@ -149,6 +149,18 @@ function hsec_att_api(array $me, string $sub, string $method): void
         taj_json(['file' => hsec_att_out($st->fetch())]);
     }
 
+    if ($sub === '/move' && $method === 'POST') {
+        // A record about to be deleted after its vouchers were reversed hands its files to its old voucher.
+        $from = hsec_att_key((string) ($_POST['from'] ?? ''));
+        $to = hsec_att_key((string) ($_POST['to'] ?? ''));
+        if (!$from || !$to || !hsec_att_doc_ok($me, $from[0], $from[1]) || !hsec_att_doc_ok($me, $to[0], $to[1])) {
+            taj_fail(404, 'not_found', 'Record not found');
+        }
+        $db->prepare('UPDATE hsec_atts SET coll = ?, doc_id = ? WHERE coll = ? AND doc_id = ? AND deleted_at IS NULL')
+            ->execute([$to[0], $to[1], $from[0], $from[1]]);
+        taj_json(['ok' => true]);
+    }
+
     if ($sub === '/delete' && $method === 'POST') {
         $st = $db->prepare($sel . ' AND a.id = ?');
         $st->execute([(int) ($_POST['id'] ?? 0)]);
