@@ -4,7 +4,9 @@
 // * Reverse and delete: posts a reversing voucher for each of its posted vouchers (dated today, or the voucher's date if
 //   later), removes its unposted ones, then deletes the record.
 // * Reverse and correct: the same, then opens a copy of the record to fix and save again, which posts a new voucher.
-// A voucher form shows the same buttons for the document it came from, and a manual voucher gets "Reverse and correct".
+// A voucher form shows the same buttons for the document it came from. Every other posted voucher (manual, imported
+// from QuickBooks) gets "Reverse voucher" and "Reverse and correct" (hassan: "it should happen on all vouchers"), and the
+// voucher view opened from the eye or a voucher number has "Amend or reverse", which opens it.
 // Files attached to a deleted record move to its reversed voucher, so the eye there still shows them.
 // The server still decides who may reverse (Senior Manager, Group GM Finance, admin) and refuses locked months.
 (function () {
@@ -20,7 +22,7 @@
         var d = Store.data[j.source.c].find(function (x) { return x.id === j.source.id; });
         if (d) return { c: j.source.c, rec: d };
       }
-      return j.source ? null : { c: "journals", rec: j };
+      return { c: "journals", rec: j }; // manual, QuickBooks-imported, or its document is gone
     }
     var js = srcJvs(F.c, F.rec.id).filter(function (x) { return posted(x) && !x.reversedBy && !x.reversalOf; });
     return js.length ? { c: F.c, rec: Store.data[F.c].find(function (x) { return x.id === F.rec.id; }) || F.rec } : null;
@@ -63,7 +65,7 @@
     if (kind === "del") { var u = usedBy(t); if (u) { er.textContent = "This " + what + " is part of " + u.trim() + ". Take it out of that first, or use Reverse and correct."; return; } }
     if (ask !== kind) {
       ask = kind;
-      btn.textContent = kind === "del" ? "Confirm reverse and delete" : "Confirm reverse and correct";
+      btn.textContent = kind === "del" ? "Confirm reverse and delete" : kind === "rev" ? "Confirm reverse" : "Confirm reverse and correct";
       er.textContent = "This posts a reversing voucher for " + post.map(function (j) { return j.ref; }).join(", ") +
         (rest.length ? ", removes the unposted voucher " + rest.map(function (j) { return j.ref || "(unnumbered)"; }).join(", ") : "") +
         (t.c === "journals" ? "" : ", then " + (kind === "del" ? "deletes this " + what : "deletes this " + what + " and opens a copy for you to correct and save")) +
@@ -82,6 +84,7 @@
       }
       closeForm();
       toast((t.c === "journals" ? t.rec.ref : what.charAt(0).toUpperCase() + what.slice(1)) + " reversed by " + refs.join(", ") + (t.c !== "journals" ? " and deleted" : "") + ".");
+      if (kind === "rev") { var rv = Store.data.journals.find(function (x) { return x.reversalOf === t.rec.id; }); if (rv) sheetOpen(jvSheet(rv)); }
       if (kind === "fix") {
         if (t.c === "journals") { delete copy.ref; copy.narration = copy.narration || ""; }
         openForm(t.c, null, copy);
@@ -97,15 +100,26 @@
       var sp = act.querySelector(".spacer"); act.insertBefore(b, sp || null);
     };
     var doc = t.c === "journals" ? "" : " " + (DOCNAME[t.c] || "record");
+    if (t.c === "journals" && !act.querySelector("#jvReverse")) add("rev", "Reverse voucher", "danger");
     add("fix", "Reverse and correct" + (F.c === "journals" ? doc : ""), "");
     if (t.c !== "journals") add("del", "Reverse and delete" + (F.c === "journals" ? doc : ""), "danger");
   }
   function hook() {
-    if (typeof Store === "undefined" || !Store.data || typeof drawForm !== "function" || typeof srcJvs !== "function" || typeof nextVoucherNo !== "function") return false;
+    if (typeof Store === "undefined" || !Store.data || typeof drawForm !== "function" || typeof srcJvs !== "function" || typeof nextVoucherNo !== "function" || typeof jvSheet !== "function") return false;
     drawForm = (function (old) { // eslint-disable-line no-global-assign
       return function () { var out = old.apply(this, arguments); ask = ""; try { buttons(); } catch (e) { console.warn(e); } return out; };
     })(drawForm);
+    // the voucher view (eye, voucher links) gets a button to open the voucher for amending
+    jvSheet = (function (old) { // eslint-disable-line no-global-assign
+      return function (j) {
+        var html = old.apply(this, arguments);
+        if (!j || !j.id || !Store.data.journals.some(function (x) { return x.id === j.id; })) return html;
+        return html.replace('<button class="btn" id="closeSheet">Close</button>', '<button class="btn" id="closeSheet">Close</button><button class="btn" data-fsopenjv="' + String(j.id).replace(/"/g, "") + '">' + (posted(j) && !j.reversedBy && !j.reversalOf ? "Amend or reverse" : "Open voucher") + "</button>");
+      };
+    })(jvSheet);
     document.addEventListener("click", function (e) {
+      var o = e.target.closest && e.target.closest("[data-fsopenjv]");
+      if (o) { e.preventDefault(); e.stopImmediatePropagation(); var pl = document.getElementById("printLayer"); if (pl) pl.innerHTML = ""; openForm("journals", o.getAttribute("data-fsopenjv")); return; }
       // a record whose vouchers were all reversed already can be deleted
       var d = e.target.closest && e.target.closest("#delBtn");
       if (d && F && F.rec && F.rec.id && F.c !== "journals") {
