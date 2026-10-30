@@ -47,9 +47,9 @@
       { k: "name", l: "Fund name", req: 1, hint: "For example: Head office petty cash." },
       { k: "entity", l: "Entity", t: "entity", req: 1 },
       { k: "custodian", l: "Custodian", req: 1, hint: "The person who holds the cash and signs the slips." },
-      { k: "account", l: "Petty cash account", t: "acc", req: 1, hint: "The petty cash / cash in hand account in the chart." },
+      { k: "account", l: "Petty cash account", t: "acc", req: 1, af: "petty", hint: "The petty cash / cash in hand account in the chart." },
       { k: "float", l: "Float (imprest amount, PKR)", t: "money", req: 1, hint: "The cash the custodian holds when fully topped up." },
-      { k: "bankAccount", l: "Topped up from (bank account)", t: "acc", req: 1 },
+      { k: "bankAccount", l: "Topped up from (bank account)", t: "acc", req: 1, af: "bank" },
       { k: "status", l: "Status", t: "select", o: ["Active", "Closed"] },
       { k: "notes", l: "Notes", t: "textarea" }],
       cols: [["name", "Fund", function (r) { return esc(r.name) + "<br><span class=\"muted\">" + esc(r.custodian || "") + "</span>"; }], ["entity", "Entity"],
@@ -61,7 +61,7 @@
     S[SLIPS] = { title: "Petty cash expense", fields: [
       { k: "slipNo", l: "Slip no.", req: 1 }, { k: "date", l: "Date", t: "date", req: 1 }, fundRef,
       { k: "payee", l: "Paid to", req: 1 }, { k: "description", l: "What it was for", req: 1 },
-      { k: "glAccount", l: "Expense account", t: "acc", req: 1 },
+      { k: "glAccount", l: "Expense account", t: "acc", req: 1, af: "expense" },
       { k: "project", l: "Project (if for a project)", t: "ref", ref: "projects", opt: 1 },
       { k: "dept", l: "Department", t: "dept" },
       { k: "amount", l: "Amount (PKR)", t: "money", req: 1 },
@@ -172,8 +172,17 @@
 
     submitForm = (function (old) { // eslint-disable-line no-global-assign
       return async function () {
-        if (F && [FUNDS, SLIPS, CLAIMS].indexOf(F.c) >= 0) { readForm(); if (check() !== true) return false; }
-        return old.apply(this, arguments);
+        var mine = F && [FUNDS, SLIPS, CLAIMS].indexOf(F.c) >= 0;
+        if (!mine) return old.apply(this, arguments);
+        readForm(); if (check() !== true) return false;
+        // the app's own message hides why a save failed; show the real reason for these forms
+        var save = Store.save, why = null;
+        Store.save = function () { return save.apply(this, arguments).catch(function (e) { why = e; throw e; }); };
+        try {
+          var ok = await old.apply(this, arguments);
+          if (ok === false && why) err("Could not save: " + (why.message || why.code || why) + ".");
+          return ok;
+        } finally { Store.save = save; }
       };
     })(submitForm);
 

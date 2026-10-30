@@ -213,8 +213,10 @@ function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
         return null;
     }
     $role = (string) ($me['hsec_jv'] ?? '');
-    // Once a voucher has been sent for approval, only these two may change, cancel or reverse it (hassan, 2026-10-25).
-    $senior = in_array($role, ['senior', 'gmf'], true);
+    // Once a voucher has been sent for approval, only these two may change, cancel or reverse it (hassan, 2026-10-25),
+    // and an ERP admin, who may do everything (hassan, 2026-10-30).
+    $admin = (bool) $me['is_admin'];
+    $senior = in_array($role, ['senior', 'gmf'], true) || $admin;
     $deny = 'Only the Senior Manager or the Group GM Finance can change, cancel or reverse a voucher once it has been sent for approval.';
     $wasSent = in_array((string) ($old['status'] ?? ''), ['Pending approval', 'Approved', 'Rejected'], true) && !empty($old['maker']);
     if ($new === null) {
@@ -281,7 +283,8 @@ function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
         if ($oldSt !== 'Pending approval') {
             return 'This voucher is not waiting for approval.';
         }
-        if ($role !== $need) {
+        // an admin may approve at either stage, but still only once per voucher and never their own
+        if ($role !== $need && !$admin) {
             return 'Only a ' . $stage . ' can approve or return a voucher at this stage. Your approval role: '
                 . (HSEC_JV_ROLES[$role] ?? 'none') . '.';
         }
@@ -291,7 +294,7 @@ function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
         if (in_array($uid, $given, true)) {
             return 'You have already approved this voucher at an earlier stage.';
         }
-        if ($need === 'gmf' && !isset($given[HSEC_JV_STAGES['senior']])) {
+        if ($need === 'gmf' && !isset($given[HSEC_JV_STAGES['senior']]) && !$admin) {
             return 'The Senior Manager approves first.';
         }
         $newAp[$i] = ['stage' => $stage, 'name' => $me['name'], 'uid' => $uid, 'action' => ($a['action'] ?? '') === 'Approved' ? 'Approved' : 'Rejected',
@@ -340,7 +343,7 @@ function hsec_access_inject(array $me): string
 {
     $flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES;
     $mods = hsec_user_mods($me);
-    $cfg = ['jv' => (string) ($me['hsec_jv'] ?? ''), 'on' => hsec_approvals_on(), 'sigs' => hsec_sigs(),
+    $cfg = ['jv' => (string) ($me['hsec_jv'] ?? ''), 'admin' => (bool) $me['is_admin'], 'on' => hsec_approvals_on(), 'sigs' => hsec_sigs(),
         'me' => 'u' . (int) $me['id'], 'people' => hsec_signers()];
     return '<script>' . ($mods !== null ? 'window.FS_MODS=' . json_encode($mods, $flags) . ';' : '')
         . 'window.FS_JV=' . json_encode($cfg['jv']) . ';window.FS_SIGN=' . json_encode($cfg, $flags) . ';'
@@ -363,5 +366,6 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-signoff.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-vlink.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-home.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-petty.js') . '</script>';
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-petty.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-accpick.js') . '</script>';
 }
