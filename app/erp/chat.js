@@ -82,6 +82,12 @@
       Tone.unlock();
       try { if ("Notification" in window && Notification.permission === "default" && !localStorage.getItem("fs-chat-asked")) { localStorage.setItem("fs-chat-asked", "1"); Notification.requestPermission(); } } catch (x) {}
     }, true);
+    // A click anywhere else on the page minimises the chat (hassan, 2026-10-30). Not during a voice note, a call or
+    // the microphone help; a typed message and an attached file stay for when it is opened again.
+    document.addEventListener("pointerdown", function (e) {
+      if (!S.open || S.rec || root.contains(e.target) || (e.target.closest && e.target.closest("#fs-call, .fsp-perm"))) return;
+      toggle(false);
+    }, true);
     panel.addEventListener("keydown", function (e) {
       if (e.key === "Escape") { e.preventDefault(); if (S.view !== "list") show("list"); else toggle(false); }
       if (e.key === "Enter" && !e.shiftKey && e.target.matches(".fsc-input")) { e.preventDefault(); send(); }
@@ -90,6 +96,7 @@
 
   function toggle(on) {
     S.open = on;
+    var tb = root.querySelector(".fsc-toast"); if (on && tb) tb.hidden = true;
     panel.hidden = !on;
     root.classList.toggle("is-open", on);
     if (on) { render(); if (S.view === "room") markRead(); }
@@ -462,8 +469,30 @@
     document.title = n ? "(" + (n > 99 ? "99+" : n) + ") " + t : t;
   }
 
+  // On screen: the chat button shakes, the phone vibrates and a box says who wrote, until it is opened or closed.
+  var buzzT = 0;
+  function buzz(list) {
+    var fab = root.querySelector(".fsc-fab"), m = list[list.length - 1], r = roomById(m.room), box = root.querySelector(".fsc-toast");
+    fab.classList.remove("is-buzz"); void fab.offsetWidth; fab.classList.add("is-buzz");
+    try { if (navigator.vibrate) navigator.vibrate([180, 90, 180]); } catch (x) {}
+    if (!box) {
+      box = document.createElement("button"); box.type = "button"; box.className = "fsc-toast";
+      box.addEventListener("click", function (e) {
+        if (e.target.closest(".fsc-tx")) { box.hidden = true; return; }
+        box.hidden = true; toggle(true); show("room", +box.getAttribute("data-room"));
+      });
+      root.insertBefore(box, root.firstChild);
+    }
+    var n = list.length + (box.hidden || box.getAttribute("data-room") !== String(m.room) ? 0 : +box.getAttribute("data-n") || 0);
+    box.setAttribute("data-room", m.room); box.setAttribute("data-n", n);
+    box.innerHTML = '<i class="fsc-av"' + hue(m.name) + ">" + initial(m.name) + '</i><span><b>' + (n > 1 ? n + " new messages" : "1 new message") + "</b><br>from " + esc(m.name)
+      + (r && r.kind === "group" ? " in " + esc(r.name) : "") + "</span><i class=\"fsc-tx\" aria-label=\"Dismiss\">&#215;</i>";
+    box.hidden = false;
+    clearTimeout(buzzT); buzzT = setTimeout(function () { box.hidden = true; }, 15000);
+  }
   function alertFor(msgs) {
-    var loud = msgs.some(function (m) { return m.uid !== C.uid && !m.del && !(S.open && !document.hidden && S.view === "room" && S.room === m.room); });
+    var mine = msgs.filter(function (m) { return m.uid !== C.uid && !m.del && !(S.open && !document.hidden && S.view === "room" && S.room === m.room); }), loud = mine.length > 0;
+    if (loud && !document.hidden && !S.open) buzz(mine);
     // One tab plays the sound, so several open ERP tabs do not all ring at once.
     if (loud) { try { var last = +localStorage.getItem("fs-chat-tone") || 0; if (Date.now() - last > 3000) { localStorage.setItem("fs-chat-tone", Date.now()); Tone.play(); } } catch (x) { Tone.play(); } }
     if (!("Notification" in window) || Notification.permission !== "granted") return;
