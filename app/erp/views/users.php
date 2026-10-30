@@ -33,7 +33,7 @@
 </section>
 <section class="panel" id="hsec-approvals">
   <h2>HSEC voucher approval</h2>
-  <p class="muted">Maker prepares and sends, Senior Manager approves first, Group GM Finance approves last. Then the voucher can be posted and printed with their signatures. Give people these roles with <b>Edit</b> on each user.</p>
+  <p class="muted">Maker prepares and sends, Senior Manager approves first, Group GM Finance approves last, and that approval posts the voucher. It prints with their signatures. Give people these roles with <b>Edit</b> on each user.</p>
   <div class="jv-flow">
 <?php foreach (HSEC_JV_ROLES as $k => $label): ?>
     <div class="jv-step"><b><?= e($label) ?></b>
