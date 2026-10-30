@@ -129,7 +129,7 @@
       ready: function (r) { var f = byId(FUNDS, r.fund); return !f ? "choose the fund" : !f.account ? "set the fund's petty cash account" : slipLines(r).some(function (l) { return !l.account; }) ? "every line needs an expense account" : n(r.amount) > 0 ? true : "enter the amounts"; },
       build: function (r) {
         var f = byId(FUNDS, r.fund), sl = slipLines(r), lines = sl.map(function (ln) {
-          var l = { account: ln.account, debit: Math.round(n(ln.amount)), credit: 0, desc: String(ln.desc || "").slice(0, 200) };
+          var l = { account: ln.account, debit: Math.round(n(ln.amount)), credit: 0, desc: (String(ln.desc || "") + (n(ln.qty) && n(ln.qty) !== 1 ? " (" + ln.qty + " × " + fmt(lineRate(ln)) + ")" : "")).slice(0, 200) };
           if (ln.project) l.project = ln.project; if (ln.dept) l.dept = ln.dept;
           return l;
         }).filter(function (l) { return l.debit > 0; });
@@ -174,25 +174,32 @@
     var f = slipFund(), ent = f ? f.entity : "", pj = Store.data.projects || [], dp = DEPTS();
     var sel = function (o, v) { return o.map(function (x) { return "<option value=\"" + esc(x[0]) + "\"" + (x[0] === v ? " selected" : "") + ">" + esc(x[1]) + "</option>"; }).join(""); };
     return "<div id=\"pcBox\"><div class=\"jhead\"><b>Expenses on this slip</b><button type=\"button\" class=\"btn sm\" id=\"pcAdd\">+ Add line</button></div>" +
-      "<div class=\"tw\"><table class=\"bitab\"><thead><tr><th style=\"min-width:180px\">What it was for *</th><th style=\"min-width:280px\">Expense account *</th><th style=\"min-width:160px\">Project</th><th>Department</th><th class=\"num\">Amount (PKR) *</th><th></th></tr></thead><tbody>" +
+      "<div class=\"tw\"><table class=\"bitab\"><thead><tr><th style=\"min-width:180px\">What it was for *</th><th style=\"min-width:280px\">Expense account *</th><th style=\"min-width:160px\">Project</th><th>Department</th><th class=\"num\">Qty *</th><th class=\"num\">Rate (PKR) *</th><th class=\"num\">Amount (PKR)</th><th></th></tr></thead><tbody>" +
       it.map(function (x, i) {
         var a = " data-pi=\"" + i + "\" aria-label=\"";
         return "<tr><td><input" + a + "What it was for, line " + (i + 1) + "\" data-pk=\"desc\" value=\"" + esc(x.desc || "") + "\" placeholder=\"For example: courier\"></td>" +
           "<td><select" + a + "Expense account, line " + (i + 1) + "\" data-pk=\"account\">" + accOpts(x.account || "", ent) + "</select></td>" +
           "<td><select" + a + "Project, line " + (i + 1) + "\" data-pk=\"project\"><option value=\"\">None</option>" + sel(pj.map(function (p) { return [p.id, refName("projects", p.id)]; }), x.project || "") + "</select></td>" +
           "<td><select" + a + "Department, line " + (i + 1) + "\" data-pk=\"dept\"><option value=\"\">Choose…</option>" + sel(dp.concat(x.dept && dp.indexOf(x.dept) < 0 ? [x.dept] : []).map(function (d) { return [d, d]; }), x.dept || "") + "</select></td>" +
-          "<td><input" + a + "Amount, line " + (i + 1) + "\" data-pk=\"amount\" type=\"text\" inputmode=\"decimal\" autocomplete=\"off\" class=\"num amt\" style=\"width:120px\" value=\"" + esc(n(x.amount) ? x.amount : "") + "\"></td>" +
+          // quantity × rate = amount (hassan, 2026-10-30); older lines had only an amount, read as 1 × amount
+          "<td><input" + a + "Quantity, line " + (i + 1) + "\" data-pk=\"qty\" type=\"number\" step=\"any\" min=\"0\" class=\"num\" style=\"width:80px\" value=\"" + esc(x.qty != null && x.qty !== "" ? x.qty : 1) + "\"></td>" +
+          "<td><input" + a + "Rate, line " + (i + 1) + "\" data-pk=\"rate\" type=\"text\" inputmode=\"decimal\" autocomplete=\"off\" class=\"num amt\" style=\"width:110px\" value=\"" + esc(lineRate(x) ? lineRate(x) : "") + "\"></td>" +
+          "<td class=\"num\" id=\"pcAmt" + i + "\">" + (n(x.amount) ? fmt(x.amount) : "–") + "</td>" +
           "<td>" + (it.length > 1 ? "<button type=\"button\" class=\"btn sm\" data-pcrm=\"" + i + "\" aria-label=\"Remove line " + (i + 1) + "\">×</button>" : "") + "</td></tr>";
       }).join("") +
-      "</tbody><tfoot><tr><td colspan=\"4\">Total</td><td class=\"num\" id=\"pcTot\">" + fmt(linesTot(it)) + "</td><td></td></tr></tfoot></table></div>" +
+      "</tbody><tfoot><tr><td colspan=\"6\">Total</td><td class=\"num\" id=\"pcTot\">" + fmt(linesTot(it)) + "</td><td></td></tr></tfoot></table></div>" +
       "<p id=\"pcLeft\" class=\"muted\" style=\"margin:6px 0 0\"></p></div>";
   }
+  // what a voucher depends on, to tell whether a slip's lines changed
+  function sig(it) { return JSON.stringify(it.map(function (l) { return [l.account, Math.round(n(l.amount)), l.project || "", l.dept || ""]; })); }
+  function lineRate(x) { return x.rate != null && x.rate !== "" ? n(x.rate) : n(x.amount) / (n(x.qty) || 1); }
   function readLines() {
     var box = document.getElementById("pcBox"); if (!box) return (F && F.rec && F.rec.items) || [];
     var rows = {};
     box.querySelectorAll("[data-pi]").forEach(function (el) { (rows[+el.getAttribute("data-pi")] = rows[+el.getAttribute("data-pi")] || {})[el.getAttribute("data-pk")] = el.value; });
     return Object.keys(rows).sort(function (a, b) { return a - b; }).map(function (i) {
-      var r = rows[i]; return { desc: String(r.desc || "").trim(), account: r.account || "", project: r.project || "", dept: r.dept || "", amount: n(r.amount) };
+      var r = rows[i], qty = r.qty === "" || r.qty == null ? 1 : n(r.qty), rate = n(r.rate);
+      return { desc: String(r.desc || "").trim(), account: r.account || "", project: r.project || "", dept: r.dept || "", qty: qty, rate: rate, amount: Math.round(qty * rate * 100) / 100 };
     });
   }
   function redrawLines() {
@@ -205,6 +212,7 @@
   function showLeft() {
     var p = document.getElementById("pcLeft"); if (!p) return;
     var it = readLines(), tot = linesTot(it), t = document.getElementById("pcTot"); if (t) t.textContent = fmt(tot);
+    it.forEach(function (l, i) { var c = document.getElementById("pcAmt" + i); if (c) c.textContent = l.amount ? fmt(l.amount) : "–"; });
     var f = slipFund(); if (!f) { p.textContent = "Choose the petty cash fund to see the cash left in it."; p.className = "muted"; return; }
     var prev = F.rec.id ? byId(SLIPS, F.rec.id) : null, x = fundFig(f);
     var left = x.cash + (prev && prev.fund === f.id && slipState(prev).k === "open" ? n(prev.amount) : 0), after = left - tot;
@@ -249,14 +257,14 @@
       if (!r.items.length) return err("Add at least one expense line.");
       for (var i = 0; i < r.items.length; i++) {
         if (!r.items[i].account) return err("Line " + (i + 1) + ": choose the expense account.");
-        if (!(n(r.items[i].amount) > 0)) return err("Line " + (i + 1) + ": enter the amount.");
+        if (!(n(r.items[i].amount) > 0)) return err("Line " + (i + 1) + ": enter the quantity and rate.");
         if (!String(r.items[i].desc || "").trim()) return err("Line " + (i + 1) + ": say what it was for.");
       }
       r.amount = Math.round(r.items.reduce(function (s, l) { return s + n(l.amount); }, 0) * 100) / 100;
       r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
       ["glAccount", "project", "dept"].forEach(function (k) { delete r[k]; });
       var pj = prev && liveJv(SLIPS, prev.id, "pay");
-      if (pj && (n(prev.amount) !== n(r.amount) || JSON.stringify(slipLines(prev)) !== JSON.stringify(r.items) || prev.fund !== r.fund || prev.date !== r.date))
+      if (pj && (n(prev.amount) !== n(r.amount) || sig(slipLines(prev)) !== sig(r.items) || prev.fund !== r.fund || prev.date !== r.date))
         return err("This expense already has voucher " + (pj.ref || "") + ". Reject or reverse that voucher before changing the amounts.");
       if (prev && slipState(prev).k !== "open") return err("This expense is in claim " + slipState(prev).c.claimNo + ", so it can no longer change. Reject that claim's voucher first if it is wrong.");
       var left = fundFig(f).cash + (prev && prev.fund === f.id ? n(prev.amount) : 0);
