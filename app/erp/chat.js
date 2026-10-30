@@ -556,7 +556,7 @@
       api("/sig?after=" + last).then(function (j) {
         last = j.last;
         j.sigs.forEach(handle);
-      }).catch(function () {}).then(function () { sigTimer = setTimeout(pollSig, c ? FAST_MS : document.hidden ? SIG_MS * 2 : SIG_MS); });
+      }).catch(function () {}).then(function () { sigTimer = setTimeout(pollSig, c ? FAST_MS : document.hidden ? SIG_MS * 4 : SIG_MS); });
     }
     function handle(g) {
       var p = g.payload ? JSON.parse(g.payload) : {};
