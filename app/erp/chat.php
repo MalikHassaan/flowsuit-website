@@ -57,7 +57,7 @@ function chat_inject(array $me, string $system = 'erp'): string
     if ($turn = erp_secret('turn_url')) {
         $ice[] = ['urls' => array_map('trim', explode(',', $turn)), 'username' => (string) erp_secret('turn_user'), 'credential' => (string) erp_secret('turn_pass')];
     }
-    $cfg = ['api' => '/erp/chat/api', 'csrf' => $_SESSION['csrf'], 'uid' => (int) $me['id'], 'admin' => (bool) $me['is_admin'], 'max' => CHAT_MAX_FILE, 'ice' => $ice];
+    $cfg = ['api' => '/erp/chat/api', 'sys' => $system, 'csrf' => $_SESSION['csrf'], 'uid' => (int) $me['id'], 'admin' => (bool) $me['is_admin'], 'max' => CHAT_MAX_FILE, 'ice' => $ice];
     return '<style>' . file_get_contents(__DIR__ . '/chat.css') . '</style><script>window.FS_CHAT=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/chat.js') . '</script>' . att_inject($me, $system) . help_inject($system);
 }
@@ -83,16 +83,21 @@ function chat_names(): array
     return array_column(erp_db()->query('SELECT id, name FROM users')->fetchAll(), 'name', 'id');
 }
 
-// Who can be picked for a new chat or group: active users linked to HSEC ERP, and admins (hassan, 2026-10-29).
+// Who can be picked for a new chat or group: inside HSEC ERP the people with HSEC access, inside TAJ the people with
+// TAJ Receivables access, and admins (hassan, 2026-10-29 and 2026-10-30: "as now i moved in taj so only taj people
+// should be shown"). Elsewhere in the ERP, everyone active. The page says which system it is in (X-FS-Sys).
 // Chats already started stay as they are.
 function chat_people(): array
 {
     static $out = null;
     if ($out === null) {
         $out = [];
-        $q = "SELECT id, name FROM users u WHERE active = 1 AND (is_admin = 1 OR EXISTS (SELECT 1 FROM access a WHERE a.user_id = u.id AND a.module = 'hsec'))"
-            . ' ORDER BY name COLLATE NOCASE';
-        foreach (erp_db()->query($q) as $p) {
+        $module = ['hsec' => 'hsec', 'taj' => 'receivables'][(string) ($_SERVER['HTTP_X_FS_SYS'] ?? '')] ?? null;
+        $st = erp_db()->prepare('SELECT id, name FROM users u WHERE active = 1'
+            . ($module ? ' AND (is_admin = 1 OR EXISTS (SELECT 1 FROM access a WHERE a.user_id = u.id AND a.module = ? AND a.level IN (\'view\', \'edit\')))' : '')
+            . ' ORDER BY name COLLATE NOCASE');
+        $st->execute($module ? [$module] : []);
+        foreach ($st as $p) {
             $out[(int) $p['id']] = $p;
         }
     }
