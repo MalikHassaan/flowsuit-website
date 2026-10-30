@@ -407,17 +407,7 @@ function hsec_module(bool $raw, bool $post): void
         $head = stripos($html, '<head>');
         $html = $head !== false ? substr_replace($html, $add, $head + 6, 0) : ($pos !== false ? substr_replace($html, $add, $pos, 0) : $add . $html);
         header('X-Frame-Options: SAMEORIGIN', true);
-        header('Cache-Control: private, no-store');
-        header('Content-Type: text/html; charset=utf-8');
-        $html = erp_slot_html($html);
-        if (function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
-            ini_set('zlib.output_compression', '0');
-            $html = gzencode($html, 6);
-            header('Content-Encoding: gzip');
-            header('Vary: Accept-Encoding');
-        }
-        header('Content-Length: ' . strlen($html));
-        echo $html;
+        erp_send_page(erp_slot_html($html));
         return;
     }
 

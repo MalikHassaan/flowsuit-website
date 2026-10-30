@@ -190,6 +190,50 @@ function erp_slot_html(string $html): string
     return $html . $tag;
 }
 
+// Sends a big app page (TAJ, HSEC: about 2 MB). The browser keeps its copy and asks again on every visit: when nothing
+// changed (same app file, same scripts, same person's settings) the server answers "not modified" and nothing is
+// downloaded. Otherwise it is sent compressed (about 4x smaller; some hosts cut off large PHP responses), and the
+// compressed copy is kept on the server so the same page is not compressed again for every visit.
+function erp_send_page(string $html): void
+{
+    $tag = '"' . md5($html) . '"';
+    header('Content-Type: text/html; charset=utf-8');
+    header_remove('Pragma');
+    header_remove('Expires');
+    header('Cache-Control: private, no-cache');
+    header('Vary: Accept-Encoding');
+    header('ETag: ' . $tag);
+    if (trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $tag) {
+        http_response_code(304);
+        return;
+    }
+    if (function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
+        ini_set('zlib.output_compression', '0');
+        $dir = erp_data_dir() . '/page-cache';
+        $file = $dir . '/' . trim($tag, '"') . '.gz';
+        $gz = is_file($file) ? (string) file_get_contents($file) : '';
+        if ($gz === '') {
+            $gz = gzencode($html, 6);
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0700, true);
+            }
+            @file_put_contents($file, $gz, LOCK_EX);
+            // keep the newest 30 pages
+            $old = glob($dir . '/*.gz') ?: [];
+            if (count($old) > 30) {
+                usort($old, fn($a, $b) => filemtime($a) <=> filemtime($b));
+                foreach (array_slice($old, 0, count($old) - 30) as $f) {
+                    @unlink($f);
+                }
+            }
+        }
+        $html = $gz;
+        header('Content-Encoding: gzip');
+    }
+    header('Content-Length: ' . strlen($html));
+    echo $html;
+}
+
 // Output filter for account tabs. Files and responses that set their own length or encoding are left alone
 // (the pages among them are rewritten before they are compressed).
 function erp_slot_output(string $buf): string
@@ -945,18 +989,7 @@ function erp_dashboard_module(bool $raw, bool $post): void
             return;
         }
         header('X-Frame-Options: SAMEORIGIN', true);
-        header('Cache-Control: private, no-store');
-        header('Content-Type: text/html; charset=utf-8');
-        $html = erp_slot_html($html);
-        // Send it compressed (about 4x smaller): some hosts cut off large PHP responses.
-        if (function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
-            ini_set('zlib.output_compression', '0');
-            $html = gzencode($html, 6);
-            header('Content-Encoding: gzip');
-            header('Vary: Accept-Encoding');
-        }
-        header('Content-Length: ' . strlen($html));
-        echo $html;
+        erp_send_page(erp_slot_html($html));
         return;
     }
 
