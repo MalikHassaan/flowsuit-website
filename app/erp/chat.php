@@ -59,13 +59,11 @@ function chat_room_shows(array $r, array $members, int $uid): bool
     if ((string) $r['sys'] !== '') {
         return $r['sys'] === $sys;
     }
-    $people = chat_people();
-    foreach ($members as $m) {
-        if ($m !== $uid && !isset($people[$m])) {
-            return false;
-        }
-    }
-    return true;
+    // Chat was used in HSEC before TAJ had it, so an older chat whose people all have HSEC access belongs to HSEC
+    // (hassan, 2026-10-30: "staff chat should also be seprated").
+    $others = array_diff($members, [$uid]);
+    $all = fn(string $module) => !array_diff($others, array_keys(chat_people_in($module)));
+    return $sys === 'hsec' ? $all('hsec') : $all('receivables') && !$all('hsec');
 }
 
 function chat_files_dir(): string
@@ -121,10 +119,16 @@ function chat_names(): array
 // Chats already started stay as they are.
 function chat_people(): array
 {
-    static $out = null;
+    return chat_people_in(['hsec' => 'hsec', 'taj' => 'receivables'][chat_sys()] ?? null);
+}
+
+// Active people with access to a module (and admins), or everyone active when no module is given.
+function chat_people_in(?string $module): array
+{
+    static $cache = [];
+    $out = &$cache[(string) $module];
     if ($out === null) {
         $out = [];
-        $module = ['hsec' => 'hsec', 'taj' => 'receivables'][chat_sys()] ?? null;
         $st = erp_db()->prepare('SELECT id, name FROM users u WHERE active = 1'
             . ($module ? ' AND (is_admin = 1 OR EXISTS (SELECT 1 FROM access a WHERE a.user_id = u.id AND a.module = ? AND a.level IN (\'view\', \'edit\')))' : '')
             . ' ORDER BY name COLLATE NOCASE');
