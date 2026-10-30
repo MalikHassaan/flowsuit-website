@@ -75,6 +75,15 @@ function erp_db(): PDO
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $db->exec('PRAGMA foreign_keys = ON');
+    // Many requests share this file (chat and sync polls from every open page): wait for a lock instead of failing,
+    // and let reads go on while one request writes (WAL). If the host's disk cannot do WAL, it stays as it was.
+    $db->exec('PRAGMA busy_timeout = 5000');
+    try {
+        if (strtolower((string) $db->query('PRAGMA journal_mode = WAL')->fetchColumn()) === 'wal') {
+            $db->exec('PRAGMA synchronous = NORMAL');
+        }
+    } catch (Throwable $e) {
+    }
     $db->exec('CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE,
         password_hash TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1,

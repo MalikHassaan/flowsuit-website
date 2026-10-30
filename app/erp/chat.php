@@ -225,8 +225,13 @@ function chat_api(string $sub): void
             }
         }
         // Everything in this person's chats has now reached their ERP ("delivered").
-        $db->prepare('UPDATE chat_members SET last_delivered = (SELECT COALESCE(MAX(id), 0) FROM chat_messages WHERE room_id = chat_members.room_id) WHERE user_id = ?')
-            ->execute([$uid]);
+        // Written only when something new arrived, since a write locks the database for every other request.
+        $lag = $db->prepare('SELECT 1 FROM chat_members WHERE user_id = ? AND last_delivered < (SELECT COALESCE(MAX(id), 0) FROM chat_messages WHERE room_id = chat_members.room_id) LIMIT 1');
+        $lag->execute([$uid]);
+        if ($lag->fetchColumn()) {
+            $db->prepare('UPDATE chat_members SET last_delivered = (SELECT COALESCE(MAX(id), 0) FROM chat_messages WHERE room_id = chat_members.room_id) WHERE user_id = ?')
+                ->execute([$uid]);
+        }
         $people = chat_people();
         $rooms = chat_rooms_for($uid, $names);
         // messages in chats that belong to the other system do not ring or show here
@@ -249,7 +254,6 @@ function chat_api(string $sub): void
 
     if ($sub === '/sig') {
         // Call set-up messages for this person, polled every few seconds so a call rings quickly.
-        $db->prepare('DELETE FROM chat_signals WHERE at < ?')->execute([time() - 120]);
         $after = (int) ($_GET['after'] ?? -1);
         if ($after < 0) { // first look: only learn where "now" is, so old signals are never replayed
             chat_json(['last' => (int) $db->query('SELECT COALESCE(MAX(id), 0) FROM chat_signals')->fetchColumn(), 'sigs' => []]);
@@ -371,6 +375,8 @@ function chat_api(string $sub): void
         if (!$to || !in_array($kind, ['ring', 'accept', 'decline', 'busy', 'offer', 'answer', 'ice', 'hangup'], true)) {
             chat_json(['error' => 'Calls work in one-to-one chats only.'], 400);
         }
+        // old call set-up messages are cleared here, when a call is made, so the frequent /sig polls only read
+        $db->prepare('DELETE FROM chat_signals WHERE at < ?')->execute([time() - 120]);
         $db->prepare('INSERT INTO chat_signals (room_id, from_user, to_user, call, kind, payload, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
             ->execute([$room, $uid, $to, mb_substr((string) ($in['call'] ?? ''), 0, 40), $kind, mb_substr((string) ($in['payload'] ?? ''), 0, 20000), time()]);
         chat_json(['ok' => true]);
