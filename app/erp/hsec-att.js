@@ -136,7 +136,7 @@
   }
   // A PDF in a frame is left out when the voucher is printed (hassan, 2026-10-30: "in print preview it shows blank"), so
   // its pages are drawn as pictures with pdf.js: they show on screen and print with the voucher. Up to 20 pages.
-  var PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/", pdfLib = null;
+  var PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/", pdfLib = null, pdfBusy = 0, printGo = false;
   function loadPdfJs() {
     if (!pdfLib) pdfLib = new Promise(function (ok, bad) {
       if (window.pdfjsLib) { ok(window.pdfjsLib); return; }
@@ -150,6 +150,8 @@
   function pdfPages(fig) {
     var box = fig.querySelector(".fs-pdfpages"), src = fig.getAttribute("data-pdf");
     var frame = function () { box.innerHTML = "<iframe src=\"" + src + "#view=FitH\" title=\"" + h(fig.getAttribute("data-name")) + "\"></iframe><p class=\"muted fs-noprint-note\">This PDF could not be drawn for printing; use open to print it.</p>"; };
+    pdfBusy++;
+    var done = function () { pdfBusy = Math.max(0, pdfBusy - 1); };
     loadPdfJs().then(function (lib) { return lib.getDocument({ url: src, withCredentials: true }).promise; }).then(function (doc) {
       var max = Math.min(doc.numPages, 20), out = [];
       var one = function (i) {
@@ -166,13 +168,13 @@
       return one(1).then(function () {
         box.innerHTML = out.join("") + (doc.numPages > max ? "<p class=\"muted\">Showing the first " + max + " of " + doc.numPages + " pages; use open for the rest.</p>" : "");
       });
-    }).catch(frame);
+    }).catch(frame).then(done, done);
   }
   function fillSheets() {
     document.querySelectorAll(".fs-attsheet[data-keys]:not([data-done])").forEach(function (el) {
       el.setAttribute("data-done", "1");
       files(el.getAttribute("data-keys").split(",").filter(Boolean)).then(function (list) { el.innerHTML = sheetBlock(list); el.querySelectorAll("[data-pdf]").forEach(pdfPages); })
-        .catch(function () { el.innerHTML = "<p class=\"muted\">Supporting documents could not be loaded.</p>"; });
+        .catch(function () { el.innerHTML = "<p class=\"muted fs-atterr\">Supporting documents could not be loaded.</p>"; });
     });
   }
 
@@ -226,6 +228,21 @@
       if (busy) return; busy = true;
       upload(F.c + "/" + F.rec.id, list, say).then(function (errs) { busy = false; panel(); var m = document.getElementById("fsAttMsg"); if (m) m.textContent = errs.length ? errs.join(" ") : "Attached."; });
     });
+    // Print waits until the attached PDFs are drawn, so they are not left out (up to 20 seconds). On window, so it runs
+    // before the app's own click handlers.
+    window.addEventListener("click", function (e) {
+      var p = e.target.closest && e.target.closest("#printSheet");
+      if (!p || printGo) return;
+      var loading = function () { return pdfBusy > 0 || !!document.querySelector("#printLayer .fs-attsheet[data-keys]:not([data-done]), #printLayer .fs-attsheet p.muted:only-child:not(.fs-atterr)"); };
+      if (!loading()) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      var label = p.textContent, t0 = Date.now(); p.textContent = "Preparing attachments…"; p.disabled = true;
+      (function wait() {
+        if (loading() && Date.now() - t0 < 20000) { setTimeout(wait, 250); return; }
+        p.textContent = label; p.disabled = false; printGo = true;
+        try { p.click(); } finally { printGo = false; }
+      })();
+    }, true);
     document.addEventListener("click", function (e) {
       var t = e.target.closest && e.target.closest("[data-attrm],#fsAttView,[data-veye],#cancelBtn");
       if (!t) return;
