@@ -27,7 +27,7 @@
     stages.forEach(function (s) {
       var a = ap.filter(function (y) { return y.stage === s.role && y.action === "Approved"; }).slice(-1)[0];
       if (a && !pap) out.push({ role: s.role, who: [person(a)], st: "Approved", at: a.at, ok: 1 });
-      else out.push({ role: s.role, who: holders(ROLE[low(s.role)] || ""), st: pap ? (j.status === "Posted" ? "Signed on paper" : "To sign") : "Pending", at: "" });
+      else out.push({ role: s.role, who: holders(ROLE[low(s.role)] || ""), st: pap ? "Sign on paper" : "Pending", at: "" });
     });
     if (j.postedBy && j.postedBy.name) out.push({ role: "Posted in the ERP by", who: [person(j.postedBy)], st: "Posted", at: j.postedBy.at, post: 1 });
     return out;

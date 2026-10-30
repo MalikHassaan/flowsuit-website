@@ -1,9 +1,9 @@
 // Puts each person's signature (uploaded in FlowSuit ERP, Users and access) on the printed voucher: in the
-// approval table, beside "Prepared by" and beside every stage that has been approved. window.FS_SIGN comes
+// approval table, beside "Prepared by", "Posted in the ERP by" and every stage approved in the system. window.FS_SIGN comes
 // from hsec_access_inject(); names on vouchers are the signed-in names, which the server fills in.
 (function () {
   var C = window.FS_SIGN;
-  if (!C || !C.on || !C.sigs) return;
+  if (!C || !C.sigs) return;
   function fill() {
     document.querySelectorAll(".pvch table.auth tbody tr").forEach(function (tr) {
       var td = tr.children;
@@ -56,7 +56,9 @@
   }
   function start() {
     if (!document.body) return setTimeout(start, 50);
-    new MutationObserver(function () { fill(); lock(); }).observe(document.body, { childList: true, subtree: true });
+    // with approval on paper, the maker's and poster's signatures still print (they acted in the ERP); the
+    // approvers sign with a pen, and the app's own buttons stay as they are
+    new MutationObserver(function () { fill(); if (C.on) lock(); }).observe(document.body, { childList: true, subtree: true });
   }
   start();
 })();
