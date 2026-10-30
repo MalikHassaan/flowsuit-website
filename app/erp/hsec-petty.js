@@ -1,15 +1,19 @@
 // Petty cash on the imprest system (hassan, 2026-10-30, chose "Full imprest"). Under Treasury › Advances:
 //  * Petty cash funds: one per custodian, with its petty cash account, the float and the bank that tops it up.
 //    Its float voucher (Dr petty cash, Cr bank) goes to voucher approval like any payment.
-//  * Petty cash expenses: one slip per spend, paid from a fund. Refused when the fund has not that much cash left.
+//  * Petty cash expenses: one slip per payment, paid from a fund, with one or more lines (expense account, what for,
+//    project, department, amount). The form shows the cash left in the fund, and a slip is refused when the fund has
+//    not that much. Each slip posts its own cash payment voucher (Dr each expense, Cr petty cash) (hassan, 2026-10-30).
 //  * Replenishment claims: gathers the fund's unclaimed slips up to the claim date into one bank payment voucher
-//    (Dr each expense, Cr bank), which goes through the voucher approval chain (Senior Manager, Group GM Finance)
-//    and brings the cash back up to the float. Slips show Reimbursed once that voucher is posted.
+//    (Dr petty cash, Cr bank), which goes through the voucher approval chain (Senior Manager, Group GM Finance)
+//    and brings the cash back up to the float. Slips show Reimbursed once that voucher is posted. Slips saved before
+//    slips had their own voucher are claimed the old way (Dr each expense instead of petty cash).
 // Also: an advance paid in cash, and the cash side of its settlement, now go to the entity's petty cash account
 // instead of the bank account (they used to credit 121004 whatever the payment method).
 (function () {
   /* global S, MODS, TAB_HOME, POSTERS, DOCNAME, LABEL, COLLS, Store, F, V, LEDGER, openForm, submitForm, readForm,
-     advJournal, accByCode, nextNo, fmt, n, esc, fdate, pill, mono, ledgerTag, liveJv, scheduleRender, todayStr, ENTS */
+     advJournal, accByCode, nextNo, fmt, n, esc, fdate, pill, mono, ledgerTag, liveJv, scheduleRender, todayStr, ENTS,
+     fieldHtml, accOptsGrouped, refName, DEPTS, ssEnhance, ledger */
   var FUNDS = "pcfunds", SLIPS = "pcslips", CLAIMS = "pcclaims";
   var D = function (c) { return Store.data[c] || []; };
   var byId = function (c, id) { return D(c).find(function (r) { return r.id === id; }) || null; };
@@ -37,6 +41,17 @@
     var f = D(FUNDS).find(function (x) { return x.status !== "Closed" && x.entity === ent && x.account; });
     return f ? f.account : "";
   }
+  // a slip's lines; slips saved before lines existed had one account and amount
+  function slipLines(s) {
+    if (Array.isArray(s.items) && s.items.length) return s.items;
+    return s.glAccount ? [{ account: s.glAccount, desc: s.description || "", project: s.project || "", dept: s.dept || "", amount: n(s.amount) }] : [];
+  }
+  // the petty cash account's posted balance for the fund's company
+  function bookBal(f) {
+    var t = 0;
+    if (typeof ledger === "function") ledger().lines.forEach(function (l) { if (l.acc === f.account && l.ent === f.entity) t += l.amt; });
+    return t;
+  }
   function claimSlips(r) {
     return D(SLIPS).filter(function (s) { return s.fund === r.fund && s.claim === r.id; });
   }
@@ -54,21 +69,19 @@
       { k: "notes", l: "Notes", t: "textarea" }],
       cols: [["name", "Fund", function (r) { return esc(r.name) + "<br><span class=\"muted\">" + esc(r.custodian || "") + "</span>"; }], ["entity", "Entity"],
         ["account", "Account", function (r) { return esc(accName(r.account)); }], ["float", "Float", null, "num"],
+        ["book", "Balance in books", function (r) { return fmt(bookBal(r)); }, "num"],
         ["open", "Spent, not claimed", function (r) { return fmt(fundFig(r).open); }, "num"], ["wait", "In claims", function (r) { return fmt(fundFig(r).wait); }, "num"],
         ["cash", "Cash that should be in hand", function (r) { var x = fundFig(r); return fmt(x.cash) + (x.float && x.cash < x.float * 0.2 ? " " + pill("Top up", "warn") : ""); }, "num"],
         ["gl", "Float voucher", function (r) { return ledgerTag(FUNDS, r); }], ["status", "Status", function (r) { return pill(r.status || "Active"); }]],
       sort: function (a, b) { return String(a.name).localeCompare(String(b.name)); } };
     S[SLIPS] = { title: "Petty cash expense", fields: [
       { k: "slipNo", l: "Slip no.", req: 1 }, { k: "date", l: "Date", t: "date", req: 1 }, fundRef,
-      { k: "payee", l: "Paid to", req: 1 }, { k: "description", l: "What it was for", req: 1 },
-      { k: "glAccount", l: "Expense account", t: "acc", req: 1, af: "expense" },
-      { k: "project", l: "Project (if for a project)", t: "ref", ref: "projects", opt: 1 },
-      { k: "dept", l: "Department", t: "dept" },
-      { k: "amount", l: "Amount (PKR)", t: "money", req: 1 },
-      { k: "receipt", l: "Receipt kept", t: "select", o: ["Yes", "No"], hint: "Keep the receipt with the custodian until the claim is approved." }],
+      { k: "payee", l: "Paid to", req: 1 }, { k: "receipt", l: "Receipt kept", t: "select", o: ["Yes", "No"], hint: "Keep the receipts with the custodian until the claim is approved." },
+      { k: "items", l: "Expenses", t: "pclines" }],
       cols: [["slipNo", "Slip", function (r) { return mono(r.slipNo); }], ["date", "Date", function (r) { return fdate(r.date); }],
-        ["fund", "Fund", function (r) { var f = byId(FUNDS, r.fund); return esc(f ? f.name : ""); }], ["payee", "Paid to"], ["description", "For"],
-        ["glAccount", "Account", function (r) { return esc(accName(r.glAccount)); }], ["amount", "Amount", null, "num"],
+        ["fund", "Fund", function (r) { var f = byId(FUNDS, r.fund); return esc(f ? f.name : ""); }], ["payee", "Paid to"], ["description", "For", function (r) { return esc(r.description || slipLines(r).map(function (l) { return l.desc; }).filter(Boolean).join("; ")); }],
+        ["glAccount", "Account", function (r) { var l = slipLines(r); return l.length ? esc(accName(l[0].account)) + (l.length > 1 ? " <span class=\"muted\">+" + (l.length - 1) + " more</span>" : "") : ""; }], ["amount", "Amount", null, "num"],
+        ["gl", "Voucher", function (r) { return ledgerTag(SLIPS, r); }],
         ["st", "Status", function (r) { var x = slipState(r); return x.k === "open" ? pill("Not claimed yet", "warn") : x.k === "paid" ? pill("Reimbursed", "good") + " " + esc(x.c.claimNo) : pill("In claim", "acc") + " " + esc(x.c.claimNo); }]],
       sort: function (a, b) { return String(b.date).localeCompare(String(a.date)) || String(b.slipNo).localeCompare(String(a.slipNo)); } };
     S[CLAIMS] = { title: "Petty cash replenishment claim", fields: [
@@ -90,9 +103,13 @@
       build: function (r) {
         var f = byId(FUNDS, r.fund), sl = claimSlips(r), g = {}, lines = [];
         sl.forEach(function (s) {
-          var k = s.glAccount + "|" + (s.project || "") + "|" + (s.dept || "");
-          var x = g[k] = g[k] || { account: s.glAccount, debit: 0, credit: 0, desc: [], project: s.project || "", dept: s.dept || "" };
-          x.debit += n(s.amount); x.desc.push(s.slipNo + " " + s.description);
+          // a slip with its own voucher has already charged the expense and credited petty cash: this puts the cash back
+          var own = liveJv(SLIPS, s.id, "pay");
+          (own ? [{ account: f.account, amount: n(s.amount), desc: "" }] : slipLines(s)).forEach(function (ln) {
+            var k = ln.account + "|" + (ln.project || "") + "|" + (ln.dept || "");
+            var x = g[k] = g[k] || { account: ln.account, debit: 0, credit: 0, desc: [], project: ln.project || "", dept: ln.dept || "" };
+            x.debit += n(ln.amount); x.desc.push(s.slipNo + (ln.desc ? " " + ln.desc : ""));
+          });
         });
         Object.keys(g).forEach(function (k) {
           var x = g[k], l = { account: x.account, debit: Math.round(x.debit), credit: 0, desc: x.desc.join("; ").slice(0, 200) };
@@ -105,7 +122,21 @@
           narration: "Petty cash replenishment " + r.claimNo + " for " + f.name + ": " + sl.length + " expense" + (sl.length === 1 ? "" : "s") + " (" + sl.map(function (s) { return s.slipNo; }).join(", ") + ")",
           lines: lines };
       } } };
-    Object.assign(DOCNAME, { pcfunds: "petty cash fund", pcclaims: "replenishment claim" });
+    POSTERS[SLIPS] = { pay: { label: "petty cash payment voucher", keys: ["items", "amount", "fund", "date"],
+      ready: function (r) { var f = byId(FUNDS, r.fund); return !f ? "choose the fund" : !f.account ? "set the fund's petty cash account" : slipLines(r).some(function (l) { return !l.account; }) ? "every line needs an expense account" : n(r.amount) > 0 ? true : "enter the amounts"; },
+      build: function (r) {
+        var f = byId(FUNDS, r.fund), sl = slipLines(r), lines = sl.map(function (ln) {
+          var l = { account: ln.account, debit: Math.round(n(ln.amount)), credit: 0, desc: String(ln.desc || "").slice(0, 200) };
+          if (ln.project) l.project = ln.project; if (ln.dept) l.dept = ln.dept;
+          return l;
+        }).filter(function (l) { return l.debit > 0; });
+        var tot = lines.reduce(function (s, l) { return s + l.debit; }, 0);
+        lines.push({ account: f.account, debit: 0, credit: tot, desc: "Paid from " + f.name });
+        return { vtype: "Cash payment voucher", date: r.date, entity: f.entity, payee: r.payee || "", ref: "", dept: (sl[0] || {}).dept || "",
+          narration: "Petty cash " + r.slipNo + " to " + (r.payee || "") + ": " + sl.map(function (l) { return l.desc; }).filter(Boolean).join("; ").slice(0, 150),
+          lines: lines };
+      } } };
+    Object.assign(DOCNAME, { pcfunds: "petty cash fund", pcclaims: "replenishment claim", pcslips: "petty cash expense" });
     LABEL[FUNDS] = "name"; LABEL[CLAIMS] = "claimNo"; LABEL[SLIPS] = "slipNo";
     var m = MODS.e_adv;
     if (m && !m.tabs.some(function (t) { return t[0] === FUNDS; })) {
@@ -127,6 +158,59 @@
     });
   }
 
+  // ---- a slip's expense lines ----
+  var expenseAcc = function (a) { return /^(5|6|72|8)/.test(a.code); };
+  function slipFund() { return F && F.rec ? byId(FUNDS, F.rec.fund) : null; }
+  function linesTot(it) { return Math.round(it.reduce(function (s, l) { return s + n(l.amount); }, 0) * 100) / 100; }
+  function accOpts(v, ent) {
+    var all = Store.data.accounts;
+    Store.data.accounts = all.filter(function (a) { return a.posting === "Header" || a.id === v || expenseAcc(a); });
+    try { return accOptsGrouped(v, ent); } finally { Store.data.accounts = all; }
+  }
+  function linesHtml(it) {
+    var f = slipFund(), ent = f ? f.entity : "", pj = Store.data.projects || [], dp = DEPTS();
+    var sel = function (o, v) { return o.map(function (x) { return "<option value=\"" + esc(x[0]) + "\"" + (x[0] === v ? " selected" : "") + ">" + esc(x[1]) + "</option>"; }).join(""); };
+    return "<div id=\"pcBox\"><div class=\"jhead\"><b>Expenses on this slip</b><button type=\"button\" class=\"btn sm\" id=\"pcAdd\">+ Add line</button></div>" +
+      "<div class=\"tw\"><table class=\"bitab\"><thead><tr><th style=\"min-width:180px\">What it was for *</th><th style=\"min-width:280px\">Expense account *</th><th style=\"min-width:160px\">Project</th><th>Department</th><th class=\"num\">Amount (PKR) *</th><th></th></tr></thead><tbody>" +
+      it.map(function (x, i) {
+        var a = " data-pi=\"" + i + "\" aria-label=\"";
+        return "<tr><td><input" + a + "What it was for, line " + (i + 1) + "\" data-pk=\"desc\" value=\"" + esc(x.desc || "") + "\" placeholder=\"For example: courier\"></td>" +
+          "<td><select" + a + "Expense account, line " + (i + 1) + "\" data-pk=\"account\">" + accOpts(x.account || "", ent) + "</select></td>" +
+          "<td><select" + a + "Project, line " + (i + 1) + "\" data-pk=\"project\"><option value=\"\">None</option>" + sel(pj.map(function (p) { return [p.id, refName("projects", p.id)]; }), x.project || "") + "</select></td>" +
+          "<td><select" + a + "Department, line " + (i + 1) + "\" data-pk=\"dept\"><option value=\"\">Choose…</option>" + sel(dp.concat(x.dept && dp.indexOf(x.dept) < 0 ? [x.dept] : []).map(function (d) { return [d, d]; }), x.dept || "") + "</select></td>" +
+          "<td><input" + a + "Amount, line " + (i + 1) + "\" data-pk=\"amount\" type=\"text\" inputmode=\"decimal\" autocomplete=\"off\" class=\"num amt\" style=\"width:120px\" value=\"" + esc(n(x.amount) ? x.amount : "") + "\"></td>" +
+          "<td>" + (it.length > 1 ? "<button type=\"button\" class=\"btn sm\" data-pcrm=\"" + i + "\" aria-label=\"Remove line " + (i + 1) + "\">×</button>" : "") + "</td></tr>";
+      }).join("") +
+      "</tbody><tfoot><tr><td colspan=\"4\">Total</td><td class=\"num\" id=\"pcTot\">" + fmt(linesTot(it)) + "</td><td></td></tr></tfoot></table></div>" +
+      "<p id=\"pcLeft\" class=\"muted\" style=\"margin:6px 0 0\"></p></div>";
+  }
+  function readLines() {
+    var box = document.getElementById("pcBox"); if (!box) return (F && F.rec && F.rec.items) || [];
+    var rows = {};
+    box.querySelectorAll("[data-pi]").forEach(function (el) { (rows[+el.getAttribute("data-pi")] = rows[+el.getAttribute("data-pi")] || {})[el.getAttribute("data-pk")] = el.value; });
+    return Object.keys(rows).sort(function (a, b) { return a - b; }).map(function (i) {
+      var r = rows[i]; return { desc: String(r.desc || "").trim(), account: r.account || "", project: r.project || "", dept: r.dept || "", amount: n(r.amount) };
+    });
+  }
+  function redrawLines() {
+    var box = document.getElementById("pcBox"); if (!box) return;
+    box.outerHTML = linesHtml(F.rec.items && F.rec.items.length ? F.rec.items : [{}]);
+    if (typeof ssEnhance === "function") ssEnhance(document.getElementById("frm"));
+    showLeft();
+  }
+  // the cash left in the fund before this slip, and after it
+  function showLeft() {
+    var p = document.getElementById("pcLeft"); if (!p) return;
+    var it = readLines(), tot = linesTot(it), t = document.getElementById("pcTot"); if (t) t.textContent = fmt(tot);
+    var f = slipFund(); if (!f) { p.textContent = "Choose the petty cash fund to see the cash left in it."; p.className = "muted"; return; }
+    var prev = F.rec.id ? byId(SLIPS, F.rec.id) : null, x = fundFig(f);
+    var left = x.cash + (prev && prev.fund === f.id && slipState(prev).k === "open" ? n(prev.amount) : 0), after = left - tot;
+    p.innerHTML = "<b>" + esc(f.name) + "</b>: cash left Rs " + fmt(left) + " of the Rs " + fmt(x.float) + " float" +
+      (x.open ? " (Rs " + fmt(x.open) + " spent, not claimed yet" + (x.wait ? "; Rs " + fmt(x.wait) + " in claims" : "") + ")" : x.wait ? " (Rs " + fmt(x.wait) + " in claims)" : "") +
+      ". After this slip: <b>Rs " + fmt(after) + "</b>." + (after < -0.5 ? " Not enough cash: make a replenishment claim first." : after < x.float * 0.2 ? " Running low: make a replenishment claim soon." : "");
+    p.className = after < -0.5 ? "err" : "muted";
+  }
+
   function err(m) { var e = document.getElementById("ferr"); if (e) e.textContent = m; return false; }
   function check() {
     var r = F.rec;
@@ -134,7 +218,19 @@
       var f = byId(FUNDS, r.fund), prev = r.id ? byId(SLIPS, r.id) : null;
       if (!f) return err("Choose the petty cash fund.");
       if (f.status === "Closed") return err(f.name + " is closed.");
-      if (!(n(r.amount) > 0)) return err("Enter the amount.");
+      r.items = (r.items || []).filter(function (l) { return l.account || n(l.amount) || l.desc; });
+      if (!r.items.length) return err("Add at least one expense line.");
+      for (var i = 0; i < r.items.length; i++) {
+        if (!r.items[i].account) return err("Line " + (i + 1) + ": choose the expense account.");
+        if (!(n(r.items[i].amount) > 0)) return err("Line " + (i + 1) + ": enter the amount.");
+        if (!String(r.items[i].desc || "").trim()) return err("Line " + (i + 1) + ": say what it was for.");
+      }
+      r.amount = Math.round(r.items.reduce(function (s, l) { return s + n(l.amount); }, 0) * 100) / 100;
+      r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
+      ["glAccount", "project", "dept"].forEach(function (k) { delete r[k]; });
+      var pj = prev && liveJv(SLIPS, prev.id, "pay");
+      if (pj && (n(prev.amount) !== n(r.amount) || JSON.stringify(slipLines(prev)) !== JSON.stringify(r.items) || prev.fund !== r.fund || prev.date !== r.date))
+        return err("This expense already has voucher " + (pj.ref || "") + ". Reject or reverse that voucher before changing the amounts.");
       if (prev && slipState(prev).k !== "open") return err("This expense is in claim " + slipState(prev).c.claimNo + ", so it can no longer change. Reject that claim's voucher first if it is wrong.");
       var left = fundFig(f).cash + (prev && prev.fund === f.id ? n(prev.amount) : 0);
       if (n(r.amount) > left + 0.5) return err("Only Rs " + fmt(Math.max(0, left)) + " cash is left in " + f.name + ". Make a replenishment claim first.");
@@ -154,7 +250,8 @@
 
   function hook() {
     if (typeof S === "undefined" || !S.advances || typeof POSTERS === "undefined" || typeof Store === "undefined" || !Store.ready ||
-      typeof submitForm !== "function" || typeof openForm !== "function" || typeof advJournal !== "function") return false;
+      typeof submitForm !== "function" || typeof openForm !== "function" || typeof advJournal !== "function" ||
+      typeof fieldHtml !== "function" || typeof readForm !== "function" || typeof accOptsGrouped !== "function") return false;
     defs();
     subscribe();
 
@@ -214,9 +311,45 @@
       };
     })(advJournal);
 
+    // a slip's expense lines, and the cash left in its fund
+    fieldHtml = (function (old) { // eslint-disable-line no-global-assign
+      return function (f, v) {
+        if (!f || f.t !== "pclines") return old.apply(this, arguments);
+        var it = Array.isArray(v) && v.length ? v : F && F.rec ? slipLines(F.rec) : [];
+        return "<div class=\"f w lines\">" + linesHtml(it.length ? it : [{}]) + "</div>";
+      };
+    })(fieldHtml);
+    readForm = (function (old) { // eslint-disable-line no-global-assign
+      return function () {
+        var r = old.apply(this, arguments);
+        if (F && F.c === SLIPS && document.getElementById("pcBox")) { F.rec.items = readLines(); F.rec.amount = linesTot(F.rec.items); }
+        return r;
+      };
+    })(readForm);
+    document.addEventListener("click", function (e) {
+      var t = e.target.closest && e.target.closest("#pcAdd, [data-pcrm]");
+      if (!t || typeof F === "undefined" || !F || F.c !== SLIPS) return;
+      var it = readLines();
+      if (t.id === "pcAdd") it.push({ dept: (it[it.length - 1] || {}).dept || "" });
+      else { it.splice(+t.getAttribute("data-pcrm"), 1); if (!it.length) it.push({}); }
+      F.rec.items = it; redrawLines();
+      if (t.id === "pcAdd") { var el = document.querySelector("[data-pi=\"" + (it.length - 1) + "\"][data-pk=\"desc\"]"); if (el) el.focus(); }
+    });
+    document.addEventListener("input", function (e) { if (typeof F !== "undefined" && F && F.c === SLIPS && e.target.closest && e.target.closest("#pcBox")) showLeft(); });
+    document.addEventListener("change", function (e) {
+      if (typeof F === "undefined" || !F || F.c !== SLIPS || !e.target) return;
+      if (e.target.id === "f_fund") { F.rec.items = readLines(); F.rec.fund = e.target.value; redrawLines(); } // the fund sets the company of the accounts
+      else if (e.target.closest && e.target.closest("#pcBox")) showLeft();
+    });
+
     // the slips a claim takes in, on the claim form
     var last = "";
     new MutationObserver(function () {
+      if (typeof F !== "undefined" && F && F.c === SLIPS) {
+        var fm = document.getElementById("frm"); if (fm && !fm.classList.contains("wide")) fm.classList.add("wide"); // room for the lines table
+        var pl = document.getElementById("pcLeft"); if (pl && !pl.textContent) showLeft();
+        return;
+      }
       if (typeof F === "undefined" || !F || F.c !== CLAIMS || !F.rec) return;
       var calc = document.querySelector("#frm .calc"); if (!calc) return;
       var r = F.rec, sl = r.id ? claimSlips(r) : D(SLIPS).filter(function (s) { return s.fund === r.fund && s.date <= (r.date || "") && slipState(s).k === "open"; });
