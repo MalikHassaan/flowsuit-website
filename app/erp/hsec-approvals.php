@@ -283,15 +283,15 @@ function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
         if ($oldSt !== 'Pending approval') {
             return 'This voucher is not waiting for approval.';
         }
-        // an admin may approve at either stage, but still only once per voucher and never their own
+        // an admin may approve every stage alone, even their own voucher (hassan, 2026-10-30)
         if ($role !== $need && !$admin) {
             return 'Only a ' . $stage . ' can approve or return a voucher at this stage. Your approval role: '
                 . (HSEC_JV_ROLES[$role] ?? 'none') . '.';
         }
-        if ($maker && $sameMaker($maker)) {
+        if ($maker && $sameMaker($maker) && !$admin) {
             return 'You prepared this voucher, so you cannot approve it.';
         }
-        if (in_array($uid, $given, true)) {
+        if (in_array($uid, $given, true) && !$admin) {
             return 'You have already approved this voucher at an earlier stage.';
         }
         if ($need === 'gmf' && !isset($given[HSEC_JV_STAGES['senior']]) && !$admin) {
@@ -307,7 +307,7 @@ function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
     if ($newSt === 'Approved' && $oldSt !== 'Approved' && count(array_intersect(array_values(HSEC_JV_STAGES), array_keys($given))) < count(HSEC_JV_STAGES)) {
         return 'A voucher is approved only after the Senior Manager and the Group GM Finance have both approved it.';
     }
-    if ($newSt === 'Posted' && $oldSt !== 'Posted' && !$fromDoc && $old !== null && $oldSt !== 'Approved') {
+    if ($newSt === 'Posted' && $oldSt !== 'Posted' && !$fromDoc && $old !== null && $oldSt !== 'Approved' && !$admin) {
         return 'This voucher has to be approved by the Senior Manager and the Group GM Finance before it is posted.';
     }
     return null;
@@ -326,6 +326,16 @@ const HSEC_HOOKS = [
         => 'const JV_POSTERS = ["admin","gmf"].concat(window.FS_JV === "gmf" ? ["fs"] : []);',
 ];
 
+// An admin may approve every stage alone, even their own voucher, and post one still waiting for approval (hassan, 2026-10-30).
+const HSEC_ADMIN_HOOKS = [
+    'if (nx && r.maker && r.maker.name.toLowerCase() === name.toLowerCase()){'
+        => 'if (nx && !window.FS_ADMIN && r.maker && r.maker.name.toLowerCase() === name.toLowerCase()){',
+    'if (nx && (r.approvals||[]).some(a => a.action === "Approved" && a.name.toLowerCase() === name.toLowerCase())){'
+        => 'if (nx && !window.FS_ADMIN && (r.approvals||[]).some(a => a.action === "Approved" && a.name.toLowerCase() === name.toLowerCase())){',
+    'if (st === "Approved") extra = `<button type="button" class="btn" id="jvPost">Post</button>`;'
+        => 'if (st === "Approved") extra = `<button type="button" class="btn" id="jvPost">Post</button>`; if (window.FS_ADMIN && st === "Pending approval") extra += `<button type="button" class="btn" id="jvPost">Post now (admin)</button>`;',
+];
+
 // Applies the hooks only if every one of them matches exactly once (a new app version may have changed them).
 function hsec_app_hooks(string $html): string
 {
@@ -335,7 +345,14 @@ function hsec_app_hooks(string $html): string
             return $html;
         }
     }
-    return strtr($html, HSEC_HOOKS);
+    $html = strtr($html, HSEC_HOOKS);
+    // Optional ones, each applied only where it still matches, so a new app version loses only that one.
+    foreach (HSEC_ADMIN_HOOKS as $find => $put) {
+        if (substr_count($html, $find) === 1) {
+            $html = str_replace($find, $put, $html);
+        }
+    }
+    return $html;
 }
 
 // Settings for the page: menu areas, approval role, signatures, and the signed-in name for every "your name" box.
@@ -346,7 +363,7 @@ function hsec_access_inject(array $me): string
     $cfg = ['jv' => (string) ($me['hsec_jv'] ?? ''), 'admin' => (bool) $me['is_admin'], 'on' => hsec_approvals_on(), 'sigs' => hsec_sigs(),
         'me' => 'u' . (int) $me['id'], 'people' => hsec_signers()];
     return '<script>' . ($mods !== null ? 'window.FS_MODS=' . json_encode($mods, $flags) . ';' : '')
-        . 'window.FS_JV=' . json_encode($cfg['jv']) . ';window.FS_SIGN=' . json_encode($cfg, $flags) . ';'
+        . 'window.FS_JV=' . json_encode($cfg['jv']) . ';window.FS_ADMIN=' . ($cfg['admin'] ? 'true' : 'false') . ';window.FS_SIGN=' . json_encode($cfg, $flags) . ';'
         // Tabs signed in to different accounts share this browser's storage, so each tab writes its own name back
         // whenever it is used, for the app's "your name" boxes.
         . '(function(){var n=' . json_encode($me['name'], $flags) . ',w=function(){try{localStorage.setItem("hsec-erp-name",n);}catch(e){}};w();'
