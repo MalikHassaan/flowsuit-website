@@ -74,7 +74,7 @@ function erp_backup_send(): void
     $zip = new ZipArchive();
     $zip->open($tmp . '.zip', ZipArchive::CREATE);
     $zip->addFile($tmp . '.sqlite', 'erp.sqlite');
-    foreach (['modules', 'taj-assets', 'chat-files', 'att-photos', 'signatures'] as $sub) {
+    foreach (['modules', 'taj-assets', 'chat-files', 'att-photos', 'signatures', 'hsec-att'] as $sub) {
         foreach (glob($dir . '/' . $sub . '/*') ?: [] as $file) {
             if (is_file($file)) {
                 $zip->addFile($file, $sub . '/' . basename($file));
@@ -114,7 +114,7 @@ function erp_backup_send(): void
         erp_backup_set('backup_unlocked', erp_now());
     }
     $zip->addFromString('README.txt', "FlowSuit ERP backup made " . erp_now() . " (Asia/Karachi).\r\n"
-        . "erp.sqlite = users, access, reports and TAJ records. modules = TAJ dashboard file. taj-assets = saved TAJ exports. chat-files = files sent in the staff chat. att-photos = check-in selfies. signatures = HSEC voucher signatures. stats.sqlite = website visitor numbers. website = the website's files as they run on the server.\r\n"
+        . "erp.sqlite = users, access, reports and TAJ records. modules = TAJ dashboard file. taj-assets = saved TAJ exports. chat-files = files sent in the staff chat. att-photos = check-in selfies. signatures = HSEC voucher signatures. hsec-att = supporting documents attached to HSEC vouchers and records. stats.sqlite = website visitor numbers. website = the website's files as they run on the server.\r\n"
         . ($locked ? "The files are locked with your backup password (AES-256). Open this .zip with 7-Zip (7-zip.org); Windows' own zip viewer cannot open AES-locked files.\r\n" : "")
         . "To restore, send this file to whoever looks after the website.\r\n");
     $zip->close();

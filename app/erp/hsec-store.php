@@ -137,6 +137,8 @@ function hsec_api(string $rest): void
         hsec_sync(max(0, (int) ($_GET['v'] ?? 0)));
     } elseif ($rest === '/doc' && $method === 'POST') {
         hsec_write($me);
+    } elseif (str_starts_with($rest, '/att')) {
+        hsec_att_api($me, substr($rest, 4), $method);
     }
     taj_fail(404, 'not_found', 'Unknown request');
 }
