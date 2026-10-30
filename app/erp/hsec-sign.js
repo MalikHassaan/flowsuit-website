@@ -24,7 +24,7 @@
   }
   // Once a voucher is sent for approval, only the Senior Manager and the Group GM Finance may change, cancel or
   // reverse it. The server refuses anyone else; this just takes the buttons away and says why.
-  var senior = C.jv === "senior" || C.jv === "gmf";
+  var senior = C.jv === "senior" || C.jv === "gmf" || !!C.admin;
   function lock() {
     var frm = document.getElementById("frm");
     if (!frm) return;
