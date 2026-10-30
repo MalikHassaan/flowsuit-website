@@ -29,7 +29,7 @@
   }
   function hue(n) { var h = 0; String(n || "").split("").forEach(function (c) { h = (h * 31 + c.charCodeAt(0)) % 360; }); return ' style="background:hsl(' + h + ',55%,40%)"'; }
   function api(path, body) {
-    var o = { credentials: "same-origin", headers: { "X-CSRF-Token": C.csrf } };
+    var o = { credentials: "same-origin", headers: { "X-CSRF-Token": C.csrf, "X-FS-Sys": C.sys || "erp" } };
     if (body) {
       o.method = "POST";
       if (body instanceof FormData) o.body = body;
