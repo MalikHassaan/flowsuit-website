@@ -12,6 +12,11 @@
 (function () {
   /* global Store, F, srcJvs, approverName, nextVoucherNo, todayStr, n, isLocked, lockTxt, toast, closeForm, openForm, drawForm, DOCNAME, sheetOpen, jvSheet */
   var ask = "", STRIP = ["id", "jvId", "jvIds", "status", "approvals", "postedBy", "maker", "sample", "reversedBy", "source", "claim", "signoff"];
+  // the app's own list of a document's vouchers, or the same thing worked out here
+  var srcJ = function (c, id) {
+    if (typeof srcJvs === "function") return srcJvs(c, id);
+    return Store.data.journals.filter(function (j) { return j.source && j.source.c === c && (j.source.id === id || (j.source.ids || []).indexOf(id) >= 0); });
+  };
   var posted = function (j) { return j.status === "Posted" || j.status === "Approved"; };
   function target() {
     if (typeof F === "undefined" || !F || !F.rec || !F.rec.id) return null;
@@ -24,11 +29,11 @@
       }
       return { c: "journals", rec: j }; // manual, QuickBooks-imported, or its document is gone
     }
-    var js = srcJvs(F.c, F.rec.id).filter(function (x) { return posted(x) && !x.reversedBy && !x.reversalOf; });
+    var js = srcJ(F.c, F.rec.id).filter(function (x) { return posted(x) && !x.reversedBy && !x.reversalOf; });
     return js.length ? { c: F.c, rec: Store.data[F.c].find(function (x) { return x.id === F.rec.id; }) || F.rec } : null;
   }
   function vouchers(t) {
-    return t.c === "journals" ? [t.rec] : srcJvs(t.c, t.rec.id).filter(function (x) { return !x.reversalOf && !x.reversedBy; });
+    return t.c === "journals" ? [t.rec] : srcJ(t.c, t.rec.id).filter(function (x) { return !x.reversalOf && !x.reversedBy; });
   }
   // another record that points at this one (a claim holding a slip, a payment against a bill...) blocks the delete
   function usedBy(t) {
@@ -97,15 +102,17 @@
     var t = target(); if (!t) return;
     var add = function (kind, label, cls) {
       var b = document.createElement("button"); b.type = "button"; b.className = "btn " + cls; b.setAttribute("data-fsundo", kind); b.textContent = label;
-      var sp = act.querySelector(".spacer"); act.insertBefore(b, sp || null);
+      // next to Delete (hassan: "where there is a delete button, add a reverse button as well")
+      var del = act.querySelector("#delBtn"), sp = act.querySelector(".spacer");
+      if (del) { del.parentNode.insertBefore(b, del); b.style.marginRight = "8px"; } else act.insertBefore(b, sp || null);
     };
     var doc = t.c === "journals" ? "" : " " + (DOCNAME[t.c] || "record");
-    if (t.c === "journals" && !act.querySelector("#jvReverse")) add("rev", "Reverse voucher", "danger");
+    if (t.c === "journals" && !act.querySelector("#jvReverse")) add("rev", "Reverse", "danger");
     add("fix", "Reverse and correct" + (F.c === "journals" ? doc : ""), "");
     if (t.c !== "journals") add("del", "Reverse and delete" + (F.c === "journals" ? doc : ""), "danger");
   }
   function hook() {
-    if (typeof Store === "undefined" || !Store.data || typeof drawForm !== "function" || typeof srcJvs !== "function" || typeof nextVoucherNo !== "function" || typeof jvSheet !== "function") return false;
+    if (typeof Store === "undefined" || !Store.data || typeof drawForm !== "function" || typeof nextVoucherNo !== "function" || typeof jvSheet !== "function") return false;
     drawForm = (function (old) { // eslint-disable-line no-global-assign
       return function () { var out = old.apply(this, arguments); ask = ""; try { buttons(); } catch (e) { console.warn(e); } return out; };
     })(drawForm);
@@ -123,7 +130,7 @@
       // a record whose vouchers were all reversed already can be deleted
       var d = e.target.closest && e.target.closest("#delBtn");
       if (d && F && F.rec && F.rec.id && F.c !== "journals") {
-        var js = srcJvs(F.c, F.rec.id), live = js.filter(function (x) { return posted(x) && !x.reversalOf && !x.reversedBy; });
+        var js = srcJ(F.c, F.rec.id), live = js.filter(function (x) { return posted(x) && !x.reversalOf && !x.reversedBy; });
         if (js.some(posted) && !live.length) {
           e.preventDefault(); e.stopImmediatePropagation();
           if (!confirm("Its vouchers are already reversed. Delete this " + (DOCNAME[F.c] || "record") + "?")) return;
@@ -131,11 +138,23 @@
           return;
         }
       }
+      // Delete on a posted voucher, or on a document whose voucher is posted, starts the reversal instead
+      if (d && F && F.rec && F.rec.id && target()) {
+        var t = target(), rb = document.querySelector(t.c === "journals" ? "[data-fsundo=rev],#jvReverse" : "[data-fsundo=del]");
+        if (rb) { e.preventDefault(); e.stopImmediatePropagation(); if (rb.id === "jvReverse") rb.click(); else run(rb.getAttribute("data-fsundo"), rb); return; }
+      }
       var b = e.target.closest && e.target.closest("[data-fsundo]"); if (!b) return;
       e.preventDefault(); e.stopImmediatePropagation(); run(b.getAttribute("data-fsundo"), b);
     }, true);
     // the app's own "Reverse it instead" message now points at the buttons on this screen
     new MutationObserver(function () {
+      try { buttons(); } catch (x) { console.warn(x); }
+      // newer app files have their own empty "Supporting documents (invoice, receipt, approval)" box; ours (hsec-att.js) keeps the files
+      document.querySelectorAll("#frm div, #frm section").forEach(function (x) {
+        if (x.hidden || x.id === "fsAtt" || x.closest("#fsAtt") || x.children.length > 8) return;
+        var hd = x.firstElementChild;
+        if (hd && /^\W*Supporting documents \(invoice/.test(hd.textContent) && /No documents yet/.test(x.textContent) && !x.querySelector("#fsAtt")) x.hidden = true;
+      });
       var er = document.getElementById("ferr");
       if (er && /cannot be deleted\. Reverse it instead\.$/.test(er.textContent) && document.querySelector("[data-fsundo]")) er.textContent = er.textContent.replace(/Reverse it instead\.$/, "Use Reverse and delete, or Reverse and correct, on this screen.");
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
