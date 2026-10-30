@@ -304,8 +304,16 @@ function hsec_jv_check(array $me, ?array $old, ?array &$new): ?string
         }
     }
     $new['approvals'] = $newAp;
-    if ($newSt === 'Approved' && $oldSt !== 'Approved' && count(array_intersect(array_values(HSEC_JV_STAGES), array_keys($given))) < count(HSEC_JV_STAGES)) {
+    $complete = count(array_intersect(array_values(HSEC_JV_STAGES), array_keys($given))) === count(HSEC_JV_STAGES);
+    if ($newSt === 'Approved' && $oldSt !== 'Approved' && !$complete) {
         return 'A voucher is approved only after the Senior Manager and the Group GM Finance have both approved it.';
+    }
+    // The last approval posts the voucher; there is no separate Post step (hassan, 2026-10-30).
+    $justApproved = $complete && $oldSt === 'Pending approval' && in_array($newSt, ['Approved', 'Posted'], true) && count($newAp) > count($oldAp);
+    if ($justApproved) {
+        $new['status'] = $newSt = 'Posted';
+        $new['postedBy'] = ['name' => $me['name'], 'uid' => $uid, 'at' => $now, 'auto' => true];
+        return null;
     }
     if ($newSt === 'Posted' && $oldSt !== 'Posted' && !$fromDoc && $old !== null && $oldSt !== 'Approved' && !$admin) {
         return 'This voucher has to be approved by the Senior Manager and the Group GM Finance before it is posted.';
@@ -326,12 +334,16 @@ const HSEC_HOOKS = [
         => 'const JV_POSTERS = ["admin","gmf"].concat(window.FS_JV === "gmf" ? ["fs"] : []);',
 ];
 
-// An admin may approve every stage alone, even their own voucher, and post one still waiting for approval (hassan, 2026-10-30).
+// An admin may approve every stage alone, even their own voucher, and post one still waiting for approval; the last
+// approval posts the voucher at once (hassan, 2026-10-30).
 const HSEC_ADMIN_HOOKS = [
     'if (nx && r.maker && r.maker.name.toLowerCase() === name.toLowerCase()){'
         => 'if (nx && !window.FS_ADMIN && r.maker && r.maker.name.toLowerCase() === name.toLowerCase()){',
     'if (nx && (r.approvals||[]).some(a => a.action === "Approved" && a.name.toLowerCase() === name.toLowerCase())){'
         => 'if (nx && !window.FS_ADMIN && (r.approvals||[]).some(a => a.action === "Approved" && a.name.toLowerCase() === name.toLowerCase())){',
+    'if (t.id === "jvReject") r.status = "Rejected"; else if (!jvNext(r)) r.status = "Approved"; }'
+        => 'if (t.id === "jvReject") r.status = "Rejected"; else if (!jvNext(r)){ r.status = "Posted"; r.postedBy = {name, at:now, auto:true}; } }',
+    '"Fully approved – ready to post"' => '"Approved and posted to the ledger"',
     'if (st === "Approved") extra = `<button type="button" class="btn" id="jvPost">Post</button>`;'
         => 'if (st === "Approved") extra = `<button type="button" class="btn" id="jvPost">Post</button>`; if (window.FS_ADMIN && st === "Pending approval") extra += `<button type="button" class="btn" id="jvPost">Post now (admin)</button>`;',
 ];
