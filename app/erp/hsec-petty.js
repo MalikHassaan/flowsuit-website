@@ -27,14 +27,14 @@
     return { k: "claim", c: c, j: j };
   }
   function fundFig(f) {
-    var open = 0, wait = 0;
+    var open = 0, wait = 0, paid = 0;
     D(SLIPS).forEach(function (s) {
       if (s.fund !== f.id) return;
       var k = slipState(s).k;
-      if (k === "open") open += n(s.amount); else if (k === "claim") wait += n(s.amount);
+      if (k === "open") open += n(s.amount); else if (k === "claim") wait += n(s.amount); else paid += n(s.amount);
     });
     var fl = n(f.float);
-    return { float: fl, open: open, wait: wait, cash: fl - open - wait };
+    return { float: fl, open: open, wait: wait, paid: paid, spent: open + wait + paid, cash: fl - open - wait };
   }
   // the active fund's petty cash account for an entity, for cash-paid advances
   function pettyAcc(ent) {
@@ -60,6 +60,7 @@
     var fundRef = { k: "fund", l: "Petty cash fund", t: "ref", ref: FUNDS, req: 1, rf: function (f) { return f.status !== "Closed"; } };
     S[FUNDS] = { title: "Petty cash fund", fields: [
       { k: "name", l: "Fund name", req: 1, hint: "For example: Head office petty cash." },
+      { k: "location", l: "Location / site", hint: "Where the cash is kept, for example: Head office, Karachi site." },
       { k: "entity", l: "Entity", t: "entity", req: 1 },
       { k: "custodian", l: "Custodian", req: 1, hint: "The person who holds the cash and signs the slips." },
       { k: "account", l: "Petty cash account", t: "acc", req: 1, af: "petty", hint: "The petty cash / cash in hand account in the chart." },
@@ -67,11 +68,13 @@
       { k: "bankAccount", l: "Topped up from (bank account)", t: "acc", req: 1, af: "bank" },
       { k: "status", l: "Status", t: "select", o: ["Active", "Closed"] },
       { k: "notes", l: "Notes", t: "textarea" }],
-      cols: [["name", "Fund", function (r) { return esc(r.name) + "<br><span class=\"muted\">" + esc(r.custodian || "") + "</span>"; }], ["entity", "Entity"],
-        ["account", "Account", function (r) { return esc(accName(r.account)); }], ["float", "Float", null, "num"],
-        ["book", "Balance in books", function (r) { return fmt(bookBal(r)); }, "num"],
+      // one row per location: who holds it, what was given, what was spent, what is left (hassan, 2026-10-30)
+      cols: [["name", "Fund", function (r) { return esc(r.name) + "<br><span class=\"muted\">" + esc(r.custodian || "") + "</span>"; }],
+        ["location", "Location"], ["entity", "Entity"], ["float", "Given (float)", null, "num"],
+        ["spent", "Spent to date", function (r) { return fmt(fundFig(r).spent); }, "num"], ["paid", "Reimbursed", function (r) { return fmt(fundFig(r).paid); }, "num"],
         ["open", "Spent, not claimed", function (r) { return fmt(fundFig(r).open); }, "num"], ["wait", "In claims", function (r) { return fmt(fundFig(r).wait); }, "num"],
         ["cash", "Cash that should be in hand", function (r) { var x = fundFig(r); return fmt(x.cash) + (x.float && x.cash < x.float * 0.2 ? " " + pill("Top up", "warn") : ""); }, "num"],
+        ["book", "Balance in books", function (r) { return fmt(bookBal(r)); }, "num"],
         ["gl", "Float voucher", function (r) { return ledgerTag(FUNDS, r); }], ["status", "Status", function (r) { return pill(r.status || "Active"); }]],
       sort: function (a, b) { return String(a.name).localeCompare(String(b.name)); } };
     S[SLIPS] = { title: "Petty cash expense", fields: [
@@ -209,6 +212,30 @@
       (x.open ? " (Rs " + fmt(x.open) + " spent, not claimed yet" + (x.wait ? "; Rs " + fmt(x.wait) + " in claims" : "") + ")" : x.wait ? " (Rs " + fmt(x.wait) + " in claims)" : "") +
       ". After this slip: <b>Rs " + fmt(after) + "</b>." + (after < -0.5 ? " Not enough cash: make a replenishment claim first." : after < x.float * 0.2 ? " Running low: make a replenishment claim soon." : "");
     p.className = after < -0.5 ? "err" : "muted";
+  }
+
+  // on a fund's form: where its money went, by expense head and by month
+  var lastFund = "";
+  function fundPanel() {
+    var calc = document.querySelector("#frm .calc"); if (!calc) return;
+    var f = byId(FUNDS, F.rec.id); if (!f) return;
+    var head = {}, mon = {}, x = fundFig(f);
+    D(SLIPS).forEach(function (s) {
+      if (s.fund !== f.id) return;
+      slipLines(s).forEach(function (l) { var k = l.account || ""; head[k] = (head[k] || 0) + n(l.amount); });
+      var m = String(s.date || "").slice(0, 7); mon[m] = (mon[m] || 0) + n(s.amount);
+    });
+    var hk = Object.keys(head).sort(function (a, b) { return head[b] - head[a]; }), mk = Object.keys(mon).sort().reverse().slice(0, 12);
+    var tab = function (t, rows) { return "<h4 style=\"margin:10px 0 6px\">" + t + "</h4>" + (rows.length ? "<div class=\"tw\"><table><tbody>" + rows.join("") + "</tbody></table></div>" : "<p class=\"muted\" style=\"margin:0\">Nothing spent yet.</p>"); };
+    var h = "<div id=\"fsPcFund\"><h4 style=\"margin:0 0 6px\">" + esc(f.name) + (f.location ? " · " + esc(f.location) : "") + " (custodian " + esc(f.custodian || "") + ")</h4>" +
+      "<dl><dt>Given (float)</dt><dd>" + fmt(x.float) + "</dd><dt>Spent to date</dt><dd>" + fmt(x.spent) + "</dd><dt>Reimbursed</dt><dd>" + fmt(x.paid) + "</dd>" +
+      "<dt>Spent, not claimed / in claims</dt><dd>" + fmt(x.open) + " / " + fmt(x.wait) + "</dd><dt>Cash that should be in hand</dt><dd>" + fmt(x.cash) + "</dd><dt>Balance in books</dt><dd>" + fmt(bookBal(f)) + "</dd></dl>" +
+      tab("Spent by expense head", hk.map(function (k) { return "<tr><td>" + esc(accName(k) || "No account") + "</td><td class=\"num\">" + fmt(head[k]) + "</td></tr>"; })) +
+      tab("Spent by month", mk.map(function (m) { return "<tr><td>" + esc(m) + "</td><td class=\"num\">" + fmt(mon[m]) + "</td></tr>"; })) + "</div>";
+    var cur = document.getElementById("fsPcFund");
+    if (cur && cur.parentNode === calc && h === lastFund) return;
+    lastFund = h; if (cur) cur.remove();
+    calc.insertAdjacentHTML("afterbegin", h);
   }
 
   function err(m) { var e = document.getElementById("ferr"); if (e) e.textContent = m; return false; }
@@ -350,6 +377,7 @@
         var pl = document.getElementById("pcLeft"); if (pl && !pl.textContent) showLeft();
         return;
       }
+      if (typeof F !== "undefined" && F && F.c === FUNDS && F.rec && F.rec.id) { fundPanel(); return; }
       if (typeof F === "undefined" || !F || F.c !== CLAIMS || !F.rec) return;
       var calc = document.querySelector("#frm .calc"); if (!calc) return;
       var r = F.rec, sl = r.id ? claimSlips(r) : D(SLIPS).filter(function (s) { return s.fund === r.fund && s.date <= (r.date || "") && slipState(s).k === "open"; });
