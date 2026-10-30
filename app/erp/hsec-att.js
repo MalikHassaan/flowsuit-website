@@ -131,13 +131,47 @@
     return "<h4>Supporting documents (" + list.length + ")</h4>" + list.map(function (f) {
       var cap = "<figcaption>" + h(f.name) + " · " + kb(f.size) + (f.by ? " · attached by " + h(f.by) : "") + " · <a href=\"" + url(f) + "\" target=\"_blank\" rel=\"noopener\">open</a> · <a href=\"" + url(f, 1) + "\">download</a></figcaption>";
       return /^image\//.test(f.mime) ? "<figure class=\"fs-attfig\"><a href=\"" + url(f) + "\" target=\"_blank\" rel=\"noopener\"><img src=\"" + url(f) + "\" alt=\"" + h(f.name) + "\"></a>" + cap + "</figure>"
-        : "<figure class=\"fs-attfig pdf\"><iframe src=\"" + url(f) + "#view=FitH\" title=\"" + h(f.name) + "\" loading=\"lazy\"></iframe>" + cap + "</figure>";
+        : "<figure class=\"fs-attfig pdf\" data-pdf=\"" + url(f) + "\" data-name=\"" + h(f.name) + "\"><div class=\"fs-pdfpages\"><p class=\"muted\">Loading " + h(f.name) + "…</p></div>" + cap + "</figure>";
     }).join("");
+  }
+  // A PDF in a frame is left out when the voucher is printed (hassan, 2026-10-30: "in print preview it shows blank"), so
+  // its pages are drawn as pictures with pdf.js: they show on screen and print with the voucher. Up to 20 pages.
+  var PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/", pdfLib = null;
+  function loadPdfJs() {
+    if (!pdfLib) pdfLib = new Promise(function (ok, bad) {
+      if (window.pdfjsLib) { ok(window.pdfjsLib); return; }
+      var sc = document.createElement("script"); sc.src = PDFJS + "pdf.min.js";
+      sc.onload = function () { if (!window.pdfjsLib) { bad(new Error("pdf.js")); return; } window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js"; ok(window.pdfjsLib); };
+      sc.onerror = function () { pdfLib = null; bad(new Error("pdf.js")); };
+      document.head.appendChild(sc);
+    });
+    return pdfLib;
+  }
+  function pdfPages(fig) {
+    var box = fig.querySelector(".fs-pdfpages"), src = fig.getAttribute("data-pdf");
+    var frame = function () { box.innerHTML = "<iframe src=\"" + src + "#view=FitH\" title=\"" + h(fig.getAttribute("data-name")) + "\"></iframe><p class=\"muted fs-noprint-note\">This PDF could not be drawn for printing; use open to print it.</p>"; };
+    loadPdfJs().then(function (lib) { return lib.getDocument({ url: src, withCredentials: true }).promise; }).then(function (doc) {
+      var max = Math.min(doc.numPages, 20), out = [];
+      var one = function (i) {
+        if (i > max) return Promise.resolve();
+        return doc.getPage(i).then(function (pg) {
+          var v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(2.5, 1400 / v1.width) });
+          var cv = document.createElement("canvas"); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+          var g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+          return pg.render({ canvasContext: g, viewport: vp }).promise.then(function () {
+            out.push("<img src=\"" + cv.toDataURL("image/jpeg", 0.85) + "\" alt=\"Page " + i + "\">"); return one(i + 1);
+          });
+        });
+      };
+      return one(1).then(function () {
+        box.innerHTML = out.join("") + (doc.numPages > max ? "<p class=\"muted\">Showing the first " + max + " of " + doc.numPages + " pages; use open for the rest.</p>" : "");
+      });
+    }).catch(frame);
   }
   function fillSheets() {
     document.querySelectorAll(".fs-attsheet[data-keys]:not([data-done])").forEach(function (el) {
       el.setAttribute("data-done", "1");
-      files(el.getAttribute("data-keys").split(",").filter(Boolean)).then(function (list) { el.innerHTML = sheetBlock(list); })
+      files(el.getAttribute("data-keys").split(",").filter(Boolean)).then(function (list) { el.innerHTML = sheetBlock(list); el.querySelectorAll("[data-pdf]").forEach(pdfPages); })
         .catch(function () { el.innerHTML = "<p class=\"muted\">Supporting documents could not be loaded.</p>"; });
     });
   }
@@ -223,8 +257,8 @@
     ".fs-attnone{margin:0}.fs-veye{display:inline-flex;align-items:center;gap:1px;margin-left:4px;padding:1px 4px;border:1px solid var(--line,#d6dbe3);border-radius:6px;background:var(--panel,#fff);color:var(--acc,#1F6FB8);cursor:pointer;vertical-align:middle;line-height:1}" +
     ".fs-veye:hover{background:#eaf2fb}.fs-veye sup{font-size:10px;font-weight:700;margin-left:1px}" +
     ".fs-attsheet{margin-top:14px}.fs-attfig{margin:10px 0;page-break-inside:avoid;break-inside:avoid}.fs-attfig img{display:block;max-width:100%;max-height:900px;margin:0 auto;border:1px solid #ddd}" +
-    ".fs-attfig iframe{display:block;width:100%;height:720px;border:1px solid #ddd}.fs-attfig figcaption{font-size:11px;color:#555;margin-top:4px}" +
-    "@media print{.fs-veye,.fs-attbox{display:none!important}.fs-attfig img{max-height:24cm}.fs-attfig.pdf iframe{display:none}.fs-attfig a{color:inherit;text-decoration:none}}";
+    ".fs-attfig iframe{display:block;width:100%;height:720px;border:1px solid #ddd}.fs-pdfpages img{display:block;width:100%;margin:0 0 8px;border:1px solid #ddd;break-inside:avoid;page-break-inside:avoid}.fs-attfig figcaption{font-size:11px;color:#555;margin-top:4px}" +
+    "@media print{.fs-veye,.fs-attbox{display:none!important}.fs-attfig img{max-height:24cm}.fs-attfig.pdf iframe,.fs-noprint-note{display:none}.fs-pdfpages img{max-height:25cm;object-fit:contain}.fs-attfig a{color:inherit;text-decoration:none}}";
   document.head.appendChild(css);
   function start() { if (!hook()) setTimeout(start, 300); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
