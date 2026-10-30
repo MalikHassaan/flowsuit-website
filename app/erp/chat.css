@@ -125,3 +125,9 @@ html:has(#frm) .drawer{padding-bottom:150px!important}
 /* drag a file onto a conversation */
 #fs-chat .fsc-panel.is-drop{outline:3px dashed #1F6FB8;outline-offset:-6px}
 #fs-chat .fsc-panel.is-drop::after{content:"Drop the file to attach it";position:absolute;inset:0;display:grid;place-items:center;background:rgba(239,246,255,.92);color:#1F6FB8;font:700 16px system-ui,sans-serif;pointer-events:none;border-radius:inherit;z-index:5}
+#fs-chat .fsc-fab.is-buzz{animation:fsc-buzz .7s ease-in-out 2!important}
+@keyframes fsc-buzz{0%,100%{transform:none}10%,50%,90%{transform:translateX(-5px) rotate(-8deg)}30%,70%{transform:translateX(5px) rotate(8deg)}}
+#fs-chat .fsc-toast{position:absolute;right:0;bottom:68px;display:flex;align-items:center;gap:10px;width:max-content;max-width:min(300px,calc(100vw - 40px));padding:10px 12px;border:0;border-left:4px solid #1F6FB8;border-radius:12px;background:#fff;box-shadow:0 12px 32px rgba(15,23,42,.28);text-align:left;animation:fsc-pop .2s ease-out!important}
+#fs-chat .fsc-toast span{flex:1;font-size:13px;line-height:1.35;color:#334155}
+#fs-chat .fsc-toast b{color:#0f172a}
+#fs-chat .fsc-toast .fsc-tx{font-style:normal;font-size:18px;color:#94a3b8;padding:0 2px}
