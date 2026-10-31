@@ -73,7 +73,7 @@
   function openCard(note) {
     if (gateEl) { err(note); return; }   // while the check-in screen is up, messages go there
     var rows = S.punches.map(function (x) {
-      return "<li><b>" + (x.kind === "in" ? "In" : "Out") + " " + esc(x.at) + "</b> " + (x.method === "office" ? "Office" : x.method === "corrected" ? "Corrected" : x.method === "nogeo" ? "Location off" : x.site ? "At " + esc(x.site) : "Not at a known site") + "</li>";
+      return "<li><b>" + (x.kind === "in" ? "In" : "Out") + " " + esc(x.at) + "</b> " + (x.method === "office" ? "Office" : x.method === "corrected" ? "Corrected" : x.method === "auto" ? "Auto: last active in the ERP" : x.method === "nogeo" ? "Location off" : x.site ? "At " + esc(x.site) : "Not at a known site") + "</li>";
     }).join("");
     var doing = S.state === "in" ? "out" : "in";
     card.innerHTML = '<header><b>Attendance</b><button type="button" data-a="close" aria-label="Close">&#215;</button></header>'
