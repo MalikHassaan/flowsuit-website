@@ -76,6 +76,7 @@
     fire([path]);
     return api("POST", "/doc", { op: op, path: path, data: data || null }).then(function (j) {
       if (j.v && j.v === version + 1) version = j.v;   // nothing else changed in between
+      if (j.data && op !== "delete") { docs[path] = j.data; fire([path]); }   // the server changed it (e.g. a renumbered voucher)
     }, function (e) {
       if (before === undefined) delete docs[path]; else docs[path] = before;
       fire([path]); throw e;
