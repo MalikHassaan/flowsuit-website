@@ -55,19 +55,18 @@
 
   function paint() {
     if (!S) return;
-    var p = S.punches, last = p[p.length - 1];
     root.classList.toggle("is-in", S.state === "in");
     root.classList.toggle("is-late", late());
     pill.classList.toggle("is-in", S.state === "in");
     pill.classList.toggle("is-late", late());
+    // hassan, 2026-10-31: once checked in the button goes away; at the end of the day a line of text says so, and
+    // nothing pops up or signs anyone out. Pressing the text checks out.
+    pill.hidden = S.state === "in" ? !late() : S.state === "out";
+    pill.classList.toggle("fsa-note", late());
     pill.innerHTML = S.state === "in"
-      ? '<i></i><span>' + (late() ? "Check out now" : "In since " + esc(firstIn())) + "</span>"
-      : S.state === "out" ? "<i></i><span>Out at " + esc(last.at) + "</span>" : "<i></i><span>Check in</span>";
-    pill.title = S.state === "in" ? "You are checked in. Press to check out." : "Press to check in";
-    if (late() && !warned) {
-      warned = true;
-      if (card.hidden) openCard("It is " + S.end + ", the end of the working day. Remember to check out.");
-    }
+      ? (late() ? '<i></i><span>Working day ended at ' + esc(S.end) + '. Check out when you leave</span>' : "")
+      : "<i></i><span>Check in</span>";
+    pill.title = late() ? "In since " + firstIn() + ". Press to check out." : "Press to check in";
   }
   function firstIn() { for (var i = S.punches.length - 1; i >= 0; i--) if (S.punches[i].kind === "in") return S.punches[i].at; return ""; }
 
