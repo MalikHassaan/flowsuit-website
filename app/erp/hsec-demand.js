@@ -18,16 +18,25 @@
   var DEM = "paydemands", BRANCHES = ["Head office", "Rawalpindi", "Islamabad", "Lahore", "Faisalabad", "Multan", "Karachi", "Peshawar"];
   var D = function (c) { return Store.data[c] || []; };
   var byId = function (c, id) { return D(c).find(function (r) { return r.id === id; }) || null; };
+  // the app's helpers, or the same worked out here when a newer app file names them differently
+  var vouchersOf = function (id) {
+    if (typeof srcJvs === "function") return srcJvs(DEM, id);
+    return D("journals").filter(function (j) { return j.source && j.source.c === DEM && j.source.id === id; });
+  };
+  var live = function (id, ev) {
+    if (typeof liveJv === "function") return liveJv(DEM, id, ev);
+    return vouchersOf(id).find(function (j) { return j.source.ev === ev && j.status !== "Rejected"; });
+  };
   var lineTot = function (it) { return Math.round((it || []).reduce(function (s, l) { return s + n(l.amount); }, 0) * 100) / 100; };
 
   // where a demand stands
   function state(r) {
-    var jv = r.id && liveJv(DEM, r.id, "accrue"), bp = r.id && liveJv(DEM, r.id, "pay");
+    var jv = r.id && live(r.id, "accrue"), bp = r.id && live(r.id, "pay");
     if (bp && bp.status === "Posted") return { k: "paid", l: "Paid", c: "good", jv: jv, bp: bp };
     if (bp) return { k: "payappr", l: "Payment in approval", c: "acc", jv: jv, bp: bp };
     if (jv && jv.status === "Posted") return { k: "topay", l: "Approved, to be paid", c: "warn", jv: jv };
     if (jv) return { k: "appr", l: "Demand in approval", c: "warn", jv: jv };
-    var back = r.id && srcJvs(DEM, r.id).some(function (j) { return j.status === "Rejected"; });
+    var back = r.id && vouchersOf(r.id).some(function (j) { return j.status === "Rejected"; });
     return back ? { k: "back", l: "Returned", c: "bad" } : { k: "none", l: "Not posted", c: "" };
   }
   var tag = function (j) { return j ? mono(j.ref || "") + " " + pill(j.status === "Posted" ? "Posted" : "In approval", j.status === "Posted" ? "good" : "warn") : "<span class=\"muted\">–</span>"; };
@@ -66,17 +75,18 @@
             narration: "Payment demand " + r.demandNo + " from " + (r.branch || "") + " for " + (r.payee || "") + ": " + (r.description || ""), lines: lines };
         } },
       pay: { label: "bank payment voucher", keys: ["bank", "amount", "payAcc"],
-        ready: function (r) { return !liveJv(DEM, r.id, "accrue") ? "save the demand so its JV is made first" : !r.bank ? "choose the bank it is paid from" : true; },
+        ready: function (r) { return !live(r.id, "accrue") ? "save the demand so its JV is made first" : !r.bank ? "choose the bank it is paid from" : true; },
         build: function (r) {
           var a = Math.round(n(r.amount));
           return { vtype: "Bank payment voucher", date: r.payDate || todayStr(), entity: r.entity, payee: r.payee || "", chequeNo: r.chequeNo || "", dept: ((r.items || [])[0] || {}).dept || "",
             narration: "Payment of demand " + r.demandNo + " (" + (r.branch || "") + ") to " + (r.payee || "") + ": " + (r.description || ""),
             lines: [{ account: r.payAcc, debit: a, credit: 0, desc: "Demand " + r.demandNo + " – " + (r.payee || "") }, { account: r.bank, debit: 0, credit: a, desc: r.chequeNo ? "Cheque / transfer " + r.chequeNo : "" }] };
         } } };
-    DOCNAME[DEM] = "payment demand"; LABEL[DEM] = "demandNo";
+    if (typeof DOCNAME !== "undefined") DOCNAME[DEM] = "payment demand";
+    if (typeof LABEL !== "undefined") LABEL[DEM] = "demandNo";
     var m = MODS.e_ap;
     if (m && !m.tabs.some(function (t) { return t[0] === DEM; })) m.tabs.unshift([DEM, "Payment demands"]);
-    TAB_HOME[DEM] = "e_ap";
+    if (typeof TAB_HOME !== "undefined") TAB_HOME[DEM] = "e_ap";
   }
 
   function subscribe() {
@@ -91,7 +101,7 @@
   // a voucher made from a demand always goes to approval
   async function post(r, ev) {
     var P = POSTERS[DEM][ev], ok = P.ready(r); if (ok !== true) throw new Error("Cannot make the " + P.label + ": " + ok + ".");
-    if (liveJv(DEM, r.id, ev)) return null;
+    if (live(r.id, ev)) return null;
     var name = approverName() || "ERP user", now = new Date().toISOString();
     var j = Object.assign({}, P.build(r), { opening: "No", status: "Pending approval", source: { c: DEM, id: r.id, ev: ev, key: ev }, maker: { name: name, at: now }, approvals: [] });
     if (!j.dept) j.dept = "Finance & Accounts";
@@ -205,7 +215,7 @@
   function hook() {
     if (typeof S === "undefined" || !S.payables || typeof MODS === "undefined" || !MODS.e_ap || typeof POSTERS === "undefined" || typeof Store === "undefined" || !Store.ready ||
       typeof submitForm !== "function" || typeof openForm !== "function" || typeof fieldHtml !== "function" || typeof readForm !== "function" ||
-      typeof listView !== "function" || typeof liveJv !== "function" || typeof jvSheet !== "function") return false;
+      typeof jvSheet !== "function") return false;
     defs();
     subscribe();
 
@@ -262,9 +272,17 @@
       };
     })(submitForm);
 
-    listView = (function (old) { // eslint-disable-line no-global-assign
+    if (typeof listView === "function") listView = (function (old) { // eslint-disable-line no-global-assign
       return function (c) { var out = old.apply(this, arguments); return c === DEM && typeof out === "string" ? summary() + out : out; };
     })(listView);
+    // without listView (newer app files), the summary goes above the list when the tab is open
+    var sumLast = "";
+    new MutationObserver(function () {
+      if (!/\/paydemands$/.test(location.hash) || document.querySelector(".fs-pdsum")) return;
+      var q = document.querySelector("#q"), bar = q && q.closest(".bar"); if (!bar) return;
+      var h = summary(); if (h === sumLast && document.querySelector(".fs-pdsum")) return;
+      sumLast = h; bar.insertAdjacentHTML("beforebegin", h);
+    }).observe(document.body, { childList: true, subtree: true });
 
     document.addEventListener("click", function (e) {
       var p = e.target.closest && e.target.closest("[data-pdprint], #fsPdPrint");
@@ -309,6 +327,11 @@
     scheduleRender();
     return true;
   }
-  function start() { if (!hook()) setTimeout(start, 300); }
+  var tries = 0;
+  function start() {
+    var ok = false;
+    try { ok = hook(); } catch (e) { console.error("Payment demands could not start", e); return; }
+    if (!ok && ++tries < 400) setTimeout(start, 300);
+  }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
