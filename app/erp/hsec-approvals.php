@@ -59,10 +59,22 @@ function hsec_nav(): array
     return $nav;
 }
 
+// The menu as Users and access shows it: the app's own areas plus ones FlowSuit adds (hsec-mgmt.js).
+function hsec_nav_full(): array
+{
+    $nav = hsec_nav();
+    foreach ($nav as $i => [$name]) {
+        if ($name === 'Home') {
+            $nav[$i][1][] = ['mgmt', 'Management dashboard'];
+        }
+    }
+    return $nav;
+}
+
 function hsec_nav_keys(): array
 {
     $keys = [];
-    foreach (hsec_nav() as [, $items]) {
+    foreach (hsec_nav_full() as [, $items]) {
         foreach ($items as [$k]) {
             $keys[] = $k;
         }
@@ -403,5 +415,6 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-demand.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-company.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-brec.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-rvcust.js') . '</script>';
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-rvcust.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-mgmt.js') . '</script>';
 }
