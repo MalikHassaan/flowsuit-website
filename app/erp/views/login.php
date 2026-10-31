@@ -12,10 +12,24 @@
     <label>E-mail<input type="email" name="email" value="<?= e($email) ?>" autocomplete="username" required autofocus></label>
     <label>Password<span class="pw-wrap"><input type="password" name="password" autocomplete="current-password" required><button type="button" class="pw-eye" data-reveal aria-label="Show password"><?= icon('eye') ?></button></span></label>
     <div class="auth-row">
-      <span class="muted">Signs out after 10 minutes without activity.</span>
+      <label class="check"><input type="checkbox" id="fsRemember"> Remember me</label>
       <a href="/erp/forgot">Forgot password?</a>
     </div>
     <button class="btn btn-gold auth-go" type="submit"><span>Sign in</span></button>
   </form>
-  <p class="auth-foot"><a href="/">&larr; FlowSuit website</a></p>
+  <p class="auth-foot">Signs out after 10 minutes without activity. Untick "Remember me" on a shared computer. · <a href="/">&larr; FlowSuit website</a></p>
 </div>
+<script>
+// "Remember me" (hassan, 2026-10-31: "just remember me, it will help to relogin"): keeps the e-mail on this computer, so
+// signing in again after the 10-minute timeout only needs the password. Nothing is sent to the server and no password is
+// kept, so the timeout still signs the person out.
+(function () {
+  var K = "fs-erp-email", box = document.getElementById("fsRemember"), f = box && box.form, em = f && f.querySelector("[name=email]");
+  if (!em) return;
+  var saved = ""; try { saved = localStorage.getItem(K) || ""; } catch (e) { /* storage blocked */ }
+  if (saved) { box.checked = true; if (!em.value) { em.value = saved; var pw = f.querySelector("[name=password]"); if (pw) pw.focus(); } }
+  f.addEventListener("submit", function () {
+    try { if (box.checked && em.value.trim()) localStorage.setItem(K, em.value.trim()); else localStorage.removeItem(K); } catch (e) { /* storage blocked */ }
+  });
+})();
+</script>
