@@ -66,26 +66,32 @@ html.fs-zoom [data-fs-zoom] { animation: fsbZoomIn 1s cubic-bezier(.2, .8, .2, 1
 #fs-intro .fsb-partner.is-on .fsb-pline span { animation: fsbSlide .5s cubic-bezier(.2, .8, .2, 1) both !important; animation-delay: calc(.6s + var(--i) * .035s) !important; }
 @keyframes fsbWipe { to { clip-path: inset(0 0 0 0); } }
 @keyframes fsbSlide { from { opacity: 0; transform: translateX(-12px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
-/* HSEC: lift doors (see erp-intro.js doorScene). Brushed light steel, a coloured edge where they meet, a floor
-   display at the top; on leaving the content fades and the doors slide open onto the ERP. */
-#fs-intro.is-doors { background: transparent; }
-#fs-intro .fsd { position: absolute; top: 0; bottom: 0; width: 50%; z-index: 0; background: linear-gradient(90deg, #F1F5F9, #FFFFFF 45%, #F8FAFC); transition: transform 1s cubic-bezier(.65, 0, .25, 1) !important; }
-#fs-intro .fsd-l { left: 0; box-shadow: inset 0 0 120px color-mix(in srgb, #1E9E3A 9%, transparent); }
-#fs-intro .fsd-r { right: 0; box-shadow: inset 0 0 120px color-mix(in srgb, #E60012 7%, transparent); }
-/* The coloured edges where the doors meet fade out behind the name, so no line cuts through it. */
-#fs-intro .fsd::before { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; -webkit-mask: linear-gradient(#000 0 14%, transparent 30% 76%, #000 92%); mask: linear-gradient(#000 0 14%, transparent 30% 76%, #000 92%); }
-#fs-intro .fsd-l::before { right: 0; background: #1E9E3A; } #fs-intro .fsd-r::before { left: 0; background: #E60012; }
-#fs-intro .fsd::after { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(15, 23, 42, .06); }
-#fs-intro .fsd-l::after { right: 18px; } #fs-intro .fsd-r::after { left: 18px; }
-#fs-intro.is-doors::before, #fs-intro.is-doors::after { z-index: 0; }
-#fs-intro .fsd-ind { position: absolute; top: 22px; left: 50%; z-index: 1; display: flex; align-items: center; gap: 10px; transform: translateX(-50%); padding: 7px 16px; border-radius: 8px; background: #0F172A; box-shadow: 0 6px 18px rgba(15, 23, 42, .18); animation: fsbFade .8s .4s both !important; }
-#fs-intro .fsd-up { width: 0; height: 0; border: 7px solid transparent; border-bottom: 10px solid #22C55E; border-top: 0; filter: drop-shadow(0 0 4px rgba(34, 197, 94, .7)); animation: fsbBlink 1.4s steps(1) infinite !important; }
-#fs-intro .fsd-num { min-width: 1ch; font: 700 22px/1 Poppins, system-ui, sans-serif; color: #FF3B3B; text-shadow: 0 0 6px rgba(255, 59, 59, .7); }
-#fs-intro .fsd-num.is-new { animation: fsbUp .35s both !important; }
-#fs-intro.is-doors.is-leaving { animation: none !important; }
-#fs-intro.is-doors.is-leaving .fsb-stage, #fs-intro.is-doors.is-leaving .fsd-ind, #fs-intro.is-doors.is-leaving .fsb-tag, #fs-intro.is-doors.is-leaving .fsb-corner, #fs-intro.is-doors.is-leaving::before, #fs-intro.is-doors.is-leaving::after { opacity: 0; transition: opacity .3s !important; }
-#fs-intro.is-doors.is-leaving .fsd-l { transform: translateX(-101%); transition-delay: .2s !important; }
-#fs-intro.is-doors.is-leaving .fsd-r { transform: translateX(101%); transition-delay: .2s !important; }
+/* HSEC: the lift film fills the screen (erp-intro.js); the emblems, name and progress sit on a glass card at the
+   bottom so the film stays visible. On leaving, the screen zooms into the open lift. */
+#fs-intro .fsv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; background: #1f2937; }
+#fs-intro.is-video { background: #1f2937; transform-origin: 50% 52%; }
+#fs-intro.is-video::before, #fs-intro.is-video::after { content: none; }
+#fs-intro.is-video .fsb-tag { color: #fff; text-shadow: 0 1px 4px rgba(0, 0, 0, .5); z-index: 1; }
+#fs-intro.is-video .fsb-corner { border-color: rgba(255, 255, 255, .6); z-index: 1; }
+#fs-intro.is-video .fsb-stage { position: absolute; left: 0; right: 0; bottom: 26px; width: max-content; max-width: calc(100vw - 32px); margin: 0 auto; box-sizing: border-box; display: grid; grid-template-columns: auto auto auto; column-gap: 26px; align-items: center; padding: 16px 28px; border-radius: 18px; background: rgba(255, 255, 255, .86); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: 0 18px 50px rgba(0, 0, 0, .35); animation: fsbUp .8s .3s both !important; }
+#fs-intro.is-video .fsb-core { grid-column: 1; grid-row: 1 / 6; width: 104px; height: 104px; margin: 0; }
+#fs-intro.is-video .fsb-core i.r2 { inset: 10px; } #fs-intro.is-video .fsb-core i.r3 { inset: 20px; } #fs-intro.is-video .fsb-core::after { inset: 24px; }
+#fs-intro.is-video .fsb-logo { width: 60px; height: 60px; padding: 8px; }
+#fs-intro.is-video .fsb-name, #fs-intro.is-video .fsb-sub, #fs-intro.is-video .fsb-bar, #fs-intro.is-video .fsb-msg { grid-column: 2; justify-self: center; }
+#fs-intro.is-video .fsb-name { font-size: 30px; }
+#fs-intro.is-video .fsb-sub { margin-top: 10px; }
+#fs-intro.is-video .fsb-bar { width: 280px; margin-top: 14px; }
+#fs-intro.is-video .fsb-msg { margin-top: 10px; }
+#fs-intro.is-video .fsb-partner { grid-column: 3; grid-row: 1 / 6; margin: 0; padding-left: 26px; border-left: 1px solid rgba(15, 23, 42, .1); }
+#fs-intro.is-video .fsb-pimg { width: 120px; }
+#fs-intro.is-video.is-leaving .fsb-stage { opacity: 0; transition: opacity .3s !important; }
+@media (max-width: 760px) {
+  #fs-intro.is-video .fsb-stage { grid-template-columns: 1fr; justify-items: center; width: calc(100vw - 32px); padding: 14px 16px; row-gap: 0; }
+  #fs-intro.is-video .fsb-core, #fs-intro.is-video .fsb-name, #fs-intro.is-video .fsb-sub, #fs-intro.is-video .fsb-bar, #fs-intro.is-video .fsb-msg, #fs-intro.is-video .fsb-partner { grid-column: 1; grid-row: auto; }
+  #fs-intro.is-video .fsb-core { width: 80px; height: 80px; margin-bottom: 8px; } #fs-intro.is-video .fsb-logo { width: 48px; height: 48px; }
+  #fs-intro.is-video .fsb-bar { width: 70vw; }
+  #fs-intro.is-video .fsb-partner { margin-top: 12px; padding: 10px 0 0; border-left: 0; border-top: 1px solid rgba(15, 23, 42, .1); }
+}
 @media (max-width: 560px) { #fs-intro .fsb-name { font-size: 28px; } #fs-intro .fsb-core { width: 180px; height: 180px; } #fs-intro .fsb-core::after { inset: 48px; } }
 /* Nothing else (the attendance card, the chat button) sits on top of the opening screen while it plays. */
-html:has(#fs-intro:not(.is-leaving)) #fs-att, html:has(#fs-intro:not(.is-leaving)) #fs-gate { visibility: hidden; }
+html:has(#fs-intro:not(.is-leaving)) #fs-att, html:has(#fs-intro:not(.is-leaving)) #fs-gate, html:has(#fs-intro:not(.is-leaving)) #fs-chat { visibility: hidden; }

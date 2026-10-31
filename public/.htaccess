@@ -32,6 +32,8 @@ RewriteEngine On
   ExpiresByType image/webp "access plus 30 days"
   ExpiresByType image/x-icon "access plus 30 days"
   ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType video/mp4 "access plus 30 days"
+  ExpiresByType video/webm "access plus 30 days"
 </IfModule>
 <IfModule mod_headers.c>
   <FilesMatch "\.(css|js)$">

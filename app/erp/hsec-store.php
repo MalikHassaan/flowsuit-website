@@ -46,6 +46,13 @@ function hsec_file(): string
     return erp_data_dir() . '/modules/hsec.html';
 }
 
+// The emblem inside the opening screen's page itself, so the centre circle is never empty while /erp/hsec-logo loads.
+function hsec_logo_uri(): string
+{
+    $png = erp_data_dir() . '/hsec-logo.png';
+    return is_file($png) && filesize($png) < 300000 ? 'data:image/png;base64,' . base64_encode((string) file_get_contents($png)) : '/erp/hsec-logo';
+}
+
 // The HSEC emblem for the sign-in screens, taken from the uploaded app file (it is not in the repository).
 function hsec_logo(): void
 {
@@ -81,9 +88,9 @@ function hsec_inject(array $me): string
         . ($allowed === null ? '' : 'try{var fsE=' . json_encode($allowed, $flags) . ',fsC=localStorage.getItem("hsec-erp-ent");'
             . 'if(fsC!=="All"&&fsE.indexOf(fsC)<0)localStorage.setItem("hsec-erp-ent",fsE.length>1?"All":fsE[0]);}catch(e){}' . "\n")
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
-        . erp_intro(['name' => 'HSEC', 'sub' => 'Finance & Accounting ERP', 'logo' => '/erp/hsec-logo', 'zoom' => '.app',
-            // hassan, 2026-10-31: lift doors that open onto the ERP (calmer than the first lift drawing), and the Shanghai Mitsubishi Elevator emblem below.
-            'scene' => 'lift', 'min' => 10000,
+        . erp_intro(['name' => 'HSEC', 'sub' => 'Finance & Accounting ERP', 'logo' => hsec_logo_uri(), 'zoom' => '.app',
+            // hassan, 2026-10-31: his film of a lift being built plays full screen (10 s), both emblems on a card below.
+            'video' => ['/assets/video/hsec-intro.webm?v=1', '/assets/video/hsec-intro.mp4?v=1'], 'min' => 10000,
             'partner' => ['img' => 'data:image/png;base64,' . base64_encode((string) file_get_contents(__DIR__ . '/hsec-partner.png')), 'line' => 'SHANGHAI MITSUBISHI ELEVATOR'],
             'steps' => ['Securing connection', 'Verifying your access', 'Loading your books', 'Preparing your dashboard']])
         . '<style>' . file_get_contents(__DIR__ . '/hsec-present.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-present.js') . '</script>'
