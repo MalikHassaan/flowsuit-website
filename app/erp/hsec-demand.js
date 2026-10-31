@@ -156,8 +156,29 @@
     it.forEach(function (l, i) { var c = document.getElementById("pdAmt" + i); if (c) c.textContent = l.amount ? fmt(l.amount) : "–"; });
   }
   function branches() {
-    var seen = {}; BRANCHES.concat(D(DEM).map(function (r) { return r.branch; })).forEach(function (b) { if (b) seen[b] = 1; });
+    var saved = typeof settings === "function" && Array.isArray(settings().pdBranches) ? settings().pdBranches : [];
+    var seen = {}; BRANCHES.concat(saved, D(DEM).map(function (r) { return r.branch; })).forEach(function (b) { if (b) seen[b] = 1; });
     return Object.keys(seen);
+  }
+
+  // + next to Branch / office (hassan, 2026-10-31: "there should be + button to add more location as transaction can be
+  // made on other office behalf as well"). An admin's new office is saved for everyone; anyone else's is kept once the
+  // demand is saved, because offices already used are offered again.
+  function branchBtn(id) {
+    var box = document.querySelector(".fs-pdbnew"), inp = document.getElementById("fsPdBrNew"), fld = document.getElementById("f_branch");
+    if (!box || !fld) return;
+    if (id === "fsPdBrAdd") { box.hidden = false; fld.hidden = true; inp.value = ""; inp.focus(); return; }
+    box.hidden = true; fld.hidden = false;
+    if (id === "fsPdBrNo") return fld.focus();
+    var name = inp.value.replace(/\s+/g, " ").trim().slice(0, 60); if (!name) return fld.focus();
+    var have = branches().find(function (x) { return x.toLowerCase() === name.toLowerCase(); });
+    fld.value = have || name; fld.dispatchEvent(new Event("change", { bubbles: true }));
+    if (have) return;
+    var dl = document.getElementById("fsPdBranches"); if (dl) { var o = document.createElement("option"); o.value = name; dl.appendChild(o); }
+    if (window.FS_ADMIN && typeof settings === "function") {
+      var s = settings(), list = (Array.isArray(s.pdBranches) ? s.pdBranches : []).concat([name]);
+      Store.save("settings", Object.assign({}, s, { id: "main", pdBranches: list })).then(function () { if (typeof toast === "function") toast(name + " added to the branch list"); }, function () {});
+    }
   }
 
   function err(m) { var e = document.getElementById("ferr"); if (e) e.textContent = m; return false; }
@@ -236,7 +257,8 @@
           return "<div class=\"f w lines\">" + linesHtml(it) + "</div>";
         }
         if (f && f.t === "pdbranch") {
-          return "<div class=\"f\"><label for=\"f_branch\">" + esc(f.l) + " *</label><input id=\"f_branch\" list=\"fsPdBranches\" value=\"" + esc(v || "") + "\" autocomplete=\"off\" required>" +
+          return "<div class=\"f\"><label for=\"f_branch\" class=\"fs-pdbl\">" + esc(f.l) + " *<button type=\"button\" class=\"fs-pdbplus\" id=\"fsPdBrAdd\" title=\"Add a branch or office\" aria-label=\"Add a branch or office\">+</button></label>" +
+            "<span class=\"fs-pdbnew\" hidden><input id=\"fsPdBrNew\" maxlength=\"60\" placeholder=\"New branch or office, e.g. Sialkot\" autocomplete=\"off\"><button type=\"button\" class=\"btn pri\" id=\"fsPdBrOk\">Add</button><button type=\"button\" class=\"btn\" id=\"fsPdBrNo\">Cancel</button></span><input id=\"f_branch\" list=\"fsPdBranches\" value=\"" + esc(v || "") + "\" autocomplete=\"off\" required>" +
             "<datalist id=\"fsPdBranches\">" + branches().map(function (b) { return "<option value=\"" + esc(b) + "\">"; }).join("") + "</datalist>" +
             (f.hint ? "<span class=\"hint\">" + esc(f.hint) + "</span>" : "") + "</div>";
         }
@@ -284,6 +306,11 @@
       sumLast = h; bar.insertAdjacentHTML("beforebegin", h);
     }).observe(document.body, { childList: true, subtree: true });
 
+    document.addEventListener("keydown", function (e) {
+      if (e.target && e.target.id === "fsPdBrNew" && (e.key === "Enter" || e.key === "Escape")) {
+        e.preventDefault(); e.stopImmediatePropagation(); branchBtn(e.key === "Enter" ? "fsPdBrOk" : "fsPdBrNo");
+      }
+    }, true);
     document.addEventListener("click", function (e) {
       var p = e.target.closest && e.target.closest("[data-pdprint], #fsPdPrint");
       if (p) {
@@ -291,6 +318,8 @@
         var r = byId(DEM, p.id === "fsPdPrint" ? F.rec.id : p.getAttribute("data-pdprint")); if (r) printSet(r);
         return;
       }
+      var b = e.target.closest && e.target.closest("#fsPdBrAdd, #fsPdBrOk, #fsPdBrNo");
+      if (b) { e.preventDefault(); e.stopImmediatePropagation(); branchBtn(b.id); return; }
       var t = e.target.closest && e.target.closest("#pdAdd, [data-pdrm]");
       if (!t || typeof F === "undefined" || !F || F.c !== DEM) return;
       var it = readLines();
@@ -322,7 +351,10 @@
       ".fs-pdcard{flex:1 1 150px;padding:10px 12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:var(--panel,#fff)}" +
       ".fs-pdcard span{display:block;font-size:12px;color:#64748b}.fs-pdcard b{display:block;font-size:22px}.fs-pdcard em{font-style:normal;font-size:12px;color:#475569}" +
       ".fs-pdcard.good b{color:#15803d}.fs-pdcard.warn b{color:#b45309}.fs-pdcard.bad b{color:#b91c1c}" +
-      ".fs-pdbreak{height:0;margin:18px 0;border-top:1px dashed #ccc}@media print{.fs-pdbreak{break-before:page;page-break-before:always;border:0;margin:0}}";
+      ".fs-pdbreak{height:0;margin:18px 0;border-top:1px dashed #ccc}@media print{.fs-pdbreak{break-before:page;page-break-before:always;border:0;margin:0}}" +
+      ".fs-pdbl{display:flex;align-items:center;justify-content:space-between;gap:8px}" +
+      ".fs-pdbplus{width:26px;height:26px;padding:0;border:1px solid #16a34a;border-radius:6px;background:#ecfdf3;color:#15803d;font-size:18px;line-height:1;cursor:pointer}" +
+      ".fs-pdbplus:hover{background:#16a34a;color:#fff}.fs-pdbnew{display:flex;gap:6px}.fs-pdbnew[hidden]{display:none}.fs-pdbnew input{flex:1;min-width:0}";
     document.head.appendChild(css);
     scheduleRender();
     return true;
