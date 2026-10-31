@@ -90,6 +90,12 @@
   }
 
   function subscribe() {
+    // offices added with + are shared with everyone (hassan, 2026-10-31: "anything entered by the maker should be shown to everyone")
+    if (COLLS.indexOf("fsbranches") < 0) COLLS.push("fsbranches");
+    if (!Array.isArray(Store.data.fsbranches)) Store.data.fsbranches = [];
+    if (Store.db) Store.db.collection("fsbranches").onSnapshot(function (s) {
+      Store.data.fsbranches = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+    });
     if (COLLS.indexOf(DEM) < 0) COLLS.push(DEM);
     if (!Array.isArray(Store.data[DEM])) Store.data[DEM] = [];
     if (Store.db) Store.db.collection(DEM).onSnapshot(function (s) {
@@ -159,13 +165,13 @@
   }
   function branches() {
     var saved = typeof settings === "function" && Array.isArray(settings().pdBranches) ? settings().pdBranches : [];
+    saved = saved.concat(D("fsbranches").map(function (b) { return b.name; }));
     var seen = {}; BRANCHES.concat(saved, D(DEM).map(function (r) { return r.branch; })).forEach(function (b) { if (b) seen[b] = 1; });
     return Object.keys(seen);
   }
 
   // + next to Branch / office (hassan, 2026-10-31: "there should be + button to add more location as transaction can be
-  // made on other office behalf as well"). An admin's new office is saved for everyone; anyone else's is kept once the
-  // demand is saved, because offices already used are offered again.
+  // made on other office behalf as well"). A new office is saved for everyone, whoever adds it.
   function branchBtn(id) {
     var box = document.querySelector(".fs-pdbnew"), inp = document.getElementById("fsPdBrNew"), fld = document.getElementById("f_branch");
     if (!box || !fld) return;
@@ -177,10 +183,10 @@
     fld.value = have || name; fld.dispatchEvent(new Event("change", { bubbles: true }));
     if (have) return;
     var dl = document.getElementById("fsPdBranches"); if (dl) { var o = document.createElement("option"); o.value = name; dl.appendChild(o); }
-    if (window.FS_ADMIN && typeof settings === "function") {
-      var s = settings(), list = (Array.isArray(s.pdBranches) ? s.pdBranches : []).concat([name]);
-      Store.save("settings", Object.assign({}, s, { id: "main", pdBranches: list })).then(function () { if (typeof toast === "function") toast(name + " added to the branch list"); }, function () {});
-    }
+    var slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || ("b" + Date.now());
+    Store.save("fsbranches", { id: slug, name: name, by: (typeof approverName === "function" && approverName()) || "", at: new Date().toISOString() })
+      .then(function () { if (typeof toast === "function") toast(name + " added to the branch list for everyone"); },
+        function (x) { if (typeof toast === "function") toast("Kept on this demand only: " + ((x && x.message) || "could not save the branch list")); });
   }
 
   function err(m) { var e = document.getElementById("ferr"); if (e) e.textContent = m; return false; }

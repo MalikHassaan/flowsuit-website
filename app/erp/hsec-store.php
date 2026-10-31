@@ -267,6 +267,7 @@ function hsec_write(array $me): void
             taj_fail(400, 'resource_exhausted', 'This record is too large to save');
         }
         $new = $json === null ? null : json_decode($json, true);
+        $renumbered = false;
         $why = hsec_refusal($me, $coll, $old, $new);
         if ($why === null && $coll === 'journals') {
             // Approval rules; the check also writes the signed-in name, id and time onto the voucher.
@@ -275,6 +276,10 @@ function hsec_write(array $me): void
             if ($new !== $before) {
                 $json = json_encode($new, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
+        }
+        if ($why === null && $coll === 'journals' && $new !== null && ($old['ref'] ?? null) !== ($new['ref'] ?? null) && hsec_unique_ref($db, $id, $new)) {
+            $json = json_encode($new, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $renumbered = true;
         }
         if ($why !== null) {
             $db->exec('ROLLBACK');
@@ -293,7 +298,43 @@ function hsec_write(array $me): void
         }
         throw $ex;
     }
-    taj_json(['ok' => true, 'v' => $v]);
+    // A renumbered voucher goes back to the browser that saved it, so the maker sees the number it really has.
+    taj_json($renumbered ? ['ok' => true, 'v' => $v, 'data' => $new] : ['ok' => true, 'v' => $v]);
+}
+
+// Two makers saving at the same moment can both be given the same voucher number, because each browser numbers from
+// the records it has. The server holds the write lock here, so a number already used by another voucher is replaced
+// by the next free one in the same series (BPV-HSEC-0029 -> BPV-HSEC-0030) and the browser picks it up on its next sync.
+// Only a new or changed number is checked, so older vouchers keep theirs.
+function hsec_unique_ref(PDO $db, string $id, array &$new): bool
+{
+    $ref = trim((string) ($new['ref'] ?? ''));
+    if ($ref === '' || !preg_match('/^(.*?)(\d+)$/', $ref, $m)) {
+        return false;
+    }
+    $taken = function (string $r) use ($db, $id): bool {
+        $st = $db->prepare("SELECT 1 FROM hsec_docs WHERE coll = 'journals' AND id <> ? AND data IS NOT NULL AND json_extract(data, '$.ref') = ? LIMIT 1");
+        $st->execute([$id, $r]);
+        return (bool) $st->fetchColumn();
+    };
+    if (!$taken($ref)) {
+        return false;
+    }
+    [, $prefix, $digits] = $m;
+    $st = $db->prepare("SELECT json_extract(data, '$.ref') FROM hsec_docs WHERE coll = 'journals' AND data IS NOT NULL AND json_extract(data, '$.ref') LIKE ?");
+    $st->execute([$prefix . '%']); // codes are letters, digits and dashes; the pattern below checks each match
+    $max = (int) $digits;
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $r) {
+        if (preg_match('/^' . preg_quote($prefix, '/') . '(\d+)$/', (string) $r, $x)) {
+            $max = max($max, (int) $x[1]);
+        }
+    }
+    do {
+        $max++;
+        $next = $prefix . str_pad((string) $max, strlen($digits), '0', STR_PAD_LEFT);
+    } while ($taken($next));
+    $new['ref'] = $next;
+    return true;
 }
 
 function hsec_counts(): array

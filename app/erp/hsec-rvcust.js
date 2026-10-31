@@ -1,14 +1,28 @@
 // Receive payment: the customer is picked, not typed (hassan, 2026-10-31: "in RV make the field customer uneditable, only
 // drop down list if any project is listed, and give + button also so that we can add customer directly"). The app's
 // "Customer (project)" box (#rcCust, a free-text box with suggestions) becomes a drop-down of the same names (projects,
-// customers already in the ledger or on invoices), and + adds a new customer: an admin's is saved for everyone, anyone
-// else's stays in the list once a receipt for it is posted. The app reads #rcCust the same way, so nothing else changes.
+// customers already in the ledger or on invoices), and + adds a new customer, saved for everyone whoever adds it
+// (collection fscustomers; hassan, 2026-10-31: "anything entered by the maker should be shown to everyone"). The app reads #rcCust the same way, so nothing else changes.
 (function () {
   /* global V, Store, settings, toast */
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); };
   var key = function (s) { return String(s || "").toLowerCase().replace(/\s+/g, " ").trim(); };
   var extra = [];
-  var saved = function () { try { var x = settings().rvCustomers; return Array.isArray(x) ? x : []; } catch (e) { return []; } };
+  var saved = function () {
+    var out = [];
+    try { var x = settings().rvCustomers; if (Array.isArray(x)) out = out.concat(x); } catch (e) { /* older setting */ }
+    try { (Store.data.fscustomers || []).forEach(function (c) { if (c.name) out.push(c.name); }); } catch (e) { /* not loaded yet */ }
+    return out;
+  };
+  var tries = 0;
+  function subscribe() {
+    if (typeof Store === "undefined" || !Store.db || typeof COLLS === "undefined" || !Store.loaded) { if (++tries < 400) setTimeout(subscribe, 300); return; }
+    if (COLLS.indexOf("fscustomers") < 0) COLLS.push("fscustomers"); // eslint-disable-line no-undef
+    if (!Array.isArray(Store.data.fscustomers)) Store.data.fscustomers = [];
+    Store.db.collection("fscustomers").onSnapshot(function (s) {
+      Store.data.fscustomers = s.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+    });
+  }
 
   function swap() {
     var inp = document.getElementById("rcCust");
@@ -44,11 +58,10 @@
     if (!have) {
       extra.push(name);
       have = document.createElement("option"); have.value = name; have.textContent = name; sel.appendChild(have);
-      if (window.FS_ADMIN && typeof settings === "function" && typeof Store !== "undefined") {
-        var s = settings();
-        Store.save("settings", Object.assign({}, s, { id: "main", rvCustomers: saved().concat([name]) }))
-          .then(function () { if (typeof toast === "function") toast(name + " added to the customer list"); }, function () {});
-      }
+      var slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || ("c" + Date.now());
+      Store.save("fscustomers", { id: slug, name: name, at: new Date().toISOString() })
+        .then(function () { if (typeof toast === "function") toast(name + " added to the customer list for everyone"); },
+          function (x) { if (typeof toast === "function") toast("Kept on this receipt only: " + ((x && x.message) || "could not save the customer list")); });
     }
     sel.value = have.value;
     sel.dispatchEvent(new Event("change", { bubbles: true }));
@@ -66,6 +79,7 @@
 
   function start() {
     if (!document.body) return setTimeout(start, 50);
+    subscribe();
     new MutationObserver(function () { try { swap(); } catch (x) { /* never break the page */ } }).observe(document.body, { childList: true, subtree: true });
     var css = document.createElement("style");
     css.textContent = ".fs-rvlab{display:flex;align-items:center;justify-content:space-between;gap:8px}" +
