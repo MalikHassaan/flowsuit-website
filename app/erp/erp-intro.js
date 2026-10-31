@@ -3,13 +3,10 @@
 //   HSEC is ready when it puts "booted" on <html>; TAJ when its own sign-in screen (#login) is hidden.
 (function () {
   var C = window.FS_INTRO || {}, MIN_MS = C.min || 5000, MAX_MS = 30000, start = Date.now();
-  // HSEC (hassan, 2026-10-31): the screen is a pair of lift doors, HSEC green on the left and Shanghai Mitsubishi red
-  // on the right, with a floor display at the top counting up while the ERP loads. When it is ready the doors slide
-  // open onto the dashboard. Kept calm on purpose: the earlier lift-assembly drawing was too busy ("doesn't feel good").
-  function doorScene() {
-    return '<div class="fsd fsd-l"></div><div class="fsd fsd-r"></div>'
-      + '<div class="fsd-ind"><i class="fsd-up"></i><b class="fsd-num">1</b></div>';
-  }
+  // HSEC (hassan, 2026-10-31): a film of a lift being built (shaft, frame, traction machine, ropes, cabin panels,
+  // doors) plays across the whole screen, with both companies' emblems on a card at the bottom. The film ends on the
+  // finished lift with its doors open, and the screen then moves into the lift and on into the ERP.
+  var vid = null, vidDone = !C.video;
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
   var intro = document.createElement("div");
   intro.id = "fs-intro";
@@ -23,8 +20,21 @@
     + (C.partner ? '<div class="fsb-partner"><span class="fsb-pimg"><img src="' + C.partner.img + '" alt=""></span><div class="fsb-pline">'
       + String(C.partner.line || "").split("").map(function (c, i) { return '<span style="--i:' + i + '">' + (c === " " ? "&nbsp;" : c) + "</span>"; }).join("") + "</div></div>" : "")
     + "</div>";
-  if (C.scene === "lift") { intro.classList.add("is-doors"); intro.insertAdjacentHTML("afterbegin", doorScene()); }
-  var num = intro.querySelector(".fsd-num"), floor = 1;
+  if (C.video) {
+    intro.classList.add("is-video");
+    vid = document.createElement("video");
+    vid.className = "fsv"; vid.muted = true; vid.autoplay = true; vid.playsInline = true; vid.preload = "auto";
+    vid.setAttribute("muted", ""); vid.setAttribute("playsinline", ""); vid.setAttribute("aria-hidden", "true");
+    var done = function () { vidDone = true; };
+    vid.addEventListener("ended", done); vid.addEventListener("error", done);
+    [].concat(C.video).forEach(function (u) {   // WebM first, MP4 for browsers without it
+      var so = document.createElement("source"); so.src = u; so.type = /\.webm/.test(u) ? "video/webm" : "video/mp4"; vid.appendChild(so);
+    });
+    var srcs = vid.querySelectorAll("source"); if (srcs.length) srcs[srcs.length - 1].addEventListener("error", done);
+    intro.insertBefore(vid, intro.firstChild);
+    var p = vid.play(); if (p && p.catch) p.catch(done);   // autoplay refused: carry on without waiting for it
+    setTimeout(function () { if (!vid.currentTime) done(); }, 4000);   // not started after 4 s (slow line): don't hold the ERP
+  }
   document.documentElement.appendChild(intro);   // before <body> exists, so nothing else shows first
 
   // The subtitle types itself after the letters are in.
@@ -47,8 +57,6 @@
     bar.style.width = Math.round(8 + t * 82) + "%";
     var s = Math.min(steps.length - 1, Math.floor(t * steps.length));
     if (s !== step) { step = s; say(steps[s] + "…"); }
-    var f = 1 + Math.floor(t * 8);   // floor display: 1 up to 9 over the opening time
-    if (num && f !== floor) { floor = f; num.textContent = f; num.classList.remove("is-new"); void num.offsetWidth; num.classList.add("is-new"); }
   }, 200);
 
   function ready() {
@@ -79,6 +87,6 @@
   }
   var check = setInterval(function () {
     var waited = Date.now() - start;
-    if ((waited >= MIN_MS && ready()) || waited >= MAX_MS) { clearInterval(check); leave(); }
+    if ((waited >= MIN_MS && vidDone && ready()) || waited >= MAX_MS) { clearInterval(check); leave(); }
   }, 150);
 })();
