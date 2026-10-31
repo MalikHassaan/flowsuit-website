@@ -11,6 +11,8 @@
     bank: function (a) { return (/^1210/.test(a.code) && !cashLike(a)) || (/^2208/.test(a.code) && /running finance|overdraft/i.test(a.name || "")); },
     cashbank: function (a) { return /^1210/.test(a.code) || (/^2208/.test(a.code) && /running finance|overdraft/i.test(a.name || "")); },
     expense: function (a) { return /^(5|6|72|8)/.test(a.code); },
+    // what a payment demand is owed on: current liabilities other than bank finance and taxes withheld
+    payable: function (a) { return /^22/.test(a.code) && !/^22(03|08)/.test(a.code); },
     // what an advance is spent on: costs and expenses, stock and other current assets
     spend: function (a) { return /^(5|6|72|8|12)/.test(a.code) && !/^1210/.test(a.code); }
   };
