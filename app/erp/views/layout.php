@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/css/erp.css?v=15">
+  <link rel="stylesheet" href="/assets/css/erp.css?v=16">
 </head>
 <body class="<?= $user ? 'erp-app' : 'erp-auth' ?>">
 <?php if ($user): ?>
@@ -40,7 +40,7 @@
   </aside>
 <?php endif; ?>
 <?php if (!$user): ?>
-  <div class="auth-bg" aria-hidden="true"><b class="glow g1"></b><b class="glow g2"></b><b class="glow g3"></b><?php foreach ([[8, 12], [22, 70], [35, 25], [48, 82], [62, 15], [74, 60], [86, 30], [92, 78], [15, 45], [55, 48], [80, 8], [28, 90]] as $n => [$x, $y]): ?><b class="tw" style="left:<?= $x ?>%;top:<?= $y ?>%;animation-delay:-<?= $n * .45 ?>s"></b><?php endforeach; ?><?php for ($k = 0; $k < 14; $k++): ?><i style="--k:<?= $k ?>"></i><?php endfor; ?></div>
+  <div class="auth-bg" aria-hidden="true"><b class="glow g1"></b><b class="glow g2"></b><b class="glow g3"></b><?php foreach ([[8, 12], [22, 70], [35, 25], [48, 82], [62, 15], [74, 60], [86, 30], [92, 78], [15, 45], [55, 48], [80, 8], [28, 90]] as $n => [$x, $y]): ?><b class="tw" style="left:<?= $x ?>%;top:<?= $y ?>%;animation-delay:-<?= $n * .45 ?>s"></b><?php endforeach; ?><?php foreach ([[78, 6, 5, 0], [96, 22, 6.5, 1.6], [62, 3, 7.5, 3.4], [88, 40, 6, 4.5], [45, 10, 8.5, 2.4], [102, 55, 7, 5.9], [70, 28, 9, 7.1], [30, 2, 8, 6.3]] as [$x, $y, $d, $w]): ?><i style="--x:<?= $x ?>%;--y:<?= $y ?>%;--d:<?= $d ?>s;--w:-<?= $w ?>s"></i><?php endforeach; ?></div>
 <?php endif; ?>
   <main class="erp-main">
 <?php if ($flash): ?>

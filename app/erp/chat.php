@@ -88,7 +88,9 @@ function chat_inject(array $me, string $system = 'erp'): string
         $ice[] = ['urls' => array_map('trim', explode(',', $turn)), 'username' => (string) erp_secret('turn_user'), 'credential' => (string) erp_secret('turn_pass')];
     }
     $cfg = ['api' => '/erp/chat/api', 'sys' => $system, 'csrf' => $_SESSION['csrf'], 'uid' => (int) $me['id'], 'admin' => (bool) $me['is_admin'], 'max' => CHAT_MAX_FILE, 'ice' => $ice];
-    return '<style>' . file_get_contents(__DIR__ . '/chat.css') . '</style><script>window.FS_CHAT=' . json_encode($cfg, $flags) . ";\n"
+    $idle = ['ping' => '/erp/ping', 'out' => '/erp/timeout', 'limit' => ERP_SESSION_IDLE, 'slot' => erp_slot()];
+    return '<script>window.FS_IDLE=' . json_encode($idle, $flags) . ";\n" . file_get_contents(__DIR__ . '/idle.js') . '</script>'
+        . '<style>' . file_get_contents(__DIR__ . '/chat.css') . '</style><script>window.FS_CHAT=' . json_encode($cfg, $flags) . ";\n"
         . file_get_contents(__DIR__ . '/chat.js') . '</script>' . att_inject($me, $system) . help_inject($system)
         . ($me['is_admin'] ? '' : '<script>' . file_get_contents(__DIR__ . '/nosource.js') . '</script>');
 }

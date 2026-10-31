@@ -37,7 +37,14 @@ input:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); 
 .auth-bg .glow { position: absolute; width: 520px; height: 520px; border-radius: 50%; filter: blur(60px); opacity: .35; animation: drift 18s ease-in-out infinite alternate; }
 .auth-bg .g1 { left: -140px; top: -120px; background: radial-gradient(circle, rgba(201,165,74,.55), transparent 70%); }
 .auth-bg .g2 { right: -160px; bottom: -160px; background: radial-gradient(circle, rgba(59,130,246,.5), transparent 70%); animation-delay: -9s; }
-.auth-bg i { position: absolute; bottom: -12px; left: calc(var(--k) * 7.3% + 2%); width: 4px; height: 4px; border-radius: 50%; background: var(--gold-2); opacity: 0; box-shadow: 0 0 8px var(--gold); animation: rise calc(9s + var(--k) * .7s) linear infinite; animation-delay: calc(var(--k) * -1.3s); }
+/* Shooting stars (hassan, 2026-10-31: "shooting stars in the background instead of moving upward"): a bright head with a
+   fading tail streaks down to the left now and then, each star on its own rhythm. */
+.auth-bg i { position: absolute; left: var(--x); top: var(--y); width: 230px; height: 2.5px; border-radius: 2px; opacity: 0;
+  background: linear-gradient(90deg, #fff, rgba(232,207,138,.75) 18%, rgba(255,255,255,0)); transform-origin: 0 50%;
+  filter: drop-shadow(0 0 5px rgba(255,255,255,.85)); animation: shoot var(--d) ease-in infinite; animation-delay: var(--w); }
+.auth-bg i::before { content: ""; position: absolute; left: -2px; top: -2px; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px 2px rgba(255,255,255,.9); }
+@keyframes shoot { 0% { opacity: 0; transform: rotate(-32deg) translateX(0); } 2% { opacity: 1; } 16% { opacity: 1; } 20%, 100% { opacity: 0; transform: rotate(-32deg) translateX(-70vw); } }
+.erp-note { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fef6e4; border: 1px solid #f1d9a6; color: #7a5a12; font-size: .9rem; }
 .auth-card { position: relative; background: var(--white); border-radius: 18px; padding: 34px 34px 26px; box-shadow: 0 40px 90px rgba(2, 6, 23, .55); display: grid; gap: 14px; overflow: hidden; animation: card-in .8s cubic-bezier(.2,.9,.3,1.2) both; }
 .auth-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, var(--gold), #94a3b8, #2563eb, var(--gold)); background-size: 300% 100%; animation: sweep 6s linear infinite; }
 .auth-brand { display: grid; justify-items: center; text-align: center; gap: 6px; }
