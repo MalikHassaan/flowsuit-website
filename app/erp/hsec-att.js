@@ -173,7 +173,13 @@
   function fillSheets() {
     document.querySelectorAll(".fs-attsheet[data-keys]:not([data-done])").forEach(function (el) {
       el.setAttribute("data-done", "1");
-      files(el.getAttribute("data-keys").split(",").filter(Boolean)).then(function (list) { el.innerHTML = sheetBlock(list); el.querySelectorAll("[data-pdf]").forEach(pdfPages); })
+      files(el.getAttribute("data-keys").split(",").filter(Boolean)).then(function (list) {
+        el.innerHTML = sheetBlock(list); el.querySelectorAll("[data-pdf]").forEach(pdfPages);
+        // Nothing attached: say so on screen, but print no extra page for it (hassan, 2026-10-31).
+        var none = !list.length, pb = el.previousElementSibling;
+        el.classList.toggle("fs-attnone", none);
+        if (pb && pb.classList.contains("fs-pdbreak")) pb.classList.toggle("fs-attnone", none);
+      })
         .catch(function () { el.innerHTML = "<p class=\"muted fs-atterr\">Supporting documents could not be loaded.</p>"; });
     });
   }
@@ -275,7 +281,7 @@
     ".fs-veye:hover{background:#eaf2fb}.fs-veye sup{font-size:10px;font-weight:700;margin-left:1px}" +
     ".fs-attsheet{margin-top:14px}.fs-attfig{margin:10px 0;page-break-inside:avoid;break-inside:avoid}.fs-attfig img{display:block;max-width:100%;max-height:900px;margin:0 auto;border:1px solid #ddd}" +
     ".fs-attfig iframe{display:block;width:100%;height:720px;border:1px solid #ddd}.fs-pdfpages img{display:block;width:100%;margin:0 0 8px;border:1px solid #ddd;break-inside:avoid;page-break-inside:avoid}.fs-attfig figcaption{font-size:11px;color:#555;margin-top:4px}" +
-    "@media print{.fs-veye,.fs-attbox{display:none!important}.fs-attfig img{max-height:24cm}.fs-attfig.pdf iframe,.fs-noprint-note{display:none}.fs-pdfpages img{max-height:23cm;object-fit:contain}.fs-attfig a{color:inherit;text-decoration:none}}";
+    "@media print{.fs-veye,.fs-attbox,.fs-attnone{display:none!important}.fs-attfig img{max-height:24cm}.fs-attfig.pdf iframe,.fs-noprint-note{display:none}.fs-pdfpages img{max-height:23cm;object-fit:contain}.fs-attfig a{color:inherit;text-decoration:none}}";
   document.head.appendChild(css);
   function start() { if (!hook()) setTimeout(start, 300); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
