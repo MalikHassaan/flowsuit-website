@@ -74,3 +74,15 @@ html.fs-gated body>*:not(#fs-gate):not(script):not(style){filter:blur(9px) satur
 html:has(#frm) #fs-att{bottom:76px;opacity:.55;transition:opacity .2s!important}
 html:has(#frm) #fs-att:hover,html:has(#frm) #fs-att:focus-within{opacity:1}
 html:has(#frm) #fs-att .fsa-pill{width:40px;padding:0;justify-content:center;font-size:0;gap:0}
+/* In the top bar (hassan, 2026-10-31): a small pill beside the page title or HSEC's top bar, the card opens below it. */
+#fs-att.is-docked{top:64px;bottom:auto;right:16px}
+.fsa-pill.fsa-dock{flex:0 0 auto;margin-left:auto;display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px 0 10px;border:0;border-radius:999px;background:#16a34a;color:#fff;font:600 13px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;white-space:nowrap;cursor:pointer;align-self:center}
+.fsa-pill.fsa-dock[hidden]{display:none}
+.fsa-pill.fsa-dock i{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.35)}
+.fsa-pill.fsa-dock.is-in{background:#ecfdf3;color:#166534;border:1px solid #bbf7d0}
+.fsa-pill.fsa-dock.is-in i{background:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.25)}
+.fsa-pill.fsa-dock.is-late{background:#dc2626;color:#fff;border-color:#dc2626}
+.fsa-pill.fsa-dock.is-late i{background:#fff}
+body.fs-present .fsa-pill.fsa-dock,body.present .fsa-pill.fsa-dock{display:none}
+#topbar .fsa-pill.fsa-dock{margin-left:0}
+.home-hero{position:relative}.home-hero>.fsa-pill.fsa-dock{position:absolute;top:16px;right:16px;z-index:2}

@@ -55,7 +55,7 @@
       cols: [["demandNo", "Demand", function (r) { return mono(r.demandNo); }], ["date", "Date", function (r) { return fdate(r.date); }],
         ["entity", "Company"], ["branch", "Branch"], ["payee", "Pay to", function (r) { return esc(r.payee || "") + (r.requestedBy ? "<br><span class=\"muted\">by " + esc(r.requestedBy) + "</span>" : ""); }],
         ["description", "For"], ["amount", "Amount", null, "num"],
-        ["jv", "Demand JV", function (r) { return tag(state(r).jv); }], ["bp", "Bank payment", function (r) { return tag(state(r).bp); }],
+        ["jv", "Demand JV", function (r) { return tag(state(r).jv); }], ["bp", "Bank payment", function (r) { var s = state(r); return s.k === "topay" ? "<button type=\"button\" class=\"btn sm pri\" data-pdpay=\"" + esc(r.id) + "\">Pay</button>" : tag(s.bp); }],
         ["st", "Status", function (r) { var s = state(r); return pill(s.l, s.c); }],
         ["pr", "", function (r) { return state(r).jv ? "<button type=\"button\" class=\"btn sm\" data-pdprint=\"" + esc(r.id) + "\">Print</button>" : ""; }]],
       sort: function (a, b) { return String(b.date).localeCompare(String(a.date)) || String(b.demandNo).localeCompare(String(a.demandNo)); } };
@@ -320,6 +320,20 @@
       }
     }, true);
     document.addEventListener("click", function (e) {
+      // Pay: open the demand at its bank part (hassan, 2026-10-31: "now I want to pay that, how can I post that")
+      var pay = e.target.closest && e.target.closest("[data-pdpay]");
+      if (pay) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        openForm(DEM, pay.getAttribute("data-pdpay"));
+        setTimeout(function () {
+          var b = document.getElementById("f_bank"); if (!b) return;
+          b.scrollIntoView({ block: "center", behavior: "smooth" });
+          var w = b.closest(".f"); if (w) { w.classList.add("fs-pdpayhl"); setTimeout(function () { w.classList.remove("fs-pdpayhl"); }, 2500); }
+          var ss = w && w.querySelector(".ssb, input:not([type=hidden])"); (b.offsetParent || !ss ? b : ss).focus();
+          var pd = document.getElementById("f_payDate"); if (pd && !pd.value) pd.value = todayStr();
+        }, 900);
+        return;
+      }
       var p = e.target.closest && e.target.closest("[data-pdprint], #fsPdPrint");
       if (p) {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -362,7 +376,8 @@
       ".fs-pdbreak{height:0;margin:18px 0;border-top:1px dashed #ccc}@media print{.fs-pdbreak{break-before:page;page-break-before:always;border:0;margin:0}}" +
       ".fs-pdbl{display:flex;align-items:center;justify-content:space-between;gap:8px}" +
       ".fs-pdbplus{width:26px;height:26px;padding:0;border:1px solid #16a34a;border-radius:6px;background:#ecfdf3;color:#15803d;font-size:18px;line-height:1;cursor:pointer}" +
-      ".fs-pdbplus:hover{background:#16a34a;color:#fff}.fs-pdbnew{display:flex;gap:6px}.fs-pdbnew[hidden]{display:none}.fs-pdbnew input{flex:1;min-width:0}";
+      ".fs-pdbplus:hover{background:#16a34a;color:#fff}.fs-pdbnew{display:flex;gap:6px}.fs-pdbnew[hidden]{display:none}.fs-pdbnew input{flex:1;min-width:0}" +
+      ".fs-pdpayhl{outline:3px solid #16a34a;outline-offset:4px;border-radius:6px;transition:outline-color 1s}";
     document.head.appendChild(css);
     scheduleRender();
     return true;
