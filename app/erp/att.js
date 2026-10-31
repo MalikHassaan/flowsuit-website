@@ -42,11 +42,24 @@
     });
   }
 
+  // The button sits in the page's top bar (hassan, 2026-10-31: "unable to see behind the check in ... it should be shown
+  // in top header"): HSEC's #topbar, or the heading of an ERP page. The HSEC app redraws its top bar, so it is put back
+  // whenever it has been dropped. With no top bar on the page it floats as before.
+  function dock() {
+    var bar = document.querySelector("#topbar") || document.querySelector(".erp-main header.page-top, .erp-main .home-hero");
+    root.classList.toggle("is-docked", !!bar);
+    pill.classList.toggle("fsa-dock", !!bar);
+    if (!bar) { if (pill.parentNode !== root) root.appendChild(pill); return; }
+    if (pill.parentNode !== bar) bar.appendChild(pill);
+  }
+
   function paint() {
     if (!S) return;
     var p = S.punches, last = p[p.length - 1];
     root.classList.toggle("is-in", S.state === "in");
     root.classList.toggle("is-late", late());
+    pill.classList.toggle("is-in", S.state === "in");
+    pill.classList.toggle("is-late", late());
     pill.innerHTML = S.state === "in"
       ? '<i></i><span>' + (late() ? "Check out now" : "In since " + esc(firstIn())) + "</span>"
       : S.state === "out" ? "<i></i><span>Out at " + esc(last.at) + "</span>" : "<i></i><span>Check in</span>";
@@ -206,12 +219,14 @@
     }, done ? 1300 : 0);
   }
   function load() {
-    return api("/state").then(take).catch(function (x) { if (/Signed out/.test(x.message)) { root.hidden = true; clearInterval(timer); } });
+    return api("/state").then(take).catch(function (x) { if (/Signed out/.test(x.message)) { root.hidden = true; pill.hidden = true; clearInterval(timer); } });
   }
   var timer;
   function start() {
     if (!document.body) return setTimeout(start, 50);
     build();
+    dock();
+    setInterval(dock, 700);
     load();
     timer = setInterval(function () { if (!document.hidden) { paint(); gateSync(); } }, 30000);
     setInterval(function () { if (!document.hidden && card.hidden) load(); }, 300000);
