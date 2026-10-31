@@ -83,7 +83,7 @@ function hsec_inject(array $me): string
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
         . erp_intro(['name' => 'HSEC', 'sub' => 'Finance & Accounting ERP', 'logo' => '/erp/hsec-logo', 'zoom' => '.app',
             // hassan, 2026-10-31: a lift being assembled behind the name, and the Shanghai Mitsubishi Elevator emblem below.
-            'scene' => 'lift', 'min' => 6000,
+            'scene' => 'lift', 'min' => 10000,
             'partner' => ['img' => 'data:image/png;base64,' . base64_encode((string) file_get_contents(__DIR__ . '/hsec-partner.png')), 'line' => 'SHANGHAI MITSUBISHI ELEVATOR'],
             'steps' => ['Securing connection', 'Verifying your access', 'Loading your books', 'Preparing your dashboard']])
         . '<style>' . file_get_contents(__DIR__ . '/hsec-present.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-present.js') . '</script>'
