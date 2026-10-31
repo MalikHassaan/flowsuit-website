@@ -26,6 +26,53 @@ function att_schema(PDO $db): void
         in_time TEXT, out_time TEXT, leave_type TEXT, reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT \'pending\',
         decided_by INTEGER, decided_at TEXT, created_at TEXT NOT NULL)');
     $db->exec('CREATE TABLE IF NOT EXISTS att_sent (user_id INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, PRIMARY KEY (user_id, day, kind))');
+    // When the person last did something in the ERP (sign-out and the 10-minute timeout keep the last real activity).
+    if (!in_array('last_seen', array_column($db->query('PRAGMA table_info(users)')->fetchAll(), 'name'), true)) {
+        $db->exec('ALTER TABLE users ADD COLUMN last_seen TEXT');
+    }
+}
+
+// Called on each request the person makes themselves (not background refreshes); written at most once a minute.
+function att_seen(array $me): void
+{
+    if (empty($me['last_seen']) || time() - strtotime((string) $me['last_seen']) >= 60) {
+        if (!empty($me['last_seen']) && time() - strtotime((string) $me['last_seen']) >= 3600) {
+            att_auto_out((int) $me['id']);   // back after an hour or more: close the earlier stay first, at its last activity
+        }
+        erp_db()->prepare('UPDATE users SET last_seen = ? WHERE id = ?')->execute([erp_now(), $me['id']]);
+    }
+}
+
+// Automatic check-out (hassan, 2026-10-31: "check out should be considered as when the system was logged out ...
+// after 6 pm if it didn't relogin after 1 hour it should be marked checkout"). Anyone still checked in, after the end
+// of the working day, who has done nothing in the ERP for an hour, is checked out at the time they were last active
+// (their sign-out, or their last action before the 10-minute timeout). A day left open from before is closed the same way.
+function att_auto_out(?int $only = null): int
+{
+    $c = att_cfg();
+    $db = erp_db();
+    $today = date('Y-m-d');
+    $rows = $db->query("SELECT p.user_id, p.day, p.at, u.last_seen FROM att_punches p JOIN users u ON u.id = p.user_id
+        WHERE p.kind = 'in' AND p.id = (SELECT MAX(id) FROM att_punches WHERE user_id = p.user_id)" . ($only ? ' AND p.user_id = ' . (int) $only : ''))->fetchAll();
+    $done = 0;
+    foreach ($rows as $r) {
+        if ($r['day'] === $today && date('H:i') < $c['end']) {
+            continue;
+        }
+        $seen = (string) ($r['last_seen'] ?? '');
+        if ($seen !== '' && time() - strtotime($seen) < 3600) {
+            continue;   // still working, or came back within the hour
+        }
+        // The last activity that day; if there is none on that day, the end of that working day.
+        $at = $seen !== '' && substr($seen, 0, 10) === $r['day'] ? $seen : $r['day'] . ' ' . $c['end'] . ':00';
+        if ($at < $r['at']) {
+            $at = $r['at'];
+        }
+        $db->prepare("INSERT INTO att_punches (user_id, kind, day, at, method, note) VALUES (?, 'out', ?, ?, 'auto', ?)")
+            ->execute([$r['user_id'], $r['day'], $at, 'Checked out automatically: last active in the ERP at ' . substr($at, 11, 5)]);
+        $done++;
+    }
+    return $done;
 }
 
 // Attendance is for HSEC staff only (hassan, 2026-10-26): people who can open HSEC ERP, and admins. TAJ-only
@@ -604,8 +651,11 @@ function att_reminders(): int
 function att_reminders_maybe(): void
 {
     $last = (int) (erp_setting('att_last_run') ?? 0);
-    if (time() - $last >= 300 && date('H:i') >= att_cfg()['end']) {
+    if (time() - $last >= 300) {
         erp_setting_set('att_last_run', (string) time());
-        att_reminders();
+        att_auto_out();
+        if (date('H:i') >= att_cfg()['end']) {
+            att_reminders();
+        }
     }
 }

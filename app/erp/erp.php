@@ -285,6 +285,7 @@ function erp_start_session(bool $touch = true): void
     if ($touch || !isset($_SESSION['seen'])) {
         $_SESSION['seen'] = time();
     }
+    $GLOBALS['erp_touched'] = $touch;   // a request the person made themselves: att_seen() notes the time
     if (empty($_SESSION['csrf'])) {
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
     }
@@ -326,6 +327,9 @@ function erp_user(): ?array
             }
             if ($user) {
                 $user['access'] = erp_access_for((int) $user['id']);
+                if (!empty($GLOBALS['erp_touched'])) {
+                    att_seen($user);
+                }
             }
         }
     }
@@ -569,6 +573,10 @@ function erp_handle(string $path): void
         session_regenerate_id(true);
         erp_redirect('/erp/login?idle=1');
     } elseif ($sub === '/logout' && $post) {
+        if (!empty($_SESSION['uid'])) {
+            // Signing out is the last activity: it becomes the check-out time if they do not come back (att_auto_out).
+            erp_db()->prepare('UPDATE users SET last_seen = ? WHERE id = ?')->execute([erp_now(), (int) $_SESSION['uid']]);
+        }
         erp_remember_clear();
         $_SESSION = [];
         session_regenerate_id(true);

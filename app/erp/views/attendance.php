@@ -10,6 +10,9 @@ $where = function (array $p): string {
     if ($p['method'] === 'nogeo') {
         return '<span class="tag">Location off</span>';
     }
+    if ($p['method'] === 'auto') {
+        return '<span class="tag" title="' . e((string) $p['note']) . '">Auto (last active in ERP)</span>';
+    }
     if ($p['method'] === 'corrected') {
         return '<span class="tag">Corrected</span>';
     }
