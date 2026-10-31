@@ -16,7 +16,9 @@ require_once __DIR__ . '/chat.php';
 require_once __DIR__ . '/attendance.php';
 require_once __DIR__ . '/help.php';
 
-const ERP_SESSION_IDLE = 7200;          // seconds before an idle session signs out
+// Signed out after 10 minutes with no mouse, keyboard or touch activity (hassan, 2026-10-31). idle.js pings the server
+// while the person is active and sends them to /erp/timeout when the 10 minutes run out in every open tab.
+const ERP_SESSION_IDLE = 600;           // seconds before an idle session signs out
 const ERP_LOGIN_LIMIT = 8;              // failed logins per IP per 15 minutes
 const ERP_ACCOUNT_LIMIT = 10;           // failed logins per account per 15 minutes, from any number of IPs
 const ERP_MAX_UPLOAD = 8 * 1024 * 1024; // bytes
@@ -554,6 +556,18 @@ function erp_handle(string $path): void
         erp_setup($hasUsers, $post);
     } elseif ($sub === '/login') {
         erp_login($post);
+    } elseif ($sub === '/ping') {
+        // idle.js: the person is still working, so the session stays alive (erp_start_session above touched it).
+        header('Cache-Control: no-store');
+        if (!erp_user()) {
+            http_response_code(401);
+        }
+        taj_json(['ok' => (bool) erp_user(), 'idle' => ERP_SESSION_IDLE]);
+    } elseif ($sub === '/timeout') {
+        erp_remember_clear();
+        $_SESSION = [];
+        session_regenerate_id(true);
+        erp_redirect('/erp/login?idle=1');
     } elseif ($sub === '/logout' && $post) {
         erp_remember_clear();
         $_SESSION = [];

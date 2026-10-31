@@ -96,8 +96,11 @@ function erp_remember_name(): string
     return erp_slot() > 1 ? ERP_REMEMBER_COOKIE . '_u' . erp_slot() : ERP_REMEMBER_COOKIE;
 }
 
+// "Remember me" is switched off (hassan, 2026-10-31: sign out after 10 minutes without activity). A 30-day cookie
+// would sign the person straight back in after the timeout, so no new one is given and old ones are cleared on sight.
 function erp_remember_set(int $userId): void
 {
+    return;
     $token = erp_token_create($userId, 'remember', ERP_REMEMBER_DAYS * 86400);
     setcookie(erp_remember_name(), $token, ['expires' => time() + ERP_REMEMBER_DAYS * 86400, 'path' => erp_slot_base(),
         'secure' => erp_https(), 'httponly' => true, 'samesite' => 'Lax']);
@@ -118,6 +121,10 @@ function erp_remember_login(): void
     if ($token === '') {
         return;
     }
+    if (!headers_sent()) {
+        erp_remember_clear();
+    }
+    return;
     $row = erp_token_user($token, ['remember']);
     if ($row) {
         // Other open tabs may send this same cookie at the same moment (several tabs waking up after the session
