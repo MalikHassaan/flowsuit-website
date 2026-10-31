@@ -4,10 +4,10 @@
 // get printed at once: first the JV, then the BPV, then the supporting documents ... and a report of how many demands
 // are paid and how many pending"). Under Payables › Payment demands:
 //  * A demand: company, branch, who asked, who is to be paid, one or more lines (account, what for, project,
-//    department, qty × rate) and the payable account. Saving it creates the demand JV (Dr each line, Cr the payable)
-//    and sends it for approval.
+//    department, qty × rate) and the payable account. Saving it posts the demand JV (Dr each line, Cr the payable) at
+//    once, with no approval (hassan, 2026-10-31); after that its amounts change only through Reverse and correct.
 //  * Choosing "Pay from bank" on the demand and saving creates the bank payment voucher (Dr the payable, Cr the bank),
-//    also sent for approval. The two go through Senior Manager and Group GM Finance like every voucher.
+//    which goes through Senior Manager and Group GM Finance like every voucher.
 //  * "Print JV + BPV + documents" prints the JV, the BPV and every attached document in one go.
 //  * The list opens with a summary: demands paid and pending, in number and amount, by branch.
 (function () {
@@ -34,7 +34,7 @@
     var jv = r.id && live(r.id, "accrue"), bp = r.id && live(r.id, "pay");
     if (bp && bp.status === "Posted") return { k: "paid", l: "Paid", c: "good", jv: jv, bp: bp };
     if (bp) return { k: "payappr", l: "Payment in approval", c: "acc", jv: jv, bp: bp };
-    if (jv && jv.status === "Posted") return { k: "topay", l: "Approved, to be paid", c: "warn", jv: jv };
+    if (jv && jv.status === "Posted") return { k: "topay", l: "To be paid", c: "warn", jv: jv };
     if (jv) return { k: "appr", l: "Demand in approval", c: "warn", jv: jv };
     var back = r.id && vouchersOf(r.id).some(function (j) { return j.status === "Rejected"; });
     return back ? { k: "back", l: "Returned", c: "bad" } : { k: "none", l: "Not posted", c: "" };
@@ -98,12 +98,14 @@
     });
   }
 
-  // a voucher made from a demand always goes to approval
+  // The demand JV posts at once; only the bank payment voucher goes to approval (hassan, 2026-10-31: "JV doesn't need
+  // approval process, only once the payment is made").
   async function post(r, ev) {
     var P = POSTERS[DEM][ev], ok = P.ready(r); if (ok !== true) throw new Error("Cannot make the " + P.label + ": " + ok + ".");
     if (live(r.id, ev)) return null;
     var name = approverName() || "ERP user", now = new Date().toISOString();
-    var j = Object.assign({}, P.build(r), { opening: "No", status: "Pending approval", source: { c: DEM, id: r.id, ev: ev, key: ev }, maker: { name: name, at: now }, approvals: [] });
+    var j = Object.assign({}, P.build(r), { opening: "No", status: ev === "accrue" ? "Posted" : "Pending approval", source: { c: DEM, id: r.id, ev: ev, key: ev }, maker: { name: name, at: now }, approvals: [] });
+    if (ev === "accrue") j.postedBy = { name: name, at: now };
     if (!j.dept) j.dept = "Finance & Accounts";
     if (isLocked(j)) throw new Error(j.entity + " " + lockTxt(j.entity) + ". Date it after that.");
     if ((j.lines || []).some(function (l) { return !l.account; })) throw new Error("An account is missing on the demand.");
@@ -192,6 +194,12 @@
       if (!String(r.items[i].desc || "").trim()) return err("Line " + (i + 1) + ": say what it is for.");
     }
     r.amount = lineTot(r.items);
+    // Once its JV is in the books, what was demanded can only change by reversing it.
+    var was = r.id && byId(DEM, r.id), jv = r.id && live(r.id, "accrue");
+    if (was && jv && jv.status === "Posted") {
+      var key = function (x) { return JSON.stringify([x.entity, x.payAcc, x.date, (x.items || []).map(function (l) { return [l.account, n(l.amount), l.project || "", l.dept || ""]; })]); };
+      if (key(was) !== key(r)) return err("The demand JV " + (jv.ref || "") + " is already posted, so the lines, amounts, accounts, company and date cannot change. Use Reverse and correct to change them.");
+    }
     r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
     if (r.bank && !r.payDate) r.payDate = todayStr();
     return true;
@@ -227,7 +235,7 @@
     var card = function (t, x, c) { return "<div class=\"fs-pdcard " + (c || "") + "\"><span>" + t + "</span><b>" + x.n + "</b><em>Rs " + fmt(x.a) + "</em></div>"; };
     var bk = Object.keys(by).sort();
     return "<div class=\"fs-pdsum\"><div class=\"fs-pdcards\">" + card("All demands", tot) + card("Paid", f("paid"), "good") + card("Pending", pend, "warn") +
-      card("Demand in approval", f("appr")) + card("Approved, to be paid", f("topay")) + card("Payment in approval", f("payappr")) + (f("back").n ? card("Returned", f("back"), "bad") : "") + "</div>" +
+      (f("appr").n ? card("Demand in approval", f("appr")) : "") + card("To be paid", f("topay")) + card("Payment in approval", f("payappr")) + (f("back").n ? card("Returned", f("back"), "bad") : "") + "</div>" +
       (bk.length ? "<div class=\"tw\"><table><thead><tr><th>Branch · company</th><th class=\"num\">Demands</th><th class=\"num\">Amount</th><th class=\"num\">Paid</th><th class=\"num\">Paid amount</th><th class=\"num\">Pending</th><th class=\"num\">Pending amount</th></tr></thead><tbody>" +
         bk.map(function (k) { var x = by[k]; return "<tr><td>" + esc(k) + "</td><td class=\"num\">" + x.n + "</td><td class=\"num\">" + fmt(x.a) + "</td><td class=\"num\">" + x.dn + "</td><td class=\"num\">" + fmt(x.da) + "</td><td class=\"num\">" + x.pn + "</td><td class=\"num\">" + fmt(x.pa) + "</td></tr>"; }).join("") +
         "</tbody></table></div>" : "") + "<p class=\"muted\" style=\"margin:6px 0 0\">Type Paid, Pending approval or a branch name in Search to filter the list below.</p></div>";
