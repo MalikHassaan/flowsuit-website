@@ -71,7 +71,7 @@
     </div>
     <p class="muted small">With two or more companies ticked, their "All my companies" view adds those companies together.</p>
   </fieldset>
-<?php $nav = hsec_nav(); $pickedMods = array_filter(explode(',', (string) ($target['hsec_mods'] ?? ''))); $modScope = $_POST['hsec_mod_scope'] ?? ($pickedMods ? 'some' : 'all'); $tickedMods = $_POST['hsec_mods'] ?? $pickedMods; ?>
+<?php $nav = hsec_nav_full(); $pickedMods = array_filter(explode(',', (string) ($target['hsec_mods'] ?? ''))); $modScope = $_POST['hsec_mod_scope'] ?? ($pickedMods ? 'some' : 'all'); $tickedMods = $_POST['hsec_mods'] ?? $pickedMods; ?>
   <fieldset class="hsec-cos hsec-mods" data-hsec-cos>
     <legend>HSEC ERP: menu areas (left panel)</legend>
     <p class="muted small">They see and work in the ticked areas only; everything else disappears from their left panel. Home is always there. Admins always see everything.</p>
