@@ -110,6 +110,9 @@
       + '<button type="button" class="fsm-kpi click' + (open.lim ? " on" : "") + '" data-fsm="lim"><span>LC / guarantee limits free</span><b>' + big(lim.avail) + '</b><i>of ' + big(lim.limit) + ' sanctioned · click for each bank ▾</i></button>'
       + '<a class="fsm-kpi" href="#e_lc/bgs"><span>Guarantees outstanding</span><b>' + big(bgAmt) + '</b><i>' + bgIss.length + ' issued' + (bgSoon.length ? ' · <em class="bad">' + bgSoon.length + ' expire in 30 days</em>' : "") + (bgReq.length ? ' · ' + bgReq.length + ' requested' : "") + '</i></a>'
       + '<a class="fsm-kpi" href="#e_lc/fatr"><span>FATR outstanding</span><b>' + big(fatOut) + '</b><i>' + fat.length + ' open' + (fatOver.length ? ' · <em class="bad">' + fatOver.length + ' overdue</em>' : "") + '</i></a>'
+      + (function () { var B = window.FS_BOOK ? window.FS_BOOK.rows().filter(function (r) { return r.on; }) : [], fy = window.FS_BOOK ? window.FS_BOOK.fyStart() : "";
+          var Y = B.filter(function (r) { return r.on >= fy; }), cvY = Y.reduce(function (s, r) { return s + r.cv; }, 0), left = B.reduce(function (s, r) { return s + r.left; }, 0);
+          return '<a class="fsm-kpi" href="#e_ar/booking"><span>Contracts booked this year</span><b>' + big(cvY) + '</b><i>' + Y.length + ' booked since ' + esc(fd(fy)) + ' · ' + big(left) + ' still to invoice</i></a>'; })()
       + '<a class="fsm-kpi" href="#e_ar/receivables"><span>Receivables to collect</span><b>' + big(arOut) + '</b><i>' + (coll.over ? '<em class="bad">' + big(coll.over) + ' overdue</em>' : 'nothing overdue') + '</i></a>'
       + '<a class="fsm-kpi" href="#proj"><span>Maintenance income this month</span><b>' + big(amcMonth) + '</b><i>' + amcRows.length + ' active AMC' + (amcRows.length === 1 ? "" : "s") + '</i></a>'
       + '<a class="fsm-kpi" href="#e_ap/payables"><span>Payables due in 30 days</span><b>' + big(apDue) + '</b><i>incl. overdue</i></a>'
