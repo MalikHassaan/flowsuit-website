@@ -38,7 +38,7 @@ function hsec_nav(): array
     if (!is_file($file)) {
         return $nav;
     }
-    $cache = erp_data_dir() . '/hsec-nav.json';
+    $cache = erp_data_dir() . '/hsec-nav-v2.json';
     if (is_file($cache) && filemtime($cache) >= filemtime($file)) {
         $nav = json_decode((string) file_get_contents($cache), true) ?: [];
         return $nav;
@@ -54,8 +54,47 @@ function hsec_nav(): array
                 $nav[] = [$g[1], array_map(fn($i) => [$i[1], $i[2]], $items)];
             }
         }
+        $nav = hsec_nav_splices($src, $b, $nav);
     }
     @file_put_contents($cache, json_encode($nav));
+    return $nav;
+}
+
+// Later versions of the app add whole groups after the NAV block with NAV.splice(...) (Sales, Reports, Business cycle).
+// Apply them in source order so Users and access lists every area the app shows.
+function hsec_nav_splices(string $src, int $from, array $nav): array
+{
+    $re = '/NAV\.splice\(([^,;]{1,120}),\s*0,\s*\["([^"\[\]]+)",\s*\[((?:\["\w+","[^"]+"\],?)+)\]\]\)/';
+    if (!preg_match_all($re, $src, $ms, PREG_SET_ORDER | PREG_OFFSET_CAPTURE, $from)) {
+        return $nav;
+    }
+    foreach ($ms as $m) {
+        $where = trim($m[1][0]);
+        $name = $m[2][0];
+        if (in_array($name, array_column($nav, 0), true)) {
+            continue;
+        }
+        preg_match_all('/\["(\w+)","([^"]+)"\]/', $m[3][0], $items, PREG_SET_ORDER);
+        $group = [$name, array_map(fn($i) => [$i[1], $i[2]], $items)];
+        $names = array_column($nav, 0);
+        $at = count($nav);
+        if (preg_match('/^\d+$/', $where)) {
+            $at = min((int) $where, count($nav));
+        } elseif (preg_match('/===\s*"([^"]+)"/', $where, $w)) {
+            $i = array_search($w[1], $names, true);
+            $at = $i === false ? count($nav) : $i;
+        } elseif (preg_match('/^\w+\s*\+\s*1$/', $where)
+            && preg_match('/startsWith\("([^"]+)"\)[^;]*;\s*$/', substr($src, max(0, $m[0][1] - 300), 300), $w)) {
+            $last = -1;
+            foreach ($names as $i => $n) {
+                if (strpos($n, $w[1]) === 0) {
+                    $last = $i;
+                }
+            }
+            $at = $last + 1;
+        }
+        array_splice($nav, $at, 0, [$group]);
+    }
     return $nav;
 }
 
