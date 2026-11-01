@@ -69,7 +69,7 @@
           return '<tr><td>' + esc(fd(r.on)) + '<div class="muted small">' + esc(r.how) + '</div></td>'
             + '<td><b>' + esc((r.p.code ? r.p.code + " · " : "") + (r.p.name || "")) + '</b>' + (r.p.status ? '<div class="muted small">' + esc(r.p.status) + '</div>' : "") + '</td>'
             + '<td>' + esc(r.p.entity || "") + '</td><td class="num"><b>' + money(r.cv) + '</b></td><td class="num">' + money(r.advIn) + '</td><td class="num">' + money(r.invoiced) + '</td>'
-            + '<td class="num">' + (r.left >= 1 ? '<b>' + money(r.left) + '</b>' : '<span class="good">Fully invoiced</span>') + '</td>'
+            + '<td class="num">' + (!r.cv ? '<a href="#proj">Set the contract value</a>' : r.left >= 1 ? '<b>' + money(r.left) + '</b>' : '<span class="good">Fully invoiced</span>') + '</td>'
             + '<td><span class="fsbk-bar"><span style="width:' + pc + '%"></span></span> ' + pc + '%</td>'
             + '<td>' + (nx ? esc(nx.row.m || "Milestone") + ' · ' + money(nx.amt) + ' <span class="muted small">' + esc(nx.s.t || "") + '</span>'
                 + (/^waits/i.test(nx.s.t || "") ? "" : '<br><button class="btn sm pri" data-bsraise="' + esc(bsKey(r.p, nx.row)) + '">Raise invoice</button>')
