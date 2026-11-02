@@ -13,7 +13,7 @@
   /* global QE, Store, qtDraw, qtRead, qtDoc, qtLive, qtPdfMenu, qtPdfName, QT_LOGO, toast, esc */
   var C = window.FS_BRIDGE || {}, API = (C.api || "/erp/m/hsec/api") + "/att";
   // The currency list comes from Setup & maintenance › Currencies & exchange rates (hsec-currency.js).
-  var CDEF = [{ code: "PKR", name: "Pakistani rupee", words: "Rupees", frac: "Paisa" }, { code: "USD", name: "US dollar", words: "US Dollars", frac: "Cents" }];
+  var CDEF = [{ code: "PKR", name: "Pakistani rupee", words: "Rupees", frac: "Paisa", sym: "Rs" }, { code: "USD", name: "US dollar", words: "US Dollars", frac: "Cents", sym: "$" }];
   var CLIST = function () { var L = window.FS_CUR && safe(function () { return window.FS_CUR.list(); }, null); return L && L.length ? L : CDEF; };
   var CURS = { filter: function (f) { return CLIST().map(function (c) { return c.code; }).filter(f); } };
   var cinfo = function (c) { return CLIST().find(function (x) { return x.code === c; }) || { code: c, name: c, words: c, frac: "" }; };
@@ -36,6 +36,30 @@
       .replace(/\bRupees (?=[A-Z])/g, function () { return (cinfo(c).words || c) + " "; })
       .replace(/(\w) Paisa Only/g, function (m, a) { var f = cinfo(c).frac; return a + (f ? " " + f : "") + " Only"; });
   }
+  // currency sign before every amount of a foreign currency quotation ("$ 2,000,000"); PKR quotations keep their format
+  var MONEY = /^-?\d[\d,]*(\.\d+)?(\/-)?$/;
+  function signDoc(html, c) {
+    if (c === "PKR") return html;
+    var sym = cinfo(c).sym || c, t = document.createElement("template"); t.innerHTML = html;
+    t.content.querySelectorAll("td.q-n, td.o-n, .q-sum b").forEach(function (el) {
+      var w = el.querySelector("b") || el, x = w.textContent.trim();
+      if (el.classList.contains("o-n") && !/\/-$/.test(x)) return; // the quantity column of the original layout
+      if (MONEY.test(x)) w.textContent = sym + " " + x;
+    });
+    t.content.querySelectorAll("td, b, div").forEach(function (el) {
+      if (el.children.length) return;
+      var x = el.textContent, y = x.replace(new RegExp("^" + c + ": (?=\\d)"), sym + " ").replace(new RegExp("^" + c + ": (?=[A-Z])"), (cinfo(c).words || c) + " ");
+      if (y !== x) el.textContent = y;
+    });
+    return t.innerHTML;
+  }
+  function signEditor() {
+    var c = QE ? cur(QE) : "PKR", sym = cinfo(c).sym || c;
+    document.querySelectorAll("#qtOv [data-qamt], #qTot b").forEach(function (el) {
+      var x = el.textContent.replace(/^\S+ (?=-?\d)/, "").trim();
+      el.textContent = c === "PKR" || !MONEY.test(x) ? x : sym + " " + x;
+    });
+  }
   function relabelEditor() {
     var ov = document.getElementById("qtOv"); if (!ov || !QE) return;
     var c = cur(QE);
@@ -55,7 +79,7 @@
       return "<option value=\"" + h(c) + "\"" + (cur(QE) === c ? " selected" : "") + ">" + h(c + " (" + x.name + ")") + "</option>";
     }).join("") + "</select><small>The currency of every price in this quotation.</small>";
     lab.parentNode.insertBefore(l, lab);
-    l.querySelector("select").addEventListener("change", function (e) { QE.currency = e.target.value; relabelEditor(); });
+    l.querySelector("select").addEventListener("change", function (e) { QE.currency = e.target.value; relabelEditor(); safe(signEditor); });
   }
 
   // ---- 2. reference car designs
@@ -256,7 +280,7 @@
     var t = document.createElement("template"); t.innerHTML = html;
     t.content.querySelectorAll("tr[data-qted]").forEach(function (tr) {
       var q = Store.data.quotes.find(function (x) { return x.id === tr.dataset.qted; }), td = tr.children[5];
-      if (td) td.textContent = (q && cur(q) !== "PKR" ? cur(q) : "Rs") + " " + td.textContent.trim();
+      if (td) td.textContent = (q && cur(q) !== "PKR" ? cinfo(cur(q)).sym || cur(q) : "Rs") + " " + td.textContent.trim();
     });
     return t.innerHTML;
   }
@@ -265,7 +289,7 @@
   function hook() {
     if (typeof qtDraw !== "function" || typeof qtRead !== "function" || typeof qtDoc !== "function" || typeof qtPdfMenu !== "function") return false;
     var oDraw = qtDraw, oRead = qtRead, oDoc = qtDoc, oMenu = qtPdfMenu, oLive = typeof qtLive === "function" ? qtLive : null;
-    qtDraw = function () { oDraw.apply(this, arguments); if (!QE) return; safe(addCurrency); safe(addPicsBox); safe(relabelEditor); }; // eslint-disable-line no-global-assign
+    qtDraw = function () { oDraw.apply(this, arguments); if (!QE) return; safe(addCurrency); safe(addPicsBox); safe(relabelEditor); safe(signEditor); }; // eslint-disable-line no-global-assign
     qtRead = function () { // eslint-disable-line no-global-assign
       oRead.apply(this, arguments); if (!QE || !document.getElementById("qtOv")) return;
       var c = document.getElementById("qe_cur"); if (c) QE.currency = c.value;
@@ -273,8 +297,8 @@
       if (P.length || QE.refPics) QE.refPics = P;
     };
     if (typeof qtList === "function") { var oList = qtList; qtList = function () { var s = oList.apply(this, arguments); return safe(function () { return relabelList(s); }, s); }; } // eslint-disable-line no-global-assign
-    if (oLive) qtLive =function () { oLive.apply(this, arguments); safe(relabelEditor); }; // eslint-disable-line no-global-assign
-    qtDoc = function (q, lh) { return relabel(insertPics(oDoc.apply(this, arguments), q || {}), cur(q)); }; // eslint-disable-line no-global-assign
+    if (oLive) qtLive = function () { oLive.apply(this, arguments); safe(relabelEditor); safe(signEditor); }; // eslint-disable-line no-global-assign
+    qtDoc = function (q, lh) { var c = cur(q); return signDoc(relabel(insertPics(oDoc.apply(this, arguments), q || {}), c), c); }; // eslint-disable-line no-global-assign
     qtPdfMenu = function (btn, id) { // eslint-disable-line no-global-assign
       oMenu.apply(this, arguments);
       var m = document.getElementById("qtPdfMenu");

@@ -6,12 +6,14 @@
 // PKR is the base currency and always stays. A currency still used by a record cannot be removed.
 (function () {
   /* global MODS, NAV, TITLE, TAB_HOME, NS_ALIAS, S, Store, FX_CUR, FX_WORDS, fxRate, fxFetch, fmtRate, settings, special, render, esc, toast */
+  // sign printed before amounts (hassan, 2026-11-02: "show currency sign with the amount ... like $ 2000,000")
+  var SYM = { PKR: "Rs", USD: "$", EUR: "€", GBP: "£", CNY: "¥", AED: "AED", SAR: "SAR", JPY: "¥", HKD: "HK$", TRY: "₺", KRW: "₩", CHF: "CHF" };
   var DEF = [
     ["PKR", "Pakistani rupee", "Rupees", "Paisa"], ["USD", "US dollar", "US Dollars", "Cents"], ["EUR", "Euro", "Euros", "Cents"],
     ["GBP", "British pound", "Pounds Sterling", "Pence"], ["CNY", "Chinese yuan", "Chinese Yuan", "Fen"], ["AED", "UAE dirham", "UAE Dirhams", "Fils"],
     ["SAR", "Saudi riyal", "Saudi Riyals", "Halalas"], ["JPY", "Japanese yen", "Japanese Yen", "Sen"], ["HKD", "Hong Kong dollar", "Hong Kong Dollars", "Cents"],
     ["TRY", "Turkish lira", "Turkish Lira", "Kurus"], ["KRW", "South Korean won", "Korean Won", "Jeon"], ["CHF", "Swiss franc", "Swiss Francs", "Rappen"]
-  ].map(function (c) { return { code: c[0], name: c[1], words: c[2], frac: c[3] }; });
+  ].map(function (c) { return { code: c[0], name: c[1], words: c[2], frac: c[3], sym: SYM[c[0]] || c[0] }; });
   var safe = function (f, d) { try { return f(); } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var say = function (m) { safe(function () { toast(m); }, null); };
@@ -21,7 +23,7 @@
     var L = Array.isArray(s) && s.length ? s.filter(function (c) { return c && /^[A-Z]{3}$/.test(c.code); }) : DEF.slice();
     if (!L.some(function (c) { return c.code === "PKR"; })) L.unshift(DEF[0]);
     L.sort(function (a, b) { return a.code === "PKR" ? -1 : b.code === "PKR" ? 1 : 0; });
-    return L;
+    return L.map(function (c) { return c.sym ? c : Object.assign({}, c, { sym: SYM[c.code] || c.code }); });
   }
   function get(code) { return list().find(function (c) { return c.code === code; }) || null; }
   function codes() { return list().map(function (c) { return c.code; }); }
@@ -77,7 +79,7 @@
       var used = u.length ? u.map(function (x) { return h(x[0]) + " " + x[1]; }).join(", ") : "<span class=\"muted\">Not used yet</span>";
       var del = c.code === "PKR" ? "" : u.length ? "<button class=\"btn sm\" disabled title=\"Used by records, so it stays\">Remove</button>"
         : "<button class=\"btn sm\" data-curdel=\"" + h(c.code) + "\">Remove</button>";
-      return "<tr><td><b>" + h(c.code) + "</b></td><td>" + h(c.name) + "</td><td>" + h(c.words) + " … " + h(c.frac) + " Only</td><td class=\"num\">" + rate
+      return "<tr><td><b>" + h(c.code) + "</b></td><td>" + h(c.name) + "</td><td>" + h(c.sym) + "</td><td>" + h(c.words) + " … " + h(c.frac) + " Only</td><td class=\"num\">" + rate
         + "</td><td>" + used + "</td><td style=\"white-space:nowrap\"><button class=\"btn sm\" data-curedit=\"" + h(c.code) + "\">Edit</button> " + del + "</td></tr>";
     }).join("");
     var v = function (k, d) { return h(e ? e[k] : d || ""); };
@@ -85,10 +87,11 @@
       + "<label><span>Code</span><input id=\"cur_code\" maxlength=\"3\" placeholder=\"e.g. QAR\" value=\"" + v("code") + "\"" + (e ? " readonly" : "") + "><small>3-letter ISO code. The live rate is fetched for it.</small></label>"
       + "<label><span>Name</span><input id=\"cur_name\" placeholder=\"e.g. Qatari riyal\" value=\"" + v("name") + "\"></label>"
       + "<label><span>Amount in words</span><input id=\"cur_words\" placeholder=\"e.g. Qatari Riyals\" value=\"" + v("words") + "\"><small>Printed as “Qatari Riyals One Thousand Only”.</small></label>"
+      + "<label><span>Sign</span><input id=\"cur_sym\" maxlength=\"5\" placeholder=\"e.g. $ or QR\" value=\"" + v("sym") + "\"><small>Printed before amounts, e.g. $ 2,000,000.</small></label>"
       + "<label><span>Fraction in words</span><input id=\"cur_frac\" placeholder=\"e.g. Dirhams\" value=\"" + v("frac") + "\"><small>For amounts with decimals, e.g. Cents.</small></label>"
       + "</div><div class=\"bar\"><button class=\"btn pri\" id=\"curSave\">" + (e ? "Save changes" : "Add currency") + "</button>"
       + (e ? "<button class=\"btn\" id=\"curCancel\">Cancel</button>" : "") + "<span class=\"err\" id=\"curErr\"></span></div></div>"
-      + "<div class=\"panel tw\"><table><thead><tr><th>Code</th><th>Name</th><th>Amount in words</th><th class=\"num\">Rate used (PKR per 1)</th><th>Used in</th><th></th></tr></thead><tbody>"
+      + "<div class=\"panel tw\"><table><thead><tr><th>Code</th><th>Name</th><th>Sign</th><th>Amount in words</th><th class=\"num\">Rate used (PKR per 1)</th><th>Used in</th><th></th></tr></thead><tbody>"
       + rows + "</tbody></table></div>"
       + "<p class=\"note\">These currencies appear in every currency box: quotations, projects, LCs, purchase orders and bank guarantees. "
       + "Set or check today's rates on <a href=\"#s_fx/fxrates\">Exchange rates</a>. Only an administrator can change this list. "
@@ -115,7 +118,7 @@
       return;
     }
     var g = function (id) { var el = document.getElementById(id); return el ? String(el.value).trim() : ""; };
-    var rec = { code: g("cur_code").toUpperCase(), name: g("cur_name"), words: g("cur_words"), frac: g("cur_frac") };
+    var rec = { code: g("cur_code").toUpperCase(), name: g("cur_name"), words: g("cur_words"), frac: g("cur_frac"), sym: g("cur_sym") || g("cur_code").toUpperCase() };
     if (!/^[A-Z]{3}$/.test(rec.code)) return err("Enter a 3-letter code, for example QAR.");
     if (!rec.name) return err("Enter the currency name.");
     if (!rec.words) return err("Enter the amount in words, for example Qatari Riyals.");
