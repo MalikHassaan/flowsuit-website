@@ -12,11 +12,15 @@
 (function () {
   /* global QE, Store, qtDraw, qtRead, qtDoc, qtLive, qtPdfMenu, qtPdfName, QT_LOGO, toast, esc */
   var C = window.FS_BRIDGE || {}, API = (C.api || "/erp/m/hsec/api") + "/att";
-  var CURS = ["PKR", "USD"];
+  // The currency list comes from Setup & maintenance › Currencies & exchange rates (hsec-currency.js).
+  var CDEF = [{ code: "PKR", name: "Pakistani rupee", words: "Rupees", frac: "Paisa" }, { code: "USD", name: "US dollar", words: "US Dollars", frac: "Cents" }];
+  var CLIST = function () { var L = window.FS_CUR && safe(function () { return window.FS_CUR.list(); }, null); return L && L.length ? L : CDEF; };
+  var CURS = { filter: function (f) { return CLIST().map(function (c) { return c.code; }).filter(f); } };
+  var cinfo = function (c) { return CLIST().find(function (x) { return x.code === c; }) || { code: c, name: c, words: c, frac: "" }; };
   var safe = function (f, d) { try { return f(); } catch (e) { return d; } };
   var say = function (m) { safe(function () { toast(m); }, null); };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
-  var cur = function (q) { var c = q && q.currency; return CURS.indexOf(c) >= 0 ? c : "PKR"; };
+  var cur = function (q) { var c = q && q.currency; return /^[A-Z]{3}$/.test(c || "") ? c : "PKR"; };
   var fileUrl = function (id) { return API + "/file?id=" + encodeURIComponent(id); };
   function post(u, fd) {
     fd.append("csrf", C.csrf || "");
@@ -29,7 +33,8 @@
   function relabel(html, c) {
     if (c === "PKR") return html;
     return html.replace(/\(PKR\)/g, "(" + c + ")").replace(/\(PKR,/g, "(" + c + ",").replace(/PKR: /g, c + ": ")
-      .replace(/\bRupees (?=[A-Z])/g, c === "USD" ? "US Dollars " : c + " ").replace(/(\w) Paisa Only/g, c === "USD" ? "$1 Cents Only" : "$1 Only");
+      .replace(/\bRupees (?=[A-Z])/g, function () { return (cinfo(c).words || c) + " "; })
+      .replace(/(\w) Paisa Only/g, function (m, a) { var f = cinfo(c).frac; return a + (f ? " " + f : "") + " Only"; });
   }
   function relabelEditor() {
     var ov = document.getElementById("qtOv"); if (!ov || !QE) return;
@@ -38,16 +43,16 @@
       if (!el.dataset.fsOrig) el.dataset.fsOrig = el.innerHTML;
       el.innerHTML = relabel(el.dataset.fsOrig, c);
     });
-    var w = document.getElementById("qWords"); if (w) w.textContent = relabel(w.textContent.replace(/^US Dollars /, "Rupees ").replace(/ Cents Only$/, " Paisa Only"), c);
+    var w = document.getElementById("qWords"); if (w) { var t = w.textContent; CLIST().forEach(function (x) { if (x.code === "PKR") return; if (x.words && t.indexOf(x.words + " ") === 0) t = "Rupees " + t.slice(x.words.length + 1); if (x.frac && / Only$/.test(t) && t.slice(-(x.frac.length + 6)) === " " + x.frac + " Only") t = t.slice(0, -(x.frac.length + 6)) + " Paisa Only"; }); w.textContent = relabel(t, c); }
     var fx = document.getElementById("qe_fx"), lab = fx && fx.closest("label");
-    if (lab) { var sm = lab.querySelector("small"); if (sm && !sm.dataset.fsFx) { sm.dataset.fsFx = "1"; sm.textContent += " For a USD quotation, prices are entered in USD; the rate stays for reference."; } }
+    if (lab) { var sm = lab.querySelector("small"); if (sm && !sm.dataset.fsFx) { sm.dataset.fsFx = "1"; sm.textContent += " For a quotation in another currency, prices are entered in that currency; the rate stays for reference."; } }
   }
   function addCurrency() {
     var fx = document.getElementById("qe_fx"), lab = fx && fx.closest("label");
     if (!lab || document.getElementById("qe_cur")) return;
     var l = document.createElement("label"); l.className = "qf";
-    l.innerHTML = "<span>Currency</span><select id=\"qe_cur\">" + CURS.map(function (c) {
-      return "<option value=\"" + c + "\"" + (cur(QE) === c ? " selected" : "") + ">" + (c === "USD" ? "USD (US dollars)" : "PKR (Pakistani rupees)") + "</option>";
+    l.innerHTML = "<span>Currency</span><select id=\"qe_cur\">" + CLIST().map(function (x) { var c = x.code;
+      return "<option value=\"" + h(c) + "\"" + (cur(QE) === c ? " selected" : "") + ">" + h(c + " (" + x.name + ")") + "</option>";
     }).join("") + "</select><small>The currency of every price in this quotation.</small>";
     lab.parentNode.insertBefore(l, lab);
     l.querySelector("select").addEventListener("change", function (e) { QE.currency = e.target.value; relabelEditor(); });
