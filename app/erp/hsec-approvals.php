@@ -98,13 +98,16 @@ function hsec_nav_splices(string $src, int $from, array $nav): array
     return $nav;
 }
 
-// The menu as Users and access shows it: the app's own areas plus ones FlowSuit adds (hsec-mgmt.js).
+// The menu as Users and access shows it: the app's own areas plus ones FlowSuit adds (hsec-mgmt.js, hsec-currency.js).
 function hsec_nav_full(): array
 {
     $nav = hsec_nav();
     foreach ($nav as $i => [$name]) {
         if ($name === 'Home') {
             $nav[$i][1][] = ['mgmt', 'Management dashboard'];
+        }
+        if ($name === 'Setup & maintenance') {
+            $nav[$i][1][] = ['s_fx', 'Currencies & exchange rates']; // hsec-currency.js
         }
     }
     return $nav;
@@ -458,6 +461,7 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-booking.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-mgmt.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-homegate.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-currency.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-quote.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-gantt.js') . '</script>';
 }
