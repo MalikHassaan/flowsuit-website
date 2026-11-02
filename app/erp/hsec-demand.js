@@ -55,10 +55,17 @@
   }
 
   // ---- Export CSV asks which vouchers (hassan, 2026-11-02: "when we click export it should ask JV, BPV or both") ----
+  var EXST = [["paid", "Paid", ["paid"]], ["topay", "To be paid (JV posted, not paid)", ["topay"]], ["payappr", "Payment in approval", ["payappr"]],
+    ["appr", "Demand in approval", ["appr"]], ["draft", "Draft / not posted", ["none"]], ["back", "Returned", ["back"]]];
   function exportMenu(btn) {
     var old = document.getElementById("fsPdExp"); if (old) { old.remove(); return; }
     var m = document.createElement("div"); m.id = "fsPdExp"; m.className = "fs-pdexp"; m.setAttribute("role", "menu");
+    var cnt = {}; (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM)).filter(inRange).forEach(function (r) { var k = state(r).k; cnt[k] = (cnt[k] || 0) + 1; });
     m.innerHTML = "<b>What do you want to export?</b><span class=\"muted\">Demands dated " + esc(rangeTxt()) + "</span>" +
+      "<fieldset class=\"fs-pdexst\"><legend>Status</legend>" + EXST.map(function (x) {
+        var c = x[2].reduce(function (t, k) { return t + (cnt[k] || 0); }, 0);
+        return "<label><input type=\"checkbox\" data-pdst=\"" + x[0] + "\" checked> " + esc(x[1]) + " <span class=\"muted\">(" + c + ")</span></label>";
+      }).join("") + "</fieldset><b style=\"font-size:13px\">Vouchers</b>" +
       "<button type=\"button\" class=\"btn\" data-pdexp=\"jv\">Demand JVs only</button>" +
       "<button type=\"button\" class=\"btn\" data-pdexp=\"bp\">Bank payment vouchers (BPV) only</button>" +
       "<button type=\"button\" class=\"btn pri\" data-pdexp=\"both\">Both JV and BPV</button>";
@@ -66,28 +73,31 @@
     m.style.top = (r.bottom + window.scrollY + 6) + "px"; m.style.left = Math.max(8, r.right + window.scrollX - 300) + "px";
     document.body.appendChild(m);
   }
-  async function exportVouchers(kind) {
+  async function exportVouchers(kind, ks) {
     var q = function (v) { var t = String(v == null ? "" : v); return /[",\n]/.test(t) ? "\"" + t.replace(/"/g, "\"\"") + "\"" : t; };
     var acc = {}; D("accounts").forEach(function (a) { acc[a.id] = a; });
-    var rows = (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM).slice()).filter(inRange)
+    var rows = (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM).slice()).filter(inRange).filter(function (r) { return !ks || ks.indexOf(state(r).k) >= 0; })
       .sort(function (a, b) { return String(a.date || "").localeCompare(String(b.date || "")) || String(a.demandNo || "").localeCompare(String(b.demandNo || "")); });
-    var out = [["Demand no.", "Demand date", "Company", "Branch", "Pay to", "For", "Voucher", "Voucher no.", "Voucher date", "Voucher status", "Cheque / transfer no.", "Account code", "Account name", "Line description", "Debit", "Credit"]];
-    var dr = 0, cr = 0, nv = 0;
+    var out = [["Demand no.", "Demand date", "Company", "Branch", "Pay to", "For", "Demand status", "Demand amount", "Voucher", "Voucher no.", "Voucher date", "Voucher status", "Cheque / transfer no.", "Account code", "Account name", "Line description", "Debit", "Credit"]];
+    var dr = 0, cr = 0, nv = 0, nd = 0, amt = 0;
     rows.forEach(function (r) {
       var s = state(r), list = [];
       if (kind !== "bp" && s.jv) list.push(["JV", s.jv]);
       if (kind !== "jv" && s.bp) list.push(["BPV", s.bp]);
+      var first = true, head = function () { var h0 = [r.demandNo, r.date, r.entity, r.branch, r.payee, r.description, s.l, first ? n(r.amount) : ""]; if (first) { first = false; amt += n(r.amount); } return h0; };
+      nd++;
+      if (!list.length) out.push(head().concat([kind === "bp" ? "No BPV yet" : kind === "jv" ? "No JV yet" : "No voucher yet", "", "", "", r.chequeNo || "", "", "", "", "", ""]));
       list.forEach(function (x) {
         var j = x[1]; nv++;
         (j.lines || []).forEach(function (l) {
           var a = acc[l.account] || {}; dr += n(l.debit); cr += n(l.credit);
-          out.push([r.demandNo, r.date, r.entity, r.branch, r.payee, r.description, x[0], j.ref || "", j.date || "", j.status || "", j.chequeNo || r.chequeNo || "",
-            a.code || "", a.name || "", l.desc || j.narration || "", n(l.debit) || "", n(l.credit) || ""]);
+          out.push(head().concat([x[0], j.ref || "", j.date || "", j.status || "", j.chequeNo || r.chequeNo || "",
+            a.code || "", a.name || "", l.desc || j.narration || "", n(l.debit) || "", n(l.credit) || ""]));
         });
       });
     });
-    if (!nv) { toast("No " + (kind === "jv" ? "demand JVs" : kind === "bp" ? "bank payment vouchers" : "vouchers") + " for demands dated " + rangeTxt() + "."); return; }
-    out.push(["Total", "", "", "", "", "", "", nv + " voucher" + (nv === 1 ? "" : "s"), "", "", "", "", "", "", Math.round(dr * 100) / 100, Math.round(cr * 100) / 100]);
+    if (!nd) { toast("No demands with those statuses dated " + rangeTxt() + "."); return; }
+    out.push(["Total", nd + " demand" + (nd === 1 ? "" : "s"), "", "", "", "", "", Math.round(amt * 100) / 100, "", nv + " voucher" + (nv === 1 ? "" : "s"), "", "", "", "", "", "", Math.round(dr * 100) / 100, Math.round(cr * 100) / 100]);
     var csv = "\ufeff" + out.map(function (row) { return row.map(q).join(","); }).join("\r\n");
     var name = "HSEC_payment_demands_" + (kind === "jv" ? "JV" : kind === "bp" ? "BPV" : "JV_and_BPV") + "_" + (R.from || "start") + "_to_" + (R.to || todayStr()) + ".csv";
     var dl = null; try { dl = window.claude && await window.claude.use("downloads"); } catch (e) { dl = null; }
@@ -402,7 +412,12 @@
       if (ex) {
         e.preventDefault(); e.stopImmediatePropagation();
         if (ex.id === "pdClr") { R = { from: "", to: "" }; keepR(); scheduleRender(); return; }
-        if (ex.hasAttribute("data-pdexp")) { var mm = document.getElementById("fsPdExp"); if (mm) mm.remove(); exportVouchers(ex.getAttribute("data-pdexp")); return; }
+        if (ex.hasAttribute("data-pdexp")) {
+          var mm = document.getElementById("fsPdExp"), ks = [];
+          if (mm) mm.querySelectorAll("[data-pdst]:checked").forEach(function (c) { EXST.forEach(function (x) { if (x[0] === c.getAttribute("data-pdst")) ks = ks.concat(x[2]); }); });
+          if (!ks.length) { toast("Tick at least one status."); return; }
+          if (mm) mm.remove(); exportVouchers(ex.getAttribute("data-pdexp"), ks); return;
+        }
         exportMenu(ex); return;
       }
       if (!(e.target.closest && e.target.closest("#fsPdExp"))) { var om = document.getElementById("fsPdExp"); if (om) om.remove(); }
@@ -469,7 +484,8 @@
       ".fs-pdbplus:hover{background:#16a34a;color:#fff}.fs-pdbnew{display:flex;gap:6px}.fs-pdbnew[hidden]{display:none}.fs-pdbnew input{flex:1;min-width:0}" +
       ".fs-pdrange{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}.fs-pdrange label{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px}" +
       ".fs-pdexp{position:absolute;z-index:60;width:300px;display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:var(--panel,#fff);box-shadow:0 12px 30px rgba(15,23,42,.18)}" +
-      ".fs-pdexp .btn{text-align:left}.fs-pdexp span{font-size:12px}" +
+      ".fs-pdexp .btn{text-align:left}.fs-pdexp span{font-size:12px}.fs-pdexst{border:1px solid var(--line,#e3e6eb);border-radius:8px;padding:6px 10px;margin:0;display:flex;flex-direction:column;gap:4px}" +
+      ".fs-pdexst legend{font-weight:700;font-size:13px;padding:0 4px}.fs-pdexst label{font-size:13px;display:flex;align-items:center;gap:6px}" +
       ".fs-pdpayhl{outline:3px solid #16a34a;outline-offset:4px;border-radius:6px;transition:outline-color 1s}";
     document.head.appendChild(css);
     scheduleRender();
