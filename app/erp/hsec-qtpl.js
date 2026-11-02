@@ -9,15 +9,19 @@
 //  * Sales › Quotations › Templates: import a template file (.json), download one, delete one.
 //  * In the editor, an administrator can "Save as template" to make a new template from the open quotation.
 (function () {
-  /* global QE, Store, V, qtDraw, qtRead, qtDoc, qtPdf, qtList, qtBlank, qtPdfName, h2pLib, dlSave, settings, esc, toast, render, qmoney */
+  /* global QE, Store, ENTS, V, qtDraw, qtRead, qtDoc, qtPdf, qtList, qtBlank, qtPdfName, h2pLib, dlSave, settings, esc, toast, render, qmoney */
   var safe = function (f, d) { try { return f(); } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var say = function (m) { safe(function () { toast(m); }, null); };
   var KEEP = ["id", "entity", "ref", "date", "status", "createdAt", "updatedAt", "createdBy", "refPics", "tpl"]; // never copied from a template
   var list = function () { var L = safe(function () { return settings().qtTpl; }, null); return Array.isArray(L) ? L.filter(function (t) { return t && t.id && t.data; }) : []; };
   var get = function (id) { return id ? list().find(function (t) { return t.id === id; }) || null : null; };
-  var lhOf = function (q) { var t = get(q && q.tpl); return t && t.head ? t : null; };
-  window.FS_QTPL = { list: list, get: get, letterhead: lhOf };
+  // company letterheads (settings.coLh, by company code): the default for that company's quotations, vouchers and invoices
+  var coMap = function () { var m = safe(function () { return settings().coLh; }, null); return m && typeof m === "object" && !Array.isArray(m) ? m : {}; };
+  var coLh = function (e) { var c = e && coMap()[e]; return c && c.head ? { id: "co:" + e, name: c.name || e + " letterhead", head: c.head, foot: c.foot || "", co: e } : null; };
+  var lhOf = function (q) { var t = get(q && q.tpl); return t && t.head ? t : coLh(q && q.entity); };
+  window.FS_QTPL = { list: list, get: get, letterhead: lhOf, company: coLh, companies: function () { return Object.keys(coMap()).filter(coLh); } };
+  var fmtOf = function (src) { return /^data:image\/jpe?g/.test(src) ? "JPEG" : "PNG"; };
 
   function saveList(L) {
     var st = safe(function () { return settings(); }, {}) || {};
@@ -44,7 +48,7 @@
     }
     var withLh = L.filter(function (t) { return t.head; });
     var l = document.createElement("label"); l.className = "qf";
-    l.innerHTML = "<span>Letterhead</span><select id=\"qe_lh\"><option value=\"\">HSEC (Hong Kong Shanghai Electric)</option>" +
+    l.innerHTML = "<span>Letterhead</span><select id=\"qe_lh\"><option value=\"\">" + h(coLh(QE.entity) ? "Company letterhead (" + QE.entity + ")" : "HSEC (Hong Kong Shanghai Electric)") + "</option>" +
       withLh.map(function (t) { return "<option value=\"" + h(t.id) + "\"" + (QE.tpl === t.id ? " selected" : "") + ">" + h(t.name) + "</option>"; }).join("") +
       "</select><small>Used for “print on letterhead”, the letterhead PDF and the Word file.</small>";
     g.appendChild(l);
@@ -79,7 +83,7 @@
     e.preventDefault(); e.stopImmediatePropagation();
     safe(qtRead, null);
     var name = window.prompt("Name for the new template (for example “BLT Brilliant standard”):", ""); if (!name || !name.trim()) return;
-    var cur = lhOf(QE), L = list(), t = { id: "t" + Date.now().toString(36), name: name.trim().slice(0, 80), head: cur ? cur.head : "", foot: cur ? cur.foot : "", data: content(QE), at: new Date().toISOString() };
+    var cur = get(QE.tpl), L = list(), t = { id: "t" + Date.now().toString(36), name: name.trim().slice(0, 80), head: cur ? cur.head : "", foot: cur ? cur.foot : "", data: content(QE), at: new Date().toISOString() };
     saveList(L.concat([t])).then(function () { say("Template “" + t.name + "” saved."); })
       .catch(function (x) { say("Only an administrator can save templates. " + (x && x.message || "")); });
   }, true);
@@ -124,8 +128,8 @@
       var N = pdf.internal.getNumberOfPages();
       for (var i = 1; i <= N; i++) {
         pdf.setPage(i);
-        pdf.addImage(t.head, "PNG", 14, 7, W, hH);
-        if (t.foot && fH) pdf.addImage(t.foot, "PNG", 14, 297 - 6 - fH, W, fH);
+        pdf.addImage(t.head, fmtOf(t.head), 14, 7, W, hH);
+        if (t.foot && fH) pdf.addImage(t.foot, fmtOf(t.foot), 14, 297 - 6 - fH, W, fH);
         pdf.setTextColor(110, 110, 110); pdf.setFont("helvetica", "normal"); pdf.setFontSize(6.6);
         pdf.text((q.ref || "") + "  ·  Page " + i + " of " + N, 196, 297 - 6 - fH - 1.5, { align: "right" });
       }
@@ -145,15 +149,32 @@
           return "<tr><td><b>" + h(t.name) + "</b></td><td>" + (t.head ? "Own letterhead" : "<span class=\"muted\">HSEC</span>") + "</td><td>" + (d.items || []).length + "</td><td>" + (d.terms || []).length +
             "</td><td>" + (d.sections || []).length + "</td><td style=\"white-space:nowrap\"><button class=\"btn sm\" data-tpldl=\"" + h(t.id) + "\">Download</button> <button class=\"btn sm\" data-tpldel=\"" + h(t.id) + "\">Delete</button></td></tr>";
         }).join("") + "</tbody></table></div>" : "<div class=\"panel empty\"><b>No templates yet</b>Import a template file below.</div>") +
-      "<div class=\"bar\" style=\"margin-top:12px\"><label class=\"btn pri\" style=\"cursor:pointer\">Import template file (.json)<input type=\"file\" id=\"fsTplFile\" accept=\".json,application/json\" hidden></label>" +
+      coSection() +
+      "<div class=\"bar\" style=\"margin-top:12px\"><label class=\"btn pri\" style=\"cursor:pointer\">Import template or letterhead file (.json)<input type=\"file\" id=\"fsTplFile\" accept=\".json,application/json\" hidden></label>" +
       "<span style=\"flex:1\"></span><button class=\"btn\" id=\"fsTplClose\">Close</button></div><p class=\"err\" id=\"fsTplErr\"></p>" +
       "<p class=\"note\">Only an administrator can import or delete templates. To make one from a quotation, open it and click “Save as template”.</p></div></div>";
+  }
+  function coSection() {
+    var C = window.FS_QTPL.companies();
+    return "<h4 style=\"margin:14px 0 6px\">Company letterheads</h4><p class=\"muted\" style=\"margin-top:0\">A company letterhead is used on that company's quotations, vouchers and invoices." +
+      " Without one, HSEC uses its built-in letterhead and other companies print their name.</p>" +
+      (C.length ? "<div class=\"tw\"><table><thead><tr><th>Company</th><th>Header</th><th>Footer</th><th></th></tr></thead><tbody>" + C.map(function (e) {
+        var c = coLh(e);
+        return "<tr><td><b>" + h(e) + "</b><br><span class=\"muted\">" + h(c.name) + "</span></td><td><img src=\"" + c.head + "\" alt=\"\" style=\"height:34px;max-width:260px;object-fit:contain\"></td><td>" +
+          (c.foot ? "<img src=\"" + c.foot + "\" alt=\"\" style=\"height:26px;max-width:260px;object-fit:contain\">" : "–") + "</td><td><button class=\"btn sm\" data-colhdel=\"" + h(e) + "\">Remove</button></td></tr>";
+      }).join("") + "</tbody></table></div>" : "<p class=\"muted\">None yet. Import a letterhead file (.json) below.</p>");
   }
   function openPanel() { var o = document.getElementById("fsTplOv"); if (o) o.remove(); document.body.insertAdjacentHTML("beforeend", panel()); }
   function perr(m) { var e = document.getElementById("fsTplErr"); if (e) e.textContent = m; else say(m); }
   document.addEventListener("click", function (e) {
-    var t = e.target.closest && e.target.closest("#fsTplBtn, #fsTplClose, [data-tpldl], [data-tpldel]"); if (!t) return;
+    var t = e.target.closest && e.target.closest("#fsTplBtn, #fsTplClose, [data-tpldl], [data-tpldel], [data-colhdel]"); if (!t) return;
     e.preventDefault(); e.stopImmediatePropagation();
+    if (t.hasAttribute("data-colhdel")) {
+      var co = t.getAttribute("data-colhdel");
+      if (!window.confirm("Remove the " + co + " letterhead? Its quotations, vouchers and invoices go back to the built-in look.")) return;
+      var m = Object.assign({}, coMap()); delete m[co];
+      return saveCo(m).then(function () { say(co + " letterhead removed."); openPanel(); }).catch(function (x) { perr("Only an administrator can change letterheads. " + (x && x.message || "")); });
+    }
     if (t.id === "fsTplBtn") return openPanel();
     if (t.id === "fsTplClose") { var o = document.getElementById("fsTplOv"); if (o) o.remove(); return; }
     var tp = get(t.getAttribute("data-tpldl") || t.getAttribute("data-tpldel")); if (!tp) return;
@@ -168,9 +189,10 @@
   document.addEventListener("change", function (e) {
     if (!e.target || e.target.id !== "fsTplFile" || !e.target.files || !e.target.files[0]) return;
     var f = e.target.files[0];
-    if (f.size > 3e6) return perr("That file is too large for a template.");
+    if (f.size > 4e6) return perr("That file is too large for a template.");
     f.text().then(function (txt) {
       var j; try { j = JSON.parse(txt); } catch (x) { return perr("That is not a template file."); }
+      if (j && j.fsLetterhead === 1) return importCo(j);
       if (!j || j.fsQuoteTemplate !== 1 || !j.data || !Array.isArray(j.data.items)) return perr("That is not a FlowSuit quotation template file.");
       var img = function (s) { return typeof s === "string" && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(s) ? s : ""; };
       var L = list(), name = String(j.name || f.name.replace(/\.json$/i, "")).slice(0, 80), old = L.find(function (x) { return x.name === name; });
@@ -180,6 +202,17 @@
     }).catch(function (x) { perr("Only an administrator can import templates. " + (x && x.message || "")); });
   });
 
+  function saveCo(m) { var st = safe(function () { return settings(); }, {}) || {}; return Store.save("settings", Object.assign({}, st, { id: "main", coLh: m })); }
+  function importCo(j) {
+    var img = function (s) { return typeof s === "string" && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(s) ? s : ""; };
+    var ents = safe(function () { return ENTS(); }, []) || [], co = String(j.company || "").trim();
+    if (!img(j.head)) return perr("That letterhead file has no header picture.");
+    if (ents.indexOf(co) < 0) return perr("That letterhead is for “" + co + "”, which is not a company in this ERP (" + ents.join(", ") + ").");
+    var m = Object.assign({}, coMap());
+    if (m[co] && !window.confirm("Replace the current " + co + " letterhead?")) return;
+    m[co] = { name: String(j.name || co + " letterhead").slice(0, 80), head: img(j.head), foot: img(j.foot), at: new Date().toISOString() };
+    return saveCo(m).then(function () { say(co + " letterhead imported. " + co + " quotations, vouchers and invoices now print on it."); openPanel(); });
+  }
   function hook() {
     if (typeof qtDraw !== "function" || typeof qtRead !== "function" || typeof qtDoc !== "function" || typeof qtPdf !== "function" || typeof qtList !== "function") return false;
     var oDraw = qtDraw, oRead = qtRead, oDoc = qtDoc, oPdf = qtPdf, oList = qtList;
