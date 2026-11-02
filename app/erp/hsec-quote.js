@@ -232,6 +232,30 @@
     if (q) downloadWord(q);
   }, true);
 
+  // ---- quotations list (hassan, 2026-11-02: "also apply changes on this one"): the list said "Total (PKR)" and
+  // "Rs" for every quotation; a USD quotation now shows "USD" in front of its total, and the Open / Accepted figures
+  // are split by currency instead of adding dollars to rupees.
+  /* global byEnt, qtTot, qtExpired, mn */
+  function sums(list) {
+    var by = {}; list.forEach(function (r) { var c = cur(r); by[c] = (by[c] || 0) + qtTot(r); });
+    var parts = CURS.filter(function (c) { return by[c] != null; }).map(function (c) { return (c === "PKR" ? "Rs " : c + " ") + mn(by[c]) + " Mn"; });
+    return parts.length ? parts.join(" + ") : "Rs " + mn(0) + " Mn";
+  }
+  function relabelList(html) {
+    var all = safe(function () { return byEnt(Store.data.quotes); }, null); if (!all) return html;
+    if (!all.some(function (r) { return cur(r) !== "PKR"; })) return html;
+    var open = all.filter(function (r) { return (r.status || "Draft") === "Sent" && !qtExpired(r); }), won = all.filter(function (r) { return r.status === "Accepted"; });
+    html = html.replace(/Open: (\d+) · Rs [^<]*? Mn/, function (m, k) { return "Open: " + k + " · " + sums(open); })
+      .replace(/Accepted: (\d+) · Rs [^<]*? Mn/, function (m, k) { return "Accepted: " + k + " · " + sums(won); })
+      .replace("<th class=\"num\">Total (PKR)</th>", "<th class=\"num\">Total</th>");
+    var t = document.createElement("template"); t.innerHTML = html;
+    t.content.querySelectorAll("tr[data-qted]").forEach(function (tr) {
+      var q = Store.data.quotes.find(function (x) { return x.id === tr.dataset.qted; }), td = tr.children[5];
+      if (td) td.textContent = (q && cur(q) !== "PKR" ? cur(q) : "Rs") + " " + td.textContent.trim();
+    });
+    return t.innerHTML;
+  }
+
   // ---- hooks into the app's quotation functions
   function hook() {
     if (typeof qtDraw !== "function" || typeof qtRead !== "function" || typeof qtDoc !== "function" || typeof qtPdfMenu !== "function") return false;
@@ -243,7 +267,8 @@
       var P = pics(QE); document.querySelectorAll("#qtOv [data-refcap]").forEach(function (el) { var p = P[+el.dataset.refcap]; if (p) p.cap = el.value; });
       if (P.length || QE.refPics) QE.refPics = P;
     };
-    if (oLive) qtLive = function () { oLive.apply(this, arguments); safe(relabelEditor); }; // eslint-disable-line no-global-assign
+    if (typeof qtList === "function") { var oList = qtList; qtList = function () { var s = oList.apply(this, arguments); return safe(function () { return relabelList(s); }, s); }; } // eslint-disable-line no-global-assign
+    if (oLive) qtLive =function () { oLive.apply(this, arguments); safe(relabelEditor); }; // eslint-disable-line no-global-assign
     qtDoc = function (q, lh) { return relabel(insertPics(oDoc.apply(this, arguments), q || {}), cur(q)); }; // eslint-disable-line no-global-assign
     qtPdfMenu = function (btn, id) { // eslint-disable-line no-global-assign
       oMenu.apply(this, arguments);
