@@ -46,6 +46,18 @@
       "Set On behalf of to the other company. In “Charge in their books to” pick THEIR bank if the money reached their bank, or their expense / supplier if you paid their bill. Their voucher (Dr that account, Cr Due to this company) is made for you."],
     ["icin", "Money received from (or for) another group company", "Dr this company's bank (1210)", "Cr Due to that company (2204)",
       "Set On behalf of to the other company and, in “Charge in their books to”, the account it came out of there."],
+    ["loangive", "Loan given to another group company", "Dr Loan to / Due from that company (1207)", "Cr this company's bank (1210)",
+      "Set On behalf of to the borrower and “Charge in their books to” their bank. Their voucher: Dr their bank, Cr Due to this company (2204). Keep loans apart from day-to-day balances by opening a sub account under 1207 named “Loan to <company>” (and under 2204 “Loan from <company>” in theirs); their voucher then uses that loan account by itself."],
+    ["loantake", "Loan received from another group company", "Dr this company's bank (1210)", "Cr Loan from / Due to that company (2204)",
+      "Set On behalf of to the lender and “Charge in their books to” the bank it came out of there. Their voucher: Dr Due from this company (1207), Cr their bank."],
+    ["loanrepay", "Repay a loan to a group company", "Dr Loan from / Due to that company (2204)", "Cr this company's bank (1210)",
+      "Set On behalf of to the lender. Their voucher: Dr their bank, Cr Due from this company (1207)."],
+    ["loanback", "Group company repays a loan to this company", "Dr this company's bank (1210)", "Cr Loan to / Due from that company (1207)",
+      "Set On behalf of to the borrower. Their voucher: Dr Due to this company (2204), Cr their bank."],
+    ["loanint", "Mark-up / interest charged on a group loan", "Lender: Dr Due from that company (1207)", "Lender: Cr Income from financial assets (7101)",
+      "Enter it in the lender's books with On behalf of the borrower and “Charge in their books to” Mark-up on borrowings (8101): the borrower gets Dr 8101, Cr Due to the lender (2204). If no mark-up is charged, post nothing."],
+    ["bankloan", "Loan from a bank or outside lender", "Dr bank (1210)", "Cr Long-term financing (2101) or Short-term borrowings (2208)",
+      "Repayment: Dr the same loan account, Cr bank. Mark-up paid: Dr Mark-up on borrowings (8101), Cr bank (or Cr Accrued mark-up 2207 if not paid yet). The part due within 12 months moves to 2209 at year end."],
     ["supplier", "Pay a supplier's bill", "Dr the supplier's payable (2201)", "Cr bank (1210); tax withheld: Cr Statutory dues (2203)",
       "Easier from Payables › Vendor bills › Pay, which settles the bill. Advance before a bill: Dr Advances to suppliers (1204)."],
     ["expense", "Pay an expense directly (no bill booked)", "Dr the expense head: 5101–5104 project costs, 6101–6108 office, 8103 bank charges", "Cr bank or cash (1210)",
@@ -146,7 +158,13 @@
 
   function guess(L, icFor) {
     var has = function (k, dr) { return L.some(function (x) { return x.k === k && (dr === undefined || x.dr === dr); }); };
-    if (icFor || has("icr") || has("icp")) return has("icr", true) ? "icout" : has("icp", false) ? "icin" : "";
+    if (icFor || has("icr") || has("icp")) {
+      var loan = L.some(function (x) { return (x.k === "icr" || x.k === "icp") && /loan/i.test(x.a.name || ""); });
+      if (loan) return has("icr", true) && has("cash", false) ? "loangive" : has("icp", false) && has("cash", true) ? "loantake" : has("icp", true) ? "loanrepay" : has("icr", false) ? "loanback" : "";
+      if (has("inc", false) && has("icr", true)) return "loanint";
+      return has("icr", true) ? "icout" : has("icp", false) ? "icin" : "";
+    }
+    if (has("cash", true) && (has("od", false) || L.some(function (x) { return !x.dr && /^2101|^2209/.test(code(x.a)); }))) return "bankloan";
     if (has("cash", true) && has("cash", false) && L.every(function (x) { return x.k === "cash"; })) return "xfer";
     if (has("sup", true) && has("cash", false)) return "supplier";
     if ((has("exp", true) || has("cor", true)) && has("cash", false)) return "expense";
