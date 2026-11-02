@@ -212,7 +212,11 @@
         if (/\b(o-pb|q-pb)\b/.test(d.className) && r.toString().trim() && first) first.setAttribute("style", (first.getAttribute("style") || "") + ";page-break-before:always"); // as text: Chrome rewrites the property to break-before, which Word ignores
       });
       el.removeAttribute("style");
-      if (typeof QT_LOGO === "string") el.insertAdjacentHTML("afterbegin", "<p align=\"center\" style=\"text-align:center;margin:0 0 10px\"><img src=\"" + QT_LOGO + "\" width=\"420\" height=\"89\" style=\"width:420px;height:89px\" alt=\"HSEC\"></p>");
+      var tlh = window.FS_QTPL && safe(function () { return window.FS_QTPL.letterhead(q); }, null); // a template's own letterhead (hsec-qtpl.js)
+      if (tlh) {
+        el.insertAdjacentHTML("afterbegin", "<p style=\"margin:0 0 10px\"><img src=\"" + tlh.head + "\" width=\"640\" height=\"76\" style=\"width:640px;height:76px\" alt=\"\"></p>");
+        if (tlh.foot) el.insertAdjacentHTML("beforeend", "<p style=\"margin:14px 0 0\"><img src=\"" + tlh.foot + "\" width=\"640\" height=\"68\" style=\"width:640px;height:68px\" alt=\"\"></p>");
+      } else if (typeof QT_LOGO === "string") el.insertAdjacentHTML("afterbegin", "<p align=\"center\" style=\"text-align:center;margin:0 0 10px\"><img src=\"" + QT_LOGO + "\" width=\"420\" height=\"89\" style=\"width:420px;height:89px\" alt=\"HSEC\"></p>");
       var parts = [], seen = {}, k = 0;
       return Promise.all([].slice.call(el.querySelectorAll("img")).map(function (im) {
         var src = im.getAttribute("src") || ""; if (!src) return null;
