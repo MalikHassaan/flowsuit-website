@@ -46,14 +46,14 @@
       "Set On behalf of to the other company. In “Charge in their books to” pick THEIR bank if the money reached their bank, or their expense / supplier if you paid their bill. Their voucher (Dr that account, Cr Due to this company) is made for you."],
     ["icin", "Money received from (or for) another group company", "Dr this company's bank (1210)", "Cr Due to that company (2204)",
       "Set On behalf of to the other company and, in “Charge in their books to”, the account it came out of there."],
-    ["loangive", "Loan given to another group company", "Dr Loan to / Due from that company (1207)", "Cr this company's bank (1210)",
-      "Set On behalf of to the borrower and “Charge in their books to” their bank. Their voucher: Dr their bank, Cr Due to this company (2204). Keep loans apart from day-to-day balances by opening a sub account under 1207 named “Loan to <company>” (and under 2204 “Loan from <company>” in theirs); their voucher then uses that loan account by itself."],
-    ["loantake", "Loan received from another group company", "Dr this company's bank (1210)", "Cr Loan from / Due to that company (2204)",
-      "Set On behalf of to the lender and “Charge in their books to” the bank it came out of there. Their voucher: Dr Due from this company (1207), Cr their bank."],
-    ["loanrepay", "Repay a loan to a group company", "Dr Loan from / Due to that company (2204)", "Cr this company's bank (1210)",
-      "Set On behalf of to the lender. Their voucher: Dr their bank, Cr Due from this company (1207)."],
-    ["loanback", "Group company repays a loan to this company", "Dr this company's bank (1210)", "Cr Loan to / Due from that company (1207)",
-      "Set On behalf of to the borrower. Their voucher: Dr Due to this company (2204), Cr their bank."],
+    ["loangive", "Loan given to another group company", "Dr Loan to that company (Loans to group companies)", "Cr this company's bank (1210)",
+      "Set On behalf of to the borrower and “Charge in their books to” their bank. Their voucher: Dr their bank, Cr Loan from this company. Their voucher then uses “Loan from <this company>” by itself. Use the Due from / Due to accounts only for day-to-day balances, not loans."],
+    ["loantake", "Loan received from another group company", "Dr this company's bank (1210)", "Cr Loan from that company (Loans from group companies)",
+      "Set On behalf of to the lender and “Charge in their books to” the bank it came out of there. Their voucher: Dr Loan to this company, Cr their bank."],
+    ["loanrepay", "Repay a loan to a group company", "Dr Loan from that company (Loans from group companies)", "Cr this company's bank (1210)",
+      "Set On behalf of to the lender. Their voucher: Dr their bank, Cr Loan to this company."],
+    ["loanback", "Group company repays a loan to this company", "Dr this company's bank (1210)", "Cr Loan to that company (Loans to group companies)",
+      "Set On behalf of to the borrower. Their voucher: Dr Loan from this company, Cr their bank."],
     ["loanint", "Mark-up / interest charged on a group loan", "Lender: Dr Due from that company (1207)", "Lender: Cr Income from financial assets (7101)",
       "Enter it in the lender's books with On behalf of the borrower and “Charge in their books to” Mark-up on borrowings (8101): the borrower gets Dr 8101, Cr Due to the lender (2204). If no mark-up is charged, post nothing."],
     ["bankloan", "Loan from a bank or outside lender", "Dr bank (1210)", "Cr Long-term financing (2101) or Short-term borrowings (2208)",
@@ -208,34 +208,50 @@
     if (e.target && e.target.closest && e.target.closest("#frm")) soon();
   }, true);
   document.addEventListener("click", function (e) { if (e.target && e.target.closest && e.target.closest("#frm")) soon(); }, true);
-  // Group-company loan accounts (hassan, 2026-11-02: "add the sub accounts"): for every "Due from X" under 1207 a
-  // "Loan to X", and for every "Due to X" under 2204 a "Loan from X", with the same tags (group company, eliminated on
-  // consolidation). Made once, when an administrator opens the ERP; existing accounts are never changed.
+  // Group-company loans (hassan, 2026-11-02: "add the sub accounts", then "make a general chart of accounts head for
+  // loan"): two heads, "Loans to group companies" (asset, after 1210) and "Loans from group companies" (liability, after
+  // 2212), each with one sub account per group company ("Loan to X" / "Loan from X", from the "Due from / Due to X"
+  // names). Group-company tagged, so they are eliminated on consolidation and "On behalf of" finds them. Made once,
+  // when an administrator opens the ERP. Loan sub accounts an earlier version put under 1207 / 2204 are moved here
+  // when nothing has been posted to them; existing accounts are otherwise never changed.
   var loanDone = false;
+  var HEADS = [
+    { top: "12", due: "1207", re: /^Due from (.+)$/i, head: "Loans to group companies", sub: "Loan to ", type: "Asset", fsLine: "adv", normal: "Debit" },
+    { top: "22", due: "2204", re: /^Due to (.+)$/i, head: "Loans from group companies", sub: "Loan from ", type: "Liability", fsLine: "tp", normal: "Credit" }
+  ];
+  function used(id) { return safe(function () { return Store.data.journals.some(function (j) { return (j.lines || []).some(function (l) { return l.account === id; }); }); }, true); }
   function loanAccounts() {
     if (loanDone || !window.FS_ADMIN || typeof addAccount !== "function" || typeof nextCode !== "function") return; // eslint-disable-line no-undef
     var A = Store.data.accounts; if (!A || !A.length) return;
     loanDone = true;
-    var want = [];
-    [["1207", /^Due from (.+)$/i, "Loan to "], ["2204", /^Due to (.+)$/i, "Loan from "]].forEach(function (p) {
-      A.filter(function (a) { return String(a.parent) === p[0] && a.posting !== "Header"; }).forEach(function (a) {
-        var m = p[1].exec(String(a.name || "").trim()); if (!m || /^ENT\d+$/i.test(m[1].trim())) return;
-        var nm = p[2] + m[1].trim();
-        if (A.some(function (x) { return String(x.parent) === p[0] && String(x.name || "").trim().toLowerCase() === nm.toLowerCase(); })) return;
-        want.push({ parent: p[0], name: nm, from: a });
-      });
-    });
-    if (!want.length) return;
+    var nm = function (a) { return String(a && a.name || "").trim().toLowerCase(); };
     (async function () {
       var made = [];
-      for (var i = 0; i < want.length; i++) {
-        var w = want[i], c = nextCode(w.parent); if (!c) break; // eslint-disable-line no-undef
+      for (var k = 0; k < HEADS.length; k++) {
+        var H = HEADS[k];
+        var head = Store.data.accounts.find(function (a) { return a.posting === "Header" && nm(a) === H.head.toLowerCase(); });
+        var names = Store.data.accounts.filter(function (a) { return String(a.parent) === H.due && a.posting !== "Header"; })
+          .map(function (a) { var m = H.re.exec(String(a.name || "").trim()); return m && !/^ENT\d+$/i.test(m[1].trim()) ? H.sub + m[1].trim() : ""; }).filter(Boolean);
+        if (!names.length) continue;
         try {
-          await addAccount({ code: c, name: w.name, parent: w.parent, type: w.from.type, fsLine: w.from.fsLine, ic: "Yes", normal: w.from.normal, nonCash: w.from.nonCash || "Normal", contra: "No" }, "group loans"); // eslint-disable-line no-undef
-          made.push(c + " " + w.name);
-        } catch (e) { console.warn("loan account", w.name, e); break; }
+          if (!head) {
+            var hc = nextCode(H.top); if (!hc) continue; // eslint-disable-line no-undef
+            await addAccount({ code: hc, name: H.head, parent: H.top, posting: "Header", type: H.type, fsLine: H.fsLine, ic: "Yes", normal: H.normal, nonCash: "Normal", contra: "No" }, "group loans"); // eslint-disable-line no-undef
+            head = Store.data.accounts.find(function (a) { return String(a.code) === hc; }); made.push(hc + " " + H.head);
+          }
+          for (var i = 0; i < names.length; i++) {
+            var want = names[i].toLowerCase();
+            if (Store.data.accounts.some(function (a) { return String(a.parent) === String(head.code) && nm(a) === want; })) continue;
+            var old = Store.data.accounts.find(function (a) { return String(a.parent) === H.due && nm(a) === want; });
+            if (old && used(old.id)) continue; // already posted to: leave it where it is
+            var c = nextCode(head.code); if (!c) break; // eslint-disable-line no-undef
+            await addAccount({ code: c, name: names[i], parent: String(head.code), type: H.type, fsLine: H.fsLine, ic: "Yes", normal: H.normal, nonCash: "Normal", contra: "No" }, "group loans"); // eslint-disable-line no-undef
+            made.push(c + " " + names[i]);
+            if (old) { await Store.remove("accounts", old.id); var x = Store.data.accounts.indexOf(old); if (x >= 0) Store.data.accounts.splice(x, 1); }
+          }
+        } catch (e) { console.warn("group loan accounts", e); }
       }
-      if (made.length) safe(function () { toast("Added " + made.length + " loan accounts for group companies: " + made.join(", ")); }, null); // eslint-disable-line no-undef
+      if (made.length) safe(function () { toast("Group loan accounts added: " + made.join(", ")); }, null); // eslint-disable-line no-undef
     })();
   }
 

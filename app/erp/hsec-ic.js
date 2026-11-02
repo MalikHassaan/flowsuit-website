@@ -12,7 +12,10 @@
   // The intercompany account in company `own`'s books for its balance with company `other`: prefix 1207 (due from) or 2204 (due to).
   // loan: the payer's line is a loan account ("Loan to JSPL"), so a "Loan from …" account is preferred over the running "Due" one.
   function icAcc(prefix, other, own, loan) {
-    var list = accs().filter(function (a) { return String(a.code).indexOf(prefix) === 0 && (!a.entity || a.entity === own); });
+    // group loans have their own heads ("Loans to / from group companies"), searched together with 1207 / 2204
+    var lh = Store.data.accounts.find(function (a) { return a.posting === "Header" && (prefix === "1207" ? /^Loans to group companies$/i : /^Loans from group companies$/i).test(String(a.name || "").trim()); });
+    var pre = [prefix].concat(lh ? [String(lh.code)] : []);
+    var list = accs().filter(function (a) { return pre.some(function (p) { return String(a.code).indexOf(p) === 0; }) && (!a.entity || a.entity === own); });
     list.sort(function (x, y) { return (/loan/i.test(y.name) === !!loan) - (/loan/i.test(x.name) === !!loan); });
     var i = ENTS().indexOf(other), word = function (s) { return new RegExp("(^|[^A-Za-z0-9])" + String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^A-Za-z0-9]|$)", "i"); };
     return list.find(function (a) { return word(other).test(a.name); })
