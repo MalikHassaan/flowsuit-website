@@ -10,14 +10,17 @@
 
   function accs() { return Store.data.accounts.filter(function (a) { return a.ic === "Yes" && isPost(a); }); }
   // The intercompany account in company `own`'s books for its balance with company `other`: prefix 1207 (due from) or 2204 (due to).
-  function icAcc(prefix, other, own) {
+  // loan: the payer's line is a loan account ("Loan to JSPL"), so a "Loan from …" account is preferred over the running "Due" one.
+  function icAcc(prefix, other, own, loan) {
     var list = accs().filter(function (a) { return String(a.code).indexOf(prefix) === 0 && (!a.entity || a.entity === own); });
+    list.sort(function (x, y) { return (/loan/i.test(y.name) === !!loan) - (/loan/i.test(x.name) === !!loan); });
     var i = ENTS().indexOf(other), word = function (s) { return new RegExp("(^|[^A-Za-z0-9])" + String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^A-Za-z0-9]|$)", "i"); };
     return list.find(function (a) { return word(other).test(a.name); })
       || list.find(function (a) { return coName(other) !== other && a.name.toLowerCase().indexOf(coName(other).toLowerCase()) >= 0; })
       || (i >= 0 && list.find(function (a) { return word("ENT" + (i + 1)).test(a.name) || String(a.code) === prefix + String(i + 1).padStart(2, "0"); }))
       || null;
   }
+  function isLoan(lines) { var ic = {}; accs().forEach(function (a) { ic[a.id] = a; }); return (lines || []).some(function (l) { return ic[l.account] && /loan/i.test(ic[l.account].name); }); }
   // Net debit on the payer's intercompany lines: positive = paid for them, negative = received for them.
   function icNet(lines) {
     var ic = {}; accs().forEach(function (a) { ic[a.id] = 1; });
@@ -147,7 +150,7 @@
     if (!r.icFor || r.reversedBy) { if (m) await Store.remove("journals", m.id); return; }
     var why = problem(r);
     if (why) { toast(why); return; }
-    var net = icNet(r.lines), amt = Math.abs(Math.round(net * 100) / 100), back = icAcc(net > 0 ? "2204" : "1207", r.entity, r.icFor);
+    var net = icNet(r.lines), amt = Math.abs(Math.round(net * 100) / 100), back = icAcc(net > 0 ? "2204" : "1207", r.entity, r.icFor, isLoan(r.lines));
     var lines = net > 0
       ? [{ account: r.icCharge, debit: amt, credit: 0, desc: accName(r.icCharge) + (r.payee ? " – " + r.payee : "") }, { account: back.id, debit: 0, credit: amt, desc: "Payable to " + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "") }]
       : [{ account: back.id, debit: amt, credit: 0, desc: "Receivable from " + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "") }, { account: r.icCharge, debit: 0, credit: amt, desc: accName(r.icCharge) + (r.payee ? " – " + r.payee : "") }];
