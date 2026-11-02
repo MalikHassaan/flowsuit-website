@@ -208,6 +208,37 @@
     if (e.target && e.target.closest && e.target.closest("#frm")) soon();
   }, true);
   document.addEventListener("click", function (e) { if (e.target && e.target.closest && e.target.closest("#frm")) soon(); }, true);
+  // Group-company loan accounts (hassan, 2026-11-02: "add the sub accounts"): for every "Due from X" under 1207 a
+  // "Loan to X", and for every "Due to X" under 2204 a "Loan from X", with the same tags (group company, eliminated on
+  // consolidation). Made once, when an administrator opens the ERP; existing accounts are never changed.
+  var loanDone = false;
+  function loanAccounts() {
+    if (loanDone || !window.FS_ADMIN || typeof addAccount !== "function" || typeof nextCode !== "function") return; // eslint-disable-line no-undef
+    var A = Store.data.accounts; if (!A || !A.length) return;
+    loanDone = true;
+    var want = [];
+    [["1207", /^Due from (.+)$/i, "Loan to "], ["2204", /^Due to (.+)$/i, "Loan from "]].forEach(function (p) {
+      A.filter(function (a) { return String(a.parent) === p[0] && a.posting !== "Header"; }).forEach(function (a) {
+        var m = p[1].exec(String(a.name || "").trim()); if (!m || /^ENT\d+$/i.test(m[1].trim())) return;
+        var nm = p[2] + m[1].trim();
+        if (A.some(function (x) { return String(x.parent) === p[0] && String(x.name || "").trim().toLowerCase() === nm.toLowerCase(); })) return;
+        want.push({ parent: p[0], name: nm, from: a });
+      });
+    });
+    if (!want.length) return;
+    (async function () {
+      var made = [];
+      for (var i = 0; i < want.length; i++) {
+        var w = want[i], c = nextCode(w.parent); if (!c) break; // eslint-disable-line no-undef
+        try {
+          await addAccount({ code: c, name: w.name, parent: w.parent, type: w.from.type, fsLine: w.from.fsLine, ic: "Yes", normal: w.from.normal, nonCash: w.from.nonCash || "Normal", contra: "No" }, "group loans"); // eslint-disable-line no-undef
+          made.push(c + " " + w.name);
+        } catch (e) { console.warn("loan account", w.name, e); break; }
+      }
+      if (made.length) safe(function () { toast("Added " + made.length + " loan accounts for group companies: " + made.join(", ")); }, null); // eslint-disable-line no-undef
+    })();
+  }
+
   function start() {
     if (typeof Store === "undefined" || !Store.data || typeof readLines !== "function") return setTimeout(start, 400);
     new MutationObserver(function () { if (!document.getElementById("fsGuide") && document.getElementById("linesBox")) soon(); }).observe(document.body, { childList: true, subtree: true });
@@ -222,6 +253,7 @@
       ".fs-gd-ok{margin:10px 0 0;color:#1b7a3d;font-weight:600}@media print{.fs-guide{display:none}}";
     document.head.appendChild(css);
     soon();
+    var tries = 0, lt = setInterval(function () { tries++; if (loanDone || tries > 40) return clearInterval(lt); if (Store.loaded) safe(loanAccounts, null); }, 1500);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
