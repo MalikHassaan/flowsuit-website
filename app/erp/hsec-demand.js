@@ -10,6 +10,8 @@
 //    which goes through Senior Manager and Group GM Finance like every voucher.
 //  * "Print JV + BPV + documents" prints the JV, the BPV and every attached document in one go.
 //  * The list opens with a summary: demands paid and pending, in number and amount, by branch.
+//  * From / To dates filter the summary, the list and the export; Export CSV asks for demand JVs, BPVs or both
+//    and gives their voucher lines (hassan, 2026-11-02).
 (function () {
   /* global S, MODS, TAB_HOME, POSTERS, DOCNAME, LABEL, COLLS, Store, F, V, LEDGER, openForm, submitForm, readForm,
      fieldHtml, accOptsGrouped, refName, DEPTS, ssEnhance, nextNo, fmt, n, esc, fdate, pill, mono, liveJv, srcJvs,
@@ -39,6 +41,61 @@
     var back = r.id && vouchersOf(r.id).some(function (j) { return j.status === "Rejected"; });
     return back ? { k: "back", l: "Returned", c: "bad" } : { k: "none", l: "Not posted", c: "" };
   }
+  // ---- date range (hassan, 2026-11-02: "there should be date filtration from and to date") ----
+  var R = (function () { try { return JSON.parse(sessionStorage.getItem("fs-pd-range")) || { from: "", to: "" }; } catch (e) { return { from: "", to: "" }; } })();
+  var keepR = function () { try { sessionStorage.setItem("fs-pd-range", JSON.stringify(R)); } catch (e) { /* private window */ } };
+  var inRange = function (r) { var d = String(r.date || ""); return (!R.from || d >= R.from) && (!R.to || d <= R.to); };
+  var ranged = function () { return !!(R.from || R.to); };
+  var rangeTxt = function () { return R.from && R.to ? fdate(R.from) + " to " + fdate(R.to) : R.from ? "from " + fdate(R.from) : R.to ? "up to " + fdate(R.to) : "all dates"; };
+  function rangeBar() {
+    return "<div class=\"fs-pdrange\"><label>From <input type=\"date\" id=\"pdFrom\" value=\"" + esc(R.from) + "\"></label>" +
+      "<label>To <input type=\"date\" id=\"pdTo\" value=\"" + esc(R.to) + "\"></label>" +
+      (ranged() ? "<button type=\"button\" class=\"btn sm\" id=\"pdClr\">Show all dates</button>" : "") +
+      "<span class=\"muted\">Demands dated " + esc(rangeTxt()) + ". The figures, the list and Export CSV follow these dates.</span></div>";
+  }
+
+  // ---- Export CSV asks which vouchers (hassan, 2026-11-02: "when we click export it should ask JV, BPV or both") ----
+  function exportMenu(btn) {
+    var old = document.getElementById("fsPdExp"); if (old) { old.remove(); return; }
+    var m = document.createElement("div"); m.id = "fsPdExp"; m.className = "fs-pdexp"; m.setAttribute("role", "menu");
+    m.innerHTML = "<b>What do you want to export?</b><span class=\"muted\">Demands dated " + esc(rangeTxt()) + "</span>" +
+      "<button type=\"button\" class=\"btn\" data-pdexp=\"jv\">Demand JVs only</button>" +
+      "<button type=\"button\" class=\"btn\" data-pdexp=\"bp\">Bank payment vouchers (BPV) only</button>" +
+      "<button type=\"button\" class=\"btn pri\" data-pdexp=\"both\">Both JV and BPV</button>";
+    var r = btn.getBoundingClientRect();
+    m.style.top = (r.bottom + window.scrollY + 6) + "px"; m.style.left = Math.max(8, r.right + window.scrollX - 300) + "px";
+    document.body.appendChild(m);
+  }
+  async function exportVouchers(kind) {
+    var q = function (v) { var t = String(v == null ? "" : v); return /[",\n]/.test(t) ? "\"" + t.replace(/"/g, "\"\"") + "\"" : t; };
+    var acc = {}; D("accounts").forEach(function (a) { acc[a.id] = a; });
+    var rows = (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM).slice()).filter(inRange)
+      .sort(function (a, b) { return String(a.date || "").localeCompare(String(b.date || "")) || String(a.demandNo || "").localeCompare(String(b.demandNo || "")); });
+    var out = [["Demand no.", "Demand date", "Company", "Branch", "Pay to", "For", "Voucher", "Voucher no.", "Voucher date", "Voucher status", "Cheque / transfer no.", "Account code", "Account name", "Line description", "Debit", "Credit"]];
+    var dr = 0, cr = 0, nv = 0;
+    rows.forEach(function (r) {
+      var s = state(r), list = [];
+      if (kind !== "bp" && s.jv) list.push(["JV", s.jv]);
+      if (kind !== "jv" && s.bp) list.push(["BPV", s.bp]);
+      list.forEach(function (x) {
+        var j = x[1]; nv++;
+        (j.lines || []).forEach(function (l) {
+          var a = acc[l.account] || {}; dr += n(l.debit); cr += n(l.credit);
+          out.push([r.demandNo, r.date, r.entity, r.branch, r.payee, r.description, x[0], j.ref || "", j.date || "", j.status || "", j.chequeNo || r.chequeNo || "",
+            a.code || "", a.name || "", l.desc || j.narration || "", n(l.debit) || "", n(l.credit) || ""]);
+        });
+      });
+    });
+    if (!nv) { toast("No " + (kind === "jv" ? "demand JVs" : kind === "bp" ? "bank payment vouchers" : "vouchers") + " for demands dated " + rangeTxt() + "."); return; }
+    out.push(["Total", "", "", "", "", "", "", nv + " voucher" + (nv === 1 ? "" : "s"), "", "", "", "", "", "", Math.round(dr * 100) / 100, Math.round(cr * 100) / 100]);
+    var csv = "\ufeff" + out.map(function (row) { return row.map(q).join(","); }).join("\r\n");
+    var name = "HSEC_payment_demands_" + (kind === "jv" ? "JV" : kind === "bp" ? "BPV" : "JV_and_BPV") + "_" + (R.from || "start") + "_to_" + (R.to || todayStr()) + ".csv";
+    var dl = null; try { dl = window.claude && await window.claude.use("downloads"); } catch (e) { dl = null; }
+    if (dl) { try { await dl.save({ filename: name, data: csv }); } catch (e) { if (e && e.code !== "declined") toast("Download failed."); } return; }
+    var a2 = document.createElement("a"); a2.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a2.download = name;
+    document.body.appendChild(a2); a2.click(); setTimeout(function () { URL.revokeObjectURL(a2.href); a2.remove(); }, 1000);
+  }
+
   var tag = function (j) { return j ? mono(j.ref || "") + " " + pill(j.status === "Posted" ? "Posted" : "In approval", j.status === "Posted" ? "good" : "warn") : "<span class=\"muted\">–</span>"; };
 
   function defs() {
@@ -228,7 +285,7 @@
 
   // ---- the summary above the list: paid and pending, by branch ----
   function summary() {
-    var rows = typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM);
+    var rows = (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM).slice()).filter(inRange);
     var tot = { n: 0, a: 0 }, g = {}, by = {};
     rows.forEach(function (r) {
       var k = state(r).k, a = n(r.amount), b = (r.branch || "No branch") + " · " + (r.entity || "");
@@ -240,7 +297,7 @@
     var f = function (k) { return g[k] || { n: 0, a: 0 }; }, pend = { n: tot.n - f("paid").n, a: tot.a - f("paid").a };
     var card = function (t, x, c) { return "<div class=\"fs-pdcard " + (c || "") + "\"><span>" + t + "</span><b>" + x.n + "</b><em>Rs " + fmt(x.a) + "</em></div>"; };
     var bk = Object.keys(by).sort();
-    return "<div class=\"fs-pdsum\"><div class=\"fs-pdcards\">" + card("All demands", tot) + card("Paid", f("paid"), "good") + card("Pending", pend, "warn") +
+    return "<div class=\"fs-pdsum\">" + rangeBar() + "<div class=\"fs-pdcards\">" + card("All demands", tot) + card("Paid", f("paid"), "good") + card("Pending", pend, "warn") +
       (f("appr").n ? card("Demand in approval", f("appr")) : "") + card("To be paid", f("topay")) + card("Payment in approval", f("payappr")) + (f("back").n ? card("Returned", f("back"), "bad") : "") + "</div>" +
       (bk.length ? "<div class=\"tw\"><table><thead><tr><th>Branch · company</th><th class=\"num\">Demands</th><th class=\"num\">Amount</th><th class=\"num\">Paid</th><th class=\"num\">Paid amount</th><th class=\"num\">Pending</th><th class=\"num\">Pending amount</th></tr></thead><tbody>" +
         bk.map(function (k) { var x = by[k]; return "<tr><td>" + esc(k) + "</td><td class=\"num\">" + x.n + "</td><td class=\"num\">" + fmt(x.a) + "</td><td class=\"num\">" + x.dn + "</td><td class=\"num\">" + fmt(x.da) + "</td><td class=\"num\">" + x.pn + "</td><td class=\"num\">" + fmt(x.pa) + "</td></tr>"; }).join("") +
@@ -309,12 +366,26 @@
     })(submitForm);
 
     if (typeof listView === "function") listView = (function (old) { // eslint-disable-line no-global-assign
-      return function (c) { var out = old.apply(this, arguments); return c === DEM && typeof out === "string" ? summary() + out : out; };
+      return function (c) {
+        if (c !== DEM) return old.apply(this, arguments);
+        var all = Store.data[DEM], out;
+        if (ranged() && Array.isArray(all)) {
+          Store.data[DEM] = all.filter(inRange);
+          try { out = old.apply(this, arguments); } finally { Store.data[DEM] = all; }
+          if (typeof out === "string" && !Store.data[DEM].filter(inRange).length && all.length)
+            out = out.replace(/<div class="panel empty">[\s\S]*$/, "<div class=\"panel empty\"><b>No payment demands dated " + esc(rangeTxt()) + "</b>Change the dates above, or click Show all dates.</div>");
+        } else out = old.apply(this, arguments);
+        return typeof out === "string" ? summary() + out : out;
+      };
     })(listView);
     // without listView (newer app files), the summary goes above the list when the tab is open
     var sumLast = "";
     new MutationObserver(function () {
-      if (!/\/paydemands$/.test(location.hash) || document.querySelector(".fs-pdsum")) return;
+      if (!/\/paydemands$/.test(location.hash)) return;
+      if (typeof listView !== "function") document.querySelectorAll("tr[data-edit=\"paydemands\"][data-id]").forEach(function (tr) {
+        var r = byId(DEM, tr.getAttribute("data-id")), hide = !!(r && !inRange(r)); if (tr.hidden !== hide) tr.hidden = hide;
+      });
+      if (document.querySelector(".fs-pdsum")) return;
       var q = document.querySelector("#q"), bar = q && q.closest(".bar"); if (!bar) return;
       var h = summary(); if (h === sumLast && document.querySelector(".fs-pdsum")) return;
       sumLast = h; bar.insertAdjacentHTML("beforebegin", h);
@@ -327,6 +398,14 @@
     }, true);
     document.addEventListener("click", function (e) {
       // Pay: open the demand at its bank part (hassan, 2026-10-31: "now I want to pay that, how can I post that")
+      var ex = e.target.closest && e.target.closest("[data-csv=\"paydemands\"], [data-pdexp], #pdClr");
+      if (ex) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (ex.id === "pdClr") { R = { from: "", to: "" }; keepR(); scheduleRender(); return; }
+        if (ex.hasAttribute("data-pdexp")) { var mm = document.getElementById("fsPdExp"); if (mm) mm.remove(); exportVouchers(ex.getAttribute("data-pdexp")); return; }
+        exportMenu(ex); return;
+      }
+      if (!(e.target.closest && e.target.closest("#fsPdExp"))) { var om = document.getElementById("fsPdExp"); if (om) om.remove(); }
       var pay = e.target.closest && e.target.closest("[data-pdpay]");
       if (pay) {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -358,6 +437,11 @@
     }, true);
     document.addEventListener("input", function (e) { if (typeof F !== "undefined" && F && F.c === DEM && e.target.closest && e.target.closest("#pdBox")) totals(); });
     document.addEventListener("change", function (e) {
+      if (e.target && (e.target.id === "pdFrom" || e.target.id === "pdTo")) {
+        R[e.target.id === "pdFrom" ? "from" : "to"] = e.target.value || "";
+        if (R.from && R.to && R.from > R.to) { var t = R.from; R.from = R.to; R.to = t; }
+        keepR(); scheduleRender(); return;
+      }
       if (typeof F === "undefined" || !F || F.c !== DEM || !e.target) return;
       if (e.target.id === "f_entity") { F.rec.items = readLines(); redraw(); } // the company sets which accounts are offered
       else if (e.target.closest && e.target.closest("#pdBox")) totals();
@@ -383,6 +467,9 @@
       ".fs-pdbl{display:flex;align-items:center;justify-content:space-between;gap:8px}" +
       ".fs-pdbplus{width:26px;height:26px;padding:0;border:1px solid #16a34a;border-radius:6px;background:#ecfdf3;color:#15803d;font-size:18px;line-height:1;cursor:pointer}" +
       ".fs-pdbplus:hover{background:#16a34a;color:#fff}.fs-pdbnew{display:flex;gap:6px}.fs-pdbnew[hidden]{display:none}.fs-pdbnew input{flex:1;min-width:0}" +
+      ".fs-pdrange{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}.fs-pdrange label{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px}" +
+      ".fs-pdexp{position:absolute;z-index:60;width:300px;display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:var(--panel,#fff);box-shadow:0 12px 30px rgba(15,23,42,.18)}" +
+      ".fs-pdexp .btn{text-align:left}.fs-pdexp span{font-size:12px}" +
       ".fs-pdpayhl{outline:3px solid #16a34a;outline-offset:4px;border-radius:6px;transition:outline-color 1s}";
     document.head.appendChild(css);
     scheduleRender();
