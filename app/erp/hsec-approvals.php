@@ -464,5 +464,6 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-currency.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-quote.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-qtpl.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-colh.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-gantt.js') . '</script>';
 }
