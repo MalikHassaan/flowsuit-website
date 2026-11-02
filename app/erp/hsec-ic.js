@@ -53,8 +53,10 @@
     var what = icFor && v("icCharge") ? accName(v("icCharge")) : line ? accName(line.account) : "";
     var amt = F.lines.reduce(function (s, l) { return s + (bank(l.account) ? n(rec ? l.debit : l.credit) : 0); }, 0);
     var proj = v("costCentre") && typeof refName === "function" ? refName("projects", v("costCentre")) : ""; // eslint-disable-line no-undef
-    var out = (rec ? "Received" : "Paid") + (v("payee") ? (rec ? " from " : " to ") + v("payee") : "")
-      + (icFor ? " on behalf of " + coLabel(icFor) : "") + (what ? " for " + what : "") + (proj ? ", " + proj : "")
+    var chA = icFor && v("icCharge") ? Store.data.accounts.find(function (x) { return x.id === v("icCharge"); }) : null, xfer = chA && bank(chA.id);
+    var out = (xfer ? (rec ? "Funds received from " + coLabel(icFor) + " (" + chA.name + ")" : "Funds transferred to " + coLabel(icFor) + " (" + chA.name + ")")
+      : (rec ? "Received" : "Paid") + (v("payee") ? (rec ? " from " : " to ") + v("payee") : "")
+      + (icFor ? " on behalf of " + coLabel(icFor) : "") + (what ? " for " + what : "")) + (proj ? ", " + proj : "")
       + (amt ? ", Rs " + fmt(amt) : "") + (v("chequeNo") ? ", cheque / TT " + v("chequeNo") + (v("chequeDate") ? " dated " + fdate(v("chequeDate")) : "") : "");
     return out === "Paid" || out === "Received" ? "" : out;
   }
