@@ -52,6 +52,43 @@
     if (typeof ledger === "function") ledger().lines.forEach(function (l) { if (l.acc === f.account && l.ent === f.entity) t += l.amt; });
     return t;
   }
+  // why the books differ from the cash that should be in hand: vouchers not posted yet, and entries on the petty cash
+  // account that did not come from this fund's float, expenses or top-ups
+  function diffWhy(f) {
+    var x = fundFig(f), book = bookBal(f), out = [], mine = {};
+    mine[FUNDS + "/" + f.id] = 1;
+    D(SLIPS).forEach(function (s) { if (s.fund === f.id) mine[SLIPS + "/" + s.id] = 1; });
+    D(CLAIMS).forEach(function (c) { if (c.fund === f.id) mine[CLAIMS + "/" + c.id] = 1; });
+    var fj = liveJv(FUNDS, f.id, "open");
+    if (!fj || fj.status !== "Posted") out.push({ t: "Float voucher " + (fj ? (fj.ref || "") + " is " + fj.status : "not made yet") + ": the float is not in the books yet", a: -n(f.float) });
+    D(SLIPS).forEach(function (s) {
+      if (s.fund !== f.id) return;
+      var j = liveJv(SLIPS, s.id, "pay"), k = slipState(s).k;
+      if (j && j.status !== "Posted" && k !== "paid") out.push({ t: s.slipNo + " voucher " + (j.ref || "") + " is " + j.status + ": the cash is spent but not yet taken out in the books", a: n(s.amount) });
+      if (j && j.status !== "Posted" && k === "paid") out.push({ t: s.slipNo + " voucher " + (j.ref || "") + " is " + j.status + ": it was topped up, but the expense voucher that takes the cash out is not posted. Approve it", a: n(s.amount) });
+    });
+    // a reversed voucher and its reversal cancel out: leave both out
+    var skip = {}, posted = {};
+    D("journals").forEach(function (j) { if (j.status === "Posted") posted[j.id] = 1; });
+    D("journals").forEach(function (j) { if (j.status === "Posted" && j.reversedBy && posted[j.reversedBy]) { skip[j.id] = 1; skip[j.reversedBy] = 1; } });
+    var others = [];
+    D("journals").forEach(function (j) {
+      if (j.status !== "Posted" || j.entity !== f.entity || skip[j.id]) return;
+      var src = j.source && j.source.c ? j.source.c + "/" + j.source.id : "", rev = /^Reversal of /i.test(j.narration || "");
+      if (mine[src]) return;
+      var amt = (j.lines || []).reduce(function (t, l) { return l.account === f.account ? t + n(l.debit) - n(l.credit) : t; }, 0);
+      if (Math.abs(amt) < 0.5) return;
+      others.push({ t: (j.ref || "Voucher") + " " + fdate(j.date) + (rev ? " (reversal)" : "") + ": " + String(j.narration || "posted straight to the petty cash account").slice(0, 90), a: amt, other: 1, d: j.date || "" });
+    });
+    others.sort(function (a, b) { return String(b.d).localeCompare(String(a.d)); });
+    if (others.length > 25) {
+      var old = others.slice(25), sum = old.reduce(function (t, o) { return t + o.a; }, 0);
+      others = others.slice(0, 25).concat([{ t: old.length + " older entries posted straight to the petty cash account (see its ledger)", a: sum, other: 1 }]);
+    }
+    out = out.concat(others);
+    var expl = out.reduce(function (t, o) { return t + o.a; }, 0);
+    return { book: book, cash: x.cash, diff: book - x.cash, rows: out, rest: Math.round(book - x.cash - expl) };
+  }
   function claimSlips(r) {
     return D(SLIPS).filter(function (s) { return s.fund === r.fund && s.claim === r.id; });
   }
@@ -74,7 +111,7 @@
         ["spent", "Spent to date", function (r) { return fmt(fundFig(r).spent); }, "num"], ["paid", "Reimbursed", function (r) { return fmt(fundFig(r).paid); }, "num"],
         ["open", "Spent, not claimed", function (r) { return fmt(fundFig(r).open); }, "num"], ["wait", "In claims", function (r) { return fmt(fundFig(r).wait); }, "num"],
         ["cash", "Cash that should be in hand", function (r) { var x = fundFig(r); return fmt(x.cash) + (x.float && x.cash < x.float * 0.2 ? " " + pill("Top up", "warn") : ""); }, "num"],
-        ["book", "Balance in books", function (r) { return fmt(bookBal(r)); }, "num"],
+        ["book", "Balance in books", function (r) { var d = Math.round(bookBal(r) - fundFig(r).cash); return fmt(bookBal(r)) + (Math.abs(d) >= 1 ? "<div class=\"small\" style=\"color:#b45309\" title=\"Open the fund to see why\">" + (d > 0 ? "+" : "−") + fmt(Math.abs(d)) + " vs cash in hand</div>" : ""); }, "num"],
         ["gl", "Float voucher", function (r) { return ledgerTag(FUNDS, r); }], ["status", "Status", function (r) { return pill(r.status || "Active"); }]],
       sort: function (a, b) { return String(a.name).localeCompare(String(b.name)); } };
     S[SLIPS] = { title: "Petty cash expense", fields: [
@@ -102,7 +139,12 @@
         return { vtype: "Bank payment voucher", date: r.date || todayStr(), entity: r.entity, payee: r.custodian || "", narration: "Petty cash float for " + r.name + " (custodian " + (r.custodian || "") + ")",
           lines: [{ account: r.account, debit: a, credit: 0, desc: "Petty cash float" }, { account: r.bankAccount, debit: 0, credit: a }] }; } } };
     POSTERS[CLAIMS] = { reimburse: { label: "replenishment voucher", keys: ["total", "fund", "date"],
-      ready: function (r) { var f = byId(FUNDS, r.fund); return !f ? "choose the fund" : !f.bankAccount ? "set the fund's bank account" : n(r.total) > 0 ? true : "no unclaimed expenses up to this date"; },
+      ready: function (r) { var f = byId(FUNDS, r.fund); if (!f) return "choose the fund"; if (!f.bankAccount) return "set the fund's bank account";
+        // a slip whose own voucher is not posted yet has not taken the cash out of petty cash in the books; topping up
+        // for it would leave petty cash higher in the books than in the custodian's hand (hassan, 2026-11-02)
+        var wait = claimSlips(r).filter(function (s) { var j = liveJv(SLIPS, s.id, "pay"); return j && j.status !== "Posted"; });
+        if (wait.length) return "first approve the petty cash voucher" + (wait.length > 1 ? "s" : "") + " of " + wait.map(function (s) { return s.slipNo; }).join(", ");
+        return n(r.total) > 0 ? true : "no unclaimed expenses up to this date"; },
       build: function (r) {
         var f = byId(FUNDS, r.fund), sl = claimSlips(r), g = {}, lines = [];
         sl.forEach(function (s) {
@@ -238,6 +280,13 @@
     var h = "<div id=\"fsPcFund\"><h4 style=\"margin:0 0 6px\">" + esc(f.name) + (f.location ? " · " + esc(f.location) : "") + " (custodian " + esc(f.custodian || "") + ")</h4>" +
       "<dl><dt>Given (float)</dt><dd>" + fmt(x.float) + "</dd><dt>Spent to date</dt><dd>" + fmt(x.spent) + "</dd><dt>Reimbursed</dt><dd>" + fmt(x.paid) + "</dd>" +
       "<dt>Spent, not claimed / in claims</dt><dd>" + fmt(x.open) + " / " + fmt(x.wait) + "</dd><dt>Cash that should be in hand</dt><dd>" + fmt(x.cash) + "</dd><dt>Balance in books</dt><dd>" + fmt(bookBal(f)) + "</dd></dl>" +
+      (function () {
+        var w = diffWhy(f); if (Math.abs(w.diff) < 1) return "";
+        return "<div class=\"banner warn\" style=\"margin:10px 0\"><b>Balance in books is " + fmt(Math.abs(w.diff)) + (w.diff > 0 ? " more" : " less") + " than the cash that should be in hand.</b> Here is why:</div>"
+          + "<div class=\"tw\"><table><tbody>" + w.rows.map(function (o) { return "<tr><td>" + esc(o.t) + "</td><td class=\"num\">" + (o.a < 0 ? "−" : "+") + fmt(Math.abs(o.a)) + "</td></tr>"; }).join("")
+          + (Math.abs(w.rest) >= 1 ? "<tr><td>Not explained by the entries above (check the petty cash account's ledger)</td><td class=\"num\">" + (w.rest < 0 ? "−" : "+") + fmt(Math.abs(w.rest)) + "</td></tr>" : "")
+          + "</tbody></table></div>" + (w.rows.some(function (o) { return o.other; }) ? "<p class=\"muted\" style=\"margin:4px 0 0\">Entries not made from the petty cash screens should be moved to the right account (reverse and re-enter), or recorded as a petty cash expense.</p>" : "");
+      })() +
       tab("Spent by expense head", hk.map(function (k) { return "<tr><td>" + esc(accName(k) || "No account") + "</td><td class=\"num\">" + fmt(head[k]) + "</td></tr>"; })) +
       tab("Spent by month", mk.map(function (m) { return "<tr><td>" + esc(m) + "</td><td class=\"num\">" + fmt(mon[m]) + "</td></tr>"; })) + "</div>";
     var cur = document.getElementById("fsPcFund");
