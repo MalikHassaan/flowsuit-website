@@ -369,6 +369,18 @@ function erp_intro(array $cfg): string
         . file_get_contents(__DIR__ . '/erp-intro.js') . '</script>';
 }
 
+// True once per sign-in: the first app page after signing in gets the full opening (film, minimum time); a refresh
+// or another tab only gets the short loading card (hassan, 2026-11-02: "the video should only be shown on the login
+// screen, not on refresh of the page or on opening a new tab").
+function erp_intro_due(): bool
+{
+    if (empty($_SESSION['intro_due'])) {
+        return false;
+    }
+    unset($_SESSION['intro_due']);
+    return true;
+}
+
 // Which name and crest the sign-in screens show: FlowSuit's own, unless an old system link
 // (/erp/login?to=hsec or ?to=taj) asked for a client's.
 function erp_system(): string

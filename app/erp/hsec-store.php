@@ -83,6 +83,7 @@ function hsec_inject(array $me): string
     $cfg = ['api' => '/erp/m/hsec/api', 'csrf' => $_SESSION['csrf'], 'uid' => taj_uid($me), 'name' => $me['name'],
         'edit' => erp_can($me, 'hsec', 'edit'), 'owner' => (bool) $me['is_admin'], 'assets' => false];
     $allowed = hsec_allowed($me);
+    $full = erp_intro_due();
     return '<script>window.FS_BRIDGE=' . json_encode($cfg, $flags) . ";\n"
         // The app remembers the last company picked; if that is not one of theirs, start on their companies.
         . ($allowed === null ? '' : 'try{var fsE=' . json_encode($allowed, $flags) . ',fsC=localStorage.getItem("hsec-erp-ent");'
@@ -90,7 +91,8 @@ function hsec_inject(array $me): string
         . file_get_contents(__DIR__ . '/taj-bridge.js') . '</script>'
         . erp_intro(['name' => 'HSEC', 'sub' => 'Finance & Accounting ERP', 'logo' => hsec_logo_uri(), 'zoom' => '.app',
             // hassan, 2026-10-31: his film of a lift being built plays full screen (10 s), both emblems on a card below.
-            'video' => ['/assets/video/hsec-intro.webm?v=1', '/assets/video/hsec-intro.mp4?v=1'], 'min' => 10000,
+            // only right after signing in; a refresh or new tab shows just the loading card until the books are ready
+            'video' => $full ? ['/assets/video/hsec-intro.webm?v=1', '/assets/video/hsec-intro.mp4?v=1'] : null, 'min' => $full ? 10000 : 300,
             'partner' => ['img' => 'data:image/png;base64,' . base64_encode((string) file_get_contents(__DIR__ . '/hsec-partner.png')), 'line' => 'SHANGHAI MITSUBISHI ELEVATOR'],
             'steps' => ['Securing connection', 'Verifying your access', 'Loading your books', 'Preparing your dashboard']])
         . '<style>' . file_get_contents(__DIR__ . '/hsec-present.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-present.js') . '</script>'

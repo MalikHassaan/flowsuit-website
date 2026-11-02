@@ -166,7 +166,7 @@ function taj_inject(array $me): string
         // screen covers it, and hides its card until then.
         . '<style id="fs-hide-gate">#login .lcard{visibility:hidden}</style>'
         . erp_intro(['name' => 'TAJ', 'sub' => 'Residencia · Receivable & Recovery ERP', 'logo' => '/erp/brand-logo', 'theme' => 'taj',
-            'wait' => 'login', 'zoom' => 'body', 'steps' => ['Securing connection', 'Verifying your access', 'Loading receivables', 'Preparing your dashboard']])
+            'wait' => 'login', 'zoom' => 'body', 'min' => erp_intro_due() ? 5000 : 300, 'steps' => ['Securing connection', 'Verifying your access', 'Loading receivables', 'Preparing your dashboard']])
         // The dashboard opens full screen, so give a way back to the ERP (not needed inside a frame).
         . '<script>addEventListener("DOMContentLoaded",function(){if(window.top!==window)return;var d=document.createElement("div");d.className="fs-erp-back";'
         . 'd.innerHTML=\'<a href="/erp">&larr; FlowSuit ERP</a>' . ($me['is_admin'] ? '<a href="/erp/m/receivables?manage=1">Replace file</a>' : '') . '\';document.body.appendChild(d);'
