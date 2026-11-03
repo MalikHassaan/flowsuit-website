@@ -178,7 +178,7 @@
     named = true;
     var ents = ENTS();
     for (var k = 0; k < Store.data.accounts.length; k++) {
-      var a = Store.data.accounts[k], m = /^Due (from|to) ENT(\d)$/.exec(String(a.name || "").trim()), e = m && ents[+m[2] - 1];
+      var a = Store.data.accounts[k], m = /^Due (from|to) ENT(\d)$/i.exec(String(a.name || "").trim()), e = m && ents[+m[2] - 1];
       if (!e || e === "ENT" + m[2] || a.ic !== "Yes") continue;
       try { await Store.save("accounts", Object.assign({}, a, { name: "Due " + m[1] + " " + coLabel(e) })); } catch (x) { return; }
     }

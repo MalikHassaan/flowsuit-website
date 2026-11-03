@@ -15,8 +15,8 @@
       { k: "i", l: "Description" },
       { k: "s", l: "Specification" },
       { k: "b", l: "Brand", w: 110 },
-      { k: "q", l: "Qty", t: "number", w: 64 },
-      { k: "u", l: "Unit", t: "select", o: UNITS, w: 84, def: "pcs" },
+      { k: "q", l: "Qty", t: "number", w: 90 },
+      { k: "u", l: "Unit", t: "select", o: UNITS, w: 96, def: "pcs" },
       { k: "p", l: "Unit price (PKR)", t: "money", w: 116 },
       { k: "a", l: "Amount", calc: 1, w: 110 }
     ];
@@ -46,8 +46,23 @@
   new MutationObserver(function () {
     if (typeof F === "undefined" || !F || F.c !== "requisitions") return;
     document.querySelectorAll('select[data-gk="description"][data-gc="u"]').forEach(function (el) {
-      if (el.value || el.dataset.fsDef) return; el.dataset.fsDef = "1"; el.value = "pcs"; el.dispatchEvent(new Event("change", { bubbles: true }));
+      if (el.value || el.dataset.fsDef) return; el.dataset.fsDef = "1"; el.value = "pcs";
+      // tell the app (it stores the row on "input") and the searchable dropdown's button, which is attached a moment later
+      // and otherwise keeps showing "–" (and then ignores picking "pcs", as the value has not changed)
+      setTimeout(function () {
+        el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true }));
+        var b = el.parentNode && el.parentNode.querySelector(".ssb"); if (b && el.selectedOptions[0]) { b.textContent = el.selectedOptions[0].textContent; b.title = b.textContent; b.classList.remove("ph"); }
+      }, 0);
     });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  // Qty: the number box was so narrow its up/down arrows covered the typed value (hassan, 2026-11-03: "in quantity there
+  // should be written value option as well"). Wider column, arrows hidden, type the quantity directly.
+  var css = document.createElement("style");
+  css.textContent = '.gtab input[data-gk="description"][data-gc="q"]{min-width:70px;text-align:right;-moz-appearance:textfield;appearance:textfield}' +
+    '.gtab input[data-gk="description"][data-gc="q"]::-webkit-outer-spin-button,.gtab input[data-gk="description"][data-gc="q"]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}';
+  (document.head || document.documentElement).appendChild(css);
+  new MutationObserver(function () {
+    document.querySelectorAll('input[data-gk="description"][data-gc="q"]:not([placeholder])').forEach(function (el) { el.placeholder = "Type qty"; el.setAttribute("inputmode", "decimal"); });
   }).observe(document.documentElement, { childList: true, subtree: true });
   function start() { if (!hook()) setTimeout(start, 300); }
   start();
