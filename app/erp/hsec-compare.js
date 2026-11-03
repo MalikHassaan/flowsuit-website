@@ -601,6 +601,8 @@
     ".fs-qmail{color:#1f6fb8}.fs-qfoot{border-top:1px solid #ccc;margin-top:30px;padding-top:8px;text-align:center;font-size:11px}" +
     "@media print{.fs-csp th,.fs-csp td{font-size:10px}}@media (max-width:760px){.fs-csfoot{grid-template-columns:1fr}}";
   (document.head || document.documentElement).appendChild(css);
+  // for the purchase order details window (hsec-podetail.js)
+  window.FS_CS = { items: items, totals: totals, printCs: printCs, poLines: poLines, qPage: qPage, loadFiles: loadFiles, state: state, stages: stages, apprOf: apprOf, STORE: STORE, prOf: prOf, css: css.textContent };
   function start() { if (!hook()) setTimeout(start, 400); }
   start();
 })();
