@@ -271,20 +271,22 @@
   async function save(print) {
     clearTimeout(tm); // a pending live-totals redraw would wipe the error message below
     readEd();
+    // the error line sits at the foot of a long sheet: also show it as a message and scroll to it, so Save never looks dead
+    var fail = function (m) { var e = document.getElementById("fsCsErr"); if (e) { e.textContent = m; safe(function () { e.scrollIntoView({ block: "center", behavior: "smooth" }); }, null); } say(m); };
     var r = prOf(E.id); if (!r) return;
     var low = lowest(E.c, E.its), err = document.getElementById("fsCsErr");
-    if (E.c.pick != null && low >= 0 && E.c.pick !== low && !String(E.c.why || "").trim()) { if (err) err.textContent = "Give the reason for not choosing the lowest quotation."; return; }
+    if (E.c.pick != null && low >= 0 && E.c.pick !== low && !String(E.c.why || "").trim()) { return fail("Give the reason for not choosing the lowest quotation."); }
     var bad = E.c.v.filter(function (v) { return String(v.name || "").trim() && !listed(v); });
-    if (bad.length) { if (err) err.textContent = "Not in the vendor list (or blocked): " + bad.map(function (v) { return v.name; }).join(", ") + ". Choose from the list or click + to add the vendor."; return; }
+    if (bad.length) { return fail("Not in the vendor list (or blocked): " + bad.map(function (v) { return v.name; }).join(", ") + ". Choose from the list or click + to add the vendor."); }
     var nod = E.c.v.filter(function (v) { return String(v.name || "").trim() && !v.date; });
-    if (nod.length) { if (err) err.textContent = "Enter the quotation date for " + nod.map(function (v) { return v.name; }).join(", ") + "."; return; }
+    if (nod.length) { return fail("Enter the quotation date for " + nod.map(function (v) { return v.name; }).join(", ") + "."); }
     var crBad = E.c.v.filter(function (v) { return String(v.name || "").trim() && isCr(ttOf(v)) && !(num(v.cdays) > 0); });
-    if (crBad.length) { if (err) err.textContent = "Enter the credit days for " + crBad.map(function (v) { return v.name; }).join(", ") + "."; return; }
+    if (crBad.length) { return fail("Enter the credit days for " + crBad.map(function (v) { return v.name; }).join(", ") + "."); }
     var pBad = E.c.v.filter(function (v) { var p = num(v.cpct); return String(v.name || "").trim() && isCr(ttOf(v)) && (ttOf(v) === TT[3] ? !(p > 0 && p < 100) : !(p > 0 && p <= 100)); });
-    if (pBad.length) { if (err) err.textContent = "Enter how much is on credit (%) for " + pBad.map(function (v) { return v.name; }).join(", ") + (pBad.some(function (v) { return ttOf(v) === TT[3]; }) ? ": with part advance it must be between 1 and 99." : "."); return; }
+    if (pBad.length) { return fail("Enter how much is on credit (%) for " + pBad.map(function (v) { return v.name; }).join(", ") + (pBad.some(function (v) { return ttOf(v) === TT[3]; }) ? ": with part advance it must be between 1 and 99." : ".")); }
     var nm = E.c.v.map(function (v) { return key(v.name); }).filter(Boolean);
-    if (nm.some(function (x, i) { return nm.indexOf(x) !== i; })) { if (err) err.textContent = "The same vendor is entered twice. Each column must be a different vendor."; return; }
-    if (E.c.exempt && !String(E.c.exemptWhy || "").trim()) { if (err) err.textContent = "Give the reason fewer than " + MIN + " quotations were obtained."; return; }
+    if (nm.some(function (x, i) { return nm.indexOf(x) !== i; })) { return fail("The same vendor is entered twice. Each column must be a different vendor."); }
+    if (E.c.exempt && !String(E.c.exemptWhy || "").trim()) { return fail("Give the reason fewer than " + MIN + " quotations were obtained."); }
     var c = clean(E.c), prev = r.cs || {}, sig = function (x) { return JSON.stringify([(x.v || []).map(function (v) { return [v.name, v.prices, v.tax]; }), x.pick, !!x.exempt]); };
     c.appr = sig(clean(cs0(r))) === sig(c) ? (prev.appr || []) : [];
     if ((prev.appr || []).length && !c.appr.length) say("The quotations or the choice changed, so the comparative statement needs approving again.");
@@ -294,9 +296,10 @@
       if (typeof F !== "undefined" && F && F.c === "requisitions" && F.rec && F.rec.id === E.id) F.rec.cs = c;
       E.c = cs0(Object.assign({}, r, { cs: c }));
       say("Comparative statement saved: " + state(Object.assign({}, r, { cs: c })).txt + ".");
-      draw(); refreshBox(true);
-      if (print) printCs(Object.assign({}, r, { cs: c }));
-    } catch (x) { if (err) err.textContent = (x && x.message) || "Could not save."; }
+      refreshBox(true);
+      if (print) { draw(); printCs(Object.assign({}, r, { cs: c })); }
+      else { var ov = document.getElementById("fsCsOv"); if (ov) ov.remove(); E = null; } // saved: close the sheet
+    } catch (x) { fail((x && x.message) || "Could not save."); }
   }
 
   // ---- print
