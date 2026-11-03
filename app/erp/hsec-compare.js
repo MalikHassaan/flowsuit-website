@@ -409,7 +409,27 @@
     if (cur) cur.remove();
     at.insertAdjacentHTML("afterend", html);
   }
-  new MutationObserver(function () { if (!document.getElementById("fsCsBox")) safe(refreshBox, null); }).observe(document.documentElement, { childList: true, subtree: true });
+  // A raised requisition is read-only (hassan, 2026-11-03: "after raising why is it showing editable text … once it is sent it
+  // will not be editable by the maker"). Once saved, its fields, item rows and Save are locked for everyone; the flow box
+  // (store check, quotations, approval, purchase order) keeps working. A rejected requisition goes back to the maker to
+  // correct. An admin can unlock it to correct a mistake.
+  function lockForm() {
+    if (typeof F === "undefined" || !F || F.c !== "requisitions" || !F.rec || !F.rec.id || F.fsUnlock) return;
+    var frm = document.getElementById("frm"); if (!frm || frm.dataset.fsLock) return;
+    var r = prOf(F.rec.id) || F.rec; if (r.status === "Rejected") return;
+    frm.dataset.fsLock = "1";
+    frm.querySelectorAll("[id^='f_'], [data-gk], [data-gadd], [data-gdel], .ssw .ssb").forEach(function (el) { if (!el.closest("#fsCsBox")) { el.disabled = true; el.readOnly = true; } });
+    frm.querySelectorAll(".actions button[type=submit]" + (window.FS_ADMIN ? "" : ", #delBtn")).forEach(function (b) { b.hidden = true; });
+    frm.classList.add("fs-locked");
+    var h2 = frm.querySelector("h2"); if (h2) h2.textContent = "Purchase requisition " + (r.prNo || "") + " (locked)";
+    if (h2) h2.insertAdjacentHTML("afterend", "<p class=\"banner info fs-lockban\">Raised" + (r.createdAt ? " on " + h(safe(function () { return fdate(String(r.createdAt).slice(0, 10)); }, String(r.createdAt).slice(0, 10))) : "") +
+      ". A raised requisition cannot be changed; carry on with the steps below." + (window.FS_ADMIN ? " <button type=\"button\" class=\"btn sm\" id=\"fsPrUnlock\">Unlock to correct (admin)</button>" : "") + "</p>");
+  }
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest || !e.target.closest("#fsPrUnlock") || !window.FS_ADMIN || typeof F === "undefined" || !F) return;
+    e.preventDefault(); F.fsUnlock = true; safe(function () { drawForm(); }, null); // eslint-disable-line no-undef
+  }, true);
+  new MutationObserver(function () { if (!document.getElementById("fsCsBox")) safe(refreshBox, null); safe(lockForm, null); }).observe(document.documentElement, { childList: true, subtree: true });
 
   document.addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest("[data-svsave], [data-csappr], [data-csopen], [data-csprint], #fsCsAdd, #fsCsSave, #fsCsPrint, #fsCsClose, [data-csdel], #mkPO, [data-cslist], [data-csnew], #fsNvSave, #fsNvClose");
@@ -470,6 +490,8 @@
     ".fs-cst input{width:100%;box-sizing:border-box;margin-top:3px}.fs-cst small{display:block;color:#667;text-align:right}.fs-cs2{display:flex;gap:4px}.fs-cs2 input{flex:1;min-width:0}" +
     ".fs-cst tr.fs-cstot td{background:#f3f6f9}.fs-cst tr.fs-cstot td.low{background:#dff2e5}.fs-cspick{display:flex;gap:6px;align-items:center;font-weight:600}" +
     ".fs-csfoot{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.fs-csw{display:flex;flex-direction:column;gap:4px}.fs-csw textarea{width:100%;box-sizing:border-box}" +
+    "#frm.fs-locked [id^='f_']:disabled,#frm.fs-locked [data-gk]:disabled,#frm.fs-locked .ssb:disabled{background:#f4f6f8;color:#333;opacity:1;-webkit-text-fill-color:#333}" +
+    "#frm.fs-locked [data-gadd],#frm.fs-locked [data-gdel]{display:none}" +
     ".fs-cscr{margin-top:4px}.fs-cscr label{display:flex;flex-direction:column;font-size:11px;color:#556;flex:1}" +
     ".fs-csro{background:#f1f4f7!important;color:#445}.fs-csreq{border-color:#c62828!important}" +
     ".fs-csvsel{display:flex;gap:4px;margin-top:3px}.fs-csvsel select{flex:1;min-width:0}.fs-csvsel select.bad{border-color:#c62828;color:#b0412e}" +
