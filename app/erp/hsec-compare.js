@@ -41,8 +41,14 @@
     var tax = sub * num(v.tax) / 100;
     return { sub: sub, tax: tax, tot: sub + tax, full: its.every(function (it, i) { return num(v.prices && v.prices[i]) > 0; }) };
   }
-  // quotations that count: a vendor name and a price for every item
-  function counted(c, its) { return (c.v || []).filter(function (v) { return String(v.name || "").trim() && totals(v, its).full; }); }
+  // vendors come only from the vendor list (hassan, 2026-11-03: "make vendor listing mandatory and we can add vendor
+  // as well by clicking the + button"); a blocked vendor cannot be chosen
+  var key = function (x) { return String(x || "").trim().toLowerCase(); };
+  function vendOf(name) { return safe(function () { return Store.data.vendors.find(function (x) { return key(x.name) && key(x.name) === key(name); }); }, null); }
+  function vendList() { return safe(function () { return Store.data.vendors.filter(function (x) { return String(x.name || "").trim() && x.status !== "Blocked"; }).map(function (x) { return String(x.name).trim(); }).sort(function (a, b) { return a.localeCompare(b); }); }, []); }
+  var listed = function (v) { var x = vendOf(v.name); return !!x && x.status !== "Blocked"; };
+  // quotations that count: a listed vendor and a price for every item
+  function counted(c, its) { return (c.v || []).filter(function (v) { return listed(v) && totals(v, its).full; }); }
   function state(r) {
     var c = r.cs || {}, its = items(r), q = counted(c, its), pick = c.pick != null && c.v && c.v[c.pick] && q.indexOf(c.v[c.pick]) >= 0;
     if (c.exempt && String(c.exemptWhy || "").trim() && q.length >= 1 && pick) return { ok: true, n: q.length, txt: q.length + " quotation" + (q.length === 1 ? "" : "s") + ", limited source" };
@@ -76,7 +82,7 @@
   async function attach(k, file) {
     readEd();
     var v = E.c.v[k], nm = String(v && v.name || "").trim(), err = document.getElementById("fsCsErr");
-    if (!nm) { if (err) err.textContent = "Type the vendor's name first, then attach its quotation."; return; }
+    if (!nm) { if (err) err.textContent = "Choose the vendor first, then attach its quotation."; return; }
     var f = await shrink(file);
     if (f.size > 2 * 1024 * 1024) { if (err) err.textContent = "That file is over 2 MB. Scan it at a lower resolution."; return; }
     var fd = new FormData(); fd.append("path", "requisitions/" + E.id); fd.append("name", nm + " – " + f.name); fd.append("file", f, f.name); fd.append("csrf", B.csrf || "");
@@ -114,15 +120,15 @@
   var E = null; // {id, c, its}
   function lowest(c, its) {
     var best = -1, bt = Infinity;
-    c.v.forEach(function (v, k) { var t = totals(v, its); if (String(v.name || "").trim() && t.full && t.tot < bt) { bt = t.tot; best = k; } });
+    c.v.forEach(function (v, k) { var t = totals(v, its); if (listed(v) && t.full && t.tot < bt) { bt = t.tot; best = k; } });
     return best;
   }
   function editor() {
-    var c = E.c, its = E.its, low = lowest(c, its), vendors = safe(function () { return Store.data.vendors.map(function (v) { return v.name; }).filter(Boolean); }, []);
+    var c = E.c, its = E.its, low = lowest(c, its), vendors = vendList();
     var cell = function (k, f, w, ph) { return "<input data-csv=\"" + k + "\" data-csf=\"" + f + "\" value=\"" + h(c.v[k][f] || "") + "\"" + (ph ? " placeholder=\"" + h(ph) + "\"" : "") + (w ? " style=\"width:" + w + "\"" : "") + ">"; };
     var head = "<tr><th style=\"min-width:220px\">Item</th><th class=\"num\">Qty</th>" + c.v.map(function (v, k) {
       return "<th class=\"fs-csv" + (k === low ? " low" : "") + "\">Vendor " + (k + 1) + (c.v.length > MIN ? " <button type=\"button\" class=\"btn sm\" data-csdel=\"" + k + "\" title=\"Remove this vendor\">×</button>" : "") +
-        "<input list=\"fsCsVend\" data-csv=\"" + k + "\" data-csf=\"name\" value=\"" + h(v.name || "") + "\" placeholder=\"Vendor name\">" +
+        vSel(k, v, vendors) +
         "<div class=\"fs-cs2\">" + cell(k, "ref", "", "Quote ref") + "<input type=\"date\" data-csv=\"" + k + "\" data-csf=\"date\" value=\"" + h(v.date || "") + "\"></div></th>";
     }).join("") + "</tr>";
     var body = its.map(function (it, i) {
@@ -141,7 +147,6 @@
       "<div class=\"fs-cshead\"><div><h3 style=\"margin:0\">Comparative statement</h3><span class=\"muted\">" + h(E.title) + "</span></div><span style=\"flex:1\"></span>" +
       "<button class=\"btn\" id=\"fsCsAdd\" type=\"button\">+ Add vendor</button><button class=\"btn\" id=\"fsCsPrint\" type=\"button\">Save &amp; print</button><button class=\"btn pri\" id=\"fsCsSave\" type=\"button\">Save</button><button class=\"btn\" id=\"fsCsClose\" type=\"button\">Close</button></div>" +
       "<p class=\"muted\" style=\"margin:6px 0 10px\">Enter at least " + MIN + " vendors' quotations: the unit price for every item, then tax and terms. The lowest total is marked green. A purchase order can be raised only after " + MIN + " quotations and a chosen vendor.</p>" +
-      "<datalist id=\"fsCsVend\">" + vendors.map(function (v) { return "<option value=\"" + h(v) + "\">"; }).join("") + "</datalist>" +
       "<div class=\"tw fs-cstw\"><table class=\"fs-cst\"><thead>" + head + "</thead><tbody>" + body + calc("Subtotal", "sub") +
       row("Tax %", "tax", "e.g. 18") + calc("Tax", "tax") + calc("Total (PKR)", "tot", 1) +
       "<tr><td colspan=\"2\"><b>Prices are</b></td>" + c.v.map(function (v, k) { return "<td class=\"fs-csv" + (k === low ? " low" : "") + "\"><select data-csv=\"" + k + "\" data-csf=\"basis\">" + ["Cash", "Credit"].map(function (o) { return "<option" + ((v.basis || "Cash") === o ? " selected" : "") + ">" + o + "</option>"; }).join("") + "</select></td>"; }).join("") + "</tr>" +
@@ -159,6 +164,42 @@
       "<label class=\"fs-csw\"><span><input type=\"checkbox\" id=\"fsCsEx\"" + (c.exempt ? " checked" : "") + "> Fewer than " + MIN + " quotations (single or limited source)</span><textarea id=\"fsCsExWhy\" rows=\"2\" placeholder=\"Why three quotations could not be obtained (sole agent, OEM spare, emergency …)\">" + h(c.exemptWhy || "") + "</textarea></label></div>" +
       "<p class=\"" + (st.ok ? "fs-csok" : "fs-csno") + "\">" + (st.ok ? "✓ " : "") + h(st.txt) + (st.ok ? ". A purchase order can be raised." : ". A purchase order cannot be raised yet.") + "</p>" +
       "<p class=\"err\" id=\"fsCsErr\"></p></div></div>";
+  }
+  function vSel(k, v, vendors) {
+    var cur = String(v.name || "").trim(), x = cur && vendOf(cur), opts = vendors.slice();
+    var bad = cur && (!x || x.status === "Blocked");
+    if (x && !bad) cur = String(x.name).trim();
+    return "<div class=\"fs-csvsel\"><select data-csv=\"" + k + "\" data-csf=\"name\"" + (bad ? " class=\"bad\"" : "") + "><option value=\"\">Choose vendor…</option>" +
+      (bad ? "<option selected value=\"" + h(cur) + "\">" + h(cur) + (x ? " (blocked)" : " (not in vendor list)") + "</option>" : "") +
+      opts.map(function (o) { return "<option" + (o === cur ? " selected" : "") + ">" + h(o) + "</option>"; }).join("") + "</select>" +
+      "<button type=\"button\" class=\"btn sm fs-csplus\" data-csnew=\"" + k + "\" title=\"Add a new vendor to the vendor list\">+</button></div>" +
+      (bad ? "<small class=\"fs-csbad\">" + (x ? "Blocked vendor: choose another." : "Pick from the list, or click + to add this vendor.") + "</small>" : "");
+  }
+  // ---- + : add a vendor to the vendor list from the comparative statement
+  var NV = -1;
+  function nvForm(k) {
+    NV = k; var o = document.getElementById("fsCsNv"); if (o) o.remove();
+    var f = function (id, l, ph, ta) { return "<label class=\"fs-csw\"><span>" + l + "</span>" + (ta ? "<textarea id=\"" + id + "\" rows=\"2\"></textarea>" : "<input id=\"" + id + "\"" + (ph ? " placeholder=\"" + h(ph) + "\"" : "") + ">") + "</label>"; };
+    document.body.insertAdjacentHTML("beforeend", "<div class=\"overlay center\" id=\"fsCsNv\"><div class=\"fs-csbox fs-nvbox\"><h3 style=\"margin:0 0 4px\">Add vendor</h3>" +
+      "<p class=\"muted\" style=\"margin:0 0 10px\">Saved to Purchasing › Vendors as \"Under review\". Complete its bank and tax details there later.</p>" +
+      f("fsNvName", "Vendor name <b style=\"color:#b0412e\">*</b>", "As on the quotation") + f("fsNvContact", "Contact person") + f("fsNvPhone", "Phone") + f("fsNvEmail", "Email") +
+      f("fsNvNtn", "NTN") + f("fsNvAddr", "Address", "", 1) +
+      "<p class=\"err\" id=\"fsNvErr\"></p><div class=\"fs-csbtns\"><button class=\"btn pri\" type=\"button\" id=\"fsNvSave\">Save vendor</button><button class=\"btn\" type=\"button\" id=\"fsNvClose\">Cancel</button></div></div></div>");
+    var n = document.getElementById("fsNvName"); if (n) n.focus();
+  }
+  async function nvSave() {
+    var g = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ""; }, err = document.getElementById("fsNvErr");
+    var name = g("fsNvName"); if (!name) { if (err) err.textContent = "Type the vendor's name."; return; }
+    var ex = vendOf(name), btn = document.getElementById("fsNvSave");
+    if (ex && ex.status === "Blocked") { if (err) err.textContent = "“" + ex.name + "” is in the vendor list but Blocked."; return; }
+    if (!ex) {
+      if (btn) btn.disabled = true;
+      try { await Store.save("vendors", { name: name, contact: g("fsNvContact"), phone: g("fsNvPhone"), email: g("fsNvEmail"), ntn: g("fsNvNtn"), address: g("fsNvAddr"), filer: "Not checked", status: "Under review" }); }
+      catch (x) { if (btn) btn.disabled = false; if (err) err.textContent = (x && x.message) || "Could not save the vendor."; return; }
+      say("Vendor “" + name + "” added to the vendor list.");
+    } else say("“" + ex.name + "” is already in the vendor list, so it was picked.");
+    var o = document.getElementById("fsCsNv"); if (o) o.remove();
+    if (E && E.c.v[NV]) { readEd(); E.c.v[NV].name = ex ? String(ex.name).trim() : name; draw(); }
   }
   function draw() { var o = document.getElementById("fsCsOv"), y = o ? (o.querySelector(".fs-cstw") || {}).scrollLeft : 0; if (o) o.remove(); document.body.insertAdjacentHTML("beforeend", editor()); var t = document.querySelector("#fsCsOv .fs-cstw"); if (t && y) t.scrollLeft = y; }
   function open(id) {
@@ -191,6 +232,10 @@
     var r = prOf(E.id); if (!r) return;
     var low = lowest(E.c, E.its), err = document.getElementById("fsCsErr");
     if (E.c.pick != null && low >= 0 && E.c.pick !== low && !String(E.c.why || "").trim()) { if (err) err.textContent = "Give the reason for not choosing the lowest quotation."; return; }
+    var bad = E.c.v.filter(function (v) { return String(v.name || "").trim() && !listed(v); });
+    if (bad.length) { if (err) err.textContent = "Not in the vendor list (or blocked): " + bad.map(function (v) { return v.name; }).join(", ") + ". Choose from the list or click + to add the vendor."; return; }
+    var nm = E.c.v.map(function (v) { return key(v.name); }).filter(Boolean);
+    if (nm.some(function (x, i) { return nm.indexOf(x) !== i; })) { if (err) err.textContent = "The same vendor is entered twice. Each column must be a different vendor."; return; }
     if (E.c.exempt && !String(E.c.exemptWhy || "").trim()) { if (err) err.textContent = "Give the reason fewer than " + MIN + " quotations were obtained."; return; }
     var c = clean(E.c), prev = r.cs || {}, sig = function (x) { return JSON.stringify([(x.v || []).map(function (v) { return [v.name, v.prices, v.tax]; }), x.pick, !!x.exempt]); };
     c.appr = sig(clean(cs0(r))) === sig(c) ? (prev.appr || []) : [];
@@ -209,7 +254,7 @@
   // ---- print
   // one vendor's quotation, laid out like the sample hassan sent
   function qPage(r, v, k, its) {
-    var vend = safe(function () { return Store.data.vendors.find(function (x) { return String(x.name || "").trim().toLowerCase() === String(v.name).trim().toLowerCase(); }); }, null) || {};
+    var vend = vendOf(v.name) || {};
     var t = totals(v, its), fd = function (d) { return d ? safe(function () { return fdate(d); }, d) : ""; }, dash = function (x) { return String(x || "").trim() ? h(x) : "–"; };
     var qno = (r.prNo || "PR") + "/Q" + (k + 1), legal = safe(function () { return coLabel(r.entity); }, r.entity || "");
     var fl = filesOf(v), pics = fl.filter(function (f) { return /^image\//.test(f.mime); });
@@ -319,7 +364,7 @@
   new MutationObserver(function () { if (!document.getElementById("fsCsBox")) safe(refreshBox, null); }).observe(document.documentElement, { childList: true, subtree: true });
 
   document.addEventListener("click", function (e) {
-    var t = e.target.closest && e.target.closest("[data-svsave], [data-csappr], [data-csopen], [data-csprint], #fsCsAdd, #fsCsSave, #fsCsPrint, #fsCsClose, [data-csdel], #mkPO, [data-cslist]");
+    var t = e.target.closest && e.target.closest("[data-svsave], [data-csappr], [data-csopen], [data-csprint], #fsCsAdd, #fsCsSave, #fsCsPrint, #fsCsClose, [data-csdel], #mkPO, [data-cslist], [data-csnew], #fsNvSave, #fsNvClose");
     if (!t) return;
     if (t.id === "mkPO") {
       if (typeof F === "undefined" || !F || F.c !== "requisitions" || !F.rec) return;
@@ -329,7 +374,7 @@
       if (F5[1].stop) return say("Purchase order blocked: the store has these items. Issue them from stock.");
       if (miss.length) { say("Purchase order blocked. Still to do: " + miss.map(function (x) { return x.t + " (" + x.d + ")"; }).join("; ") + "."); return F5[1].ok && !st.ok ? open(r.id) : null; }
       var c = r.cs, v = c.v[c.pick], its = items(r), tot = Math.round(totals(v, its).tot * 100) / 100;
-      var vend = safe(function () { return Store.data.vendors.find(function (x) { return String(x.name || "").trim().toLowerCase() === String(v.name).trim().toLowerCase(); }); }, null);
+      var vend = vendOf(v.name);
       closeForm();
       openForm("pos", null, { date: todayStr(), entity: r.entity, prRef: r.id, vendor: vend ? vend.id : "", description: r.description, amount: tot, status: "Open", currency: "PKR", _fromPR: r.id });
       if (!vend) say("“" + v.name + "” is not in the vendor list yet. Add the vendor, then pick it on this PO.");
@@ -341,6 +386,9 @@
     if (t.hasAttribute("data-csappr")) return approve(t.getAttribute("data-csappr"), +t.getAttribute("data-k"));
     if (t.hasAttribute("data-csopen")) return open(t.getAttribute("data-csopen"));
     if (t.hasAttribute("data-csprint")) { var pr = prOf(t.getAttribute("data-csprint")); return pr && printCs(pr); }
+    if (t.hasAttribute("data-csnew")) return nvForm(+t.getAttribute("data-csnew"));
+    if (t.id === "fsNvSave") return nvSave();
+    if (t.id === "fsNvClose") { var nv = document.getElementById("fsCsNv"); if (nv) nv.remove(); return; }
     if (t.id === "fsCsClose") { var o = document.getElementById("fsCsOv"); if (o) o.remove(); E = null; return; }
     if (t.id === "fsCsAdd") { readEd(); E.c.v.push(blankV()); return draw(); }
     if (t.hasAttribute("data-csdel")) { readEd(); var k = +t.getAttribute("data-csdel"); E.c.v.splice(k, 1); if (E.c.pick === k) E.c.pick = null; else if (E.c.pick > k) E.c.pick--; return draw(); }
@@ -355,7 +403,7 @@
       if (sel) { var q = "#fsCsOv [data-csv=\"" + sel[0] + "\"]" + (sel[2] !== undefined ? "[data-csp=\"" + sel[2] + "\"]" : "[data-csf=\"" + sel[1] + "\"]"); var el = document.querySelector(q); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (x) { /* date inputs */ } } } }, 700);
   });
   document.addEventListener("change", function (e) { if (E && e.target.dataset && e.target.dataset.csfile !== undefined && e.target.files && e.target.files[0]) attach(+e.target.dataset.csfile, e.target.files[0]); });
-  document.addEventListener("change", function (e) { if (E && e.target.closest && e.target.closest("#fsCsOv") && (e.target.name === "fsCsPick" || e.target.id === "fsCsEx")) { readEd(); draw(); } });
+  document.addEventListener("change", function (e) { if (E && e.target.closest && e.target.closest("#fsCsOv") && (e.target.name === "fsCsPick" || e.target.id === "fsCsEx" || e.target.dataset.csf === "name")) { readEd(); draw(); } });
 
   function hook() {
     if (typeof S === "undefined" || !S.requisitions || typeof Store === "undefined" || !Store.data) return false;
@@ -374,6 +422,9 @@
     ".fs-cst input{width:100%;box-sizing:border-box;margin-top:3px}.fs-cst small{display:block;color:#667;text-align:right}.fs-cs2{display:flex;gap:4px}.fs-cs2 input{flex:1;min-width:0}" +
     ".fs-cst tr.fs-cstot td{background:#f3f6f9}.fs-cst tr.fs-cstot td.low{background:#dff2e5}.fs-cspick{display:flex;gap:6px;align-items:center;font-weight:600}" +
     ".fs-csfoot{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.fs-csw{display:flex;flex-direction:column;gap:4px}.fs-csw textarea{width:100%;box-sizing:border-box}" +
+    ".fs-csvsel{display:flex;gap:4px;margin-top:3px}.fs-csvsel select{flex:1;min-width:0}.fs-csvsel select.bad{border-color:#c62828;color:#b0412e}" +
+    ".fs-csplus{background:#2e9c58!important;color:#fff!important;border-color:#2e9c58!important;font-weight:700;padding:0 9px}.fs-csbad{color:#b0412e!important;text-align:left!important}" +
+    ".fs-nvbox{width:min(460px,94vw)}.fs-nvbox .fs-csw{margin-bottom:8px}.fs-nvbox input,.fs-nvbox textarea{width:100%;box-sizing:border-box}#fsCsNv{z-index:10001}" +
     ".fs-csok{color:#1b7a3d;font-weight:600}.fs-csno{color:#b0412e;font-weight:600}" +
     ".fs-csbox2{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid #cfe0f1;background:#f6faff;border-radius:8px;padding:10px 12px;margin-top:10px}.fs-csbox2.ok{border-color:#9fd3b0;background:#effaf2}" +
     ".fs-flow{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;width:100%}.fs-flow li{flex:1;min-width:120px;display:flex;flex-direction:column;border:1px solid #dde3ea;border-radius:8px;padding:6px 8px;background:#fff;position:relative;padding-left:34px}" +
