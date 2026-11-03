@@ -47,8 +47,34 @@
   function vendOf(name) { return safe(function () { return Store.data.vendors.find(function (x) { return key(x.name) && key(x.name) === key(name); }); }, null); }
   function vendList() { return safe(function () { return Store.data.vendors.filter(function (x) { return String(x.name || "").trim() && x.status !== "Blocked"; }).map(function (x) { return String(x.name).trim(); }).sort(function (a, b) { return a.localeCompare(b); }); }, []); }
   var listed = function (v) { var x = vendOf(v.name); return !!x && x.status !== "Blocked"; };
-  // quotations that count: a listed vendor and a price for every item
-  function counted(c, its) { return (c.v || []).filter(function (v) { return listed(v) && totals(v, its).full; }); }
+  // quote ref, date and expiry (hassan, 2026-11-03: "quote reference auto, the quotation date is mandatory, once we give that
+  // date and the validity days the quotation expiry should auto be populated")
+  var qref = function (pr, k) { return ((pr && pr.prNo) || "PR") + "/Q" + (k + 1); };
+  function validDays(t) {
+    var m = /(\d+(?:\.\d+)?)\s*(day|d\b|week|wk|month|mon|year|yr)?/i.exec(String(t || "")); if (!m) return 0;
+    var u = (m[2] || "day").toLowerCase(), k = /^w/.test(u) ? 7 : /^mo/.test(u) ? 30 : /^y/.test(u) ? 365 : 1;
+    return Math.round(+m[1] * k);
+  }
+  function expiryOf(v) {
+    var d = validDays(v.validity); if (!v.date || !d || !/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return "";
+    var x = new Date(v.date + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10);
+  }
+  // payment terms (hassan, 2026-11-03: "in credit pay term if it's N number of days then it should ask how much credit is
+  // being given for how many days"): a type, and for credit the share on credit and the number of days
+  var TT = ["Full advance", "Payment on delivery", "Credit", "Part advance, balance on credit"];
+  function ttOf(v) {
+    if (v.tt) return v.tt; var t = String(v.terms || "");
+    return /advance/i.test(t) && /credit|balance/i.test(t) ? TT[3] : /credit/i.test(t) ? TT[2] : /advance/i.test(t) ? TT[0] : /deliver/i.test(t) ? TT[1] : "";
+  }
+  var isCr = function (tt) { return tt === TT[2] || tt === TT[3]; };
+  function termText(v) {
+    var tt = ttOf(v), d = Math.round(num(v.cdays)), p = num(v.cpct);
+    if (tt === TT[2]) return (p > 0 && p < 100 ? p + "% on credit, " + (100 - p) + "% on delivery" : "100% credit") + (d ? ", payable " + d + " days after invoice" : "");
+    if (tt === TT[3]) return (p > 0 && p < 100 ? (100 - p) + "% advance, " + p + "% credit" : "Part advance, balance on credit") + (d ? " payable " + d + " days after invoice" : "");
+    return tt || String(v.terms || "");
+  }
+  // quotations that count: a listed vendor, its quotation date and a price for every item
+  function counted(c, its) { return (c.v || []).filter(function (v) { return listed(v) && v.date && totals(v, its).full; }); }
   function state(r) {
     var c = r.cs || {}, its = items(r), q = counted(c, its), pick = c.pick != null && c.v && c.v[c.pick] && q.indexOf(c.v[c.pick]) >= 0;
     if (c.exempt && String(c.exemptWhy || "").trim() && q.length >= 1 && pick) return { ok: true, n: q.length, txt: q.length + " quotation" + (q.length === 1 ? "" : "s") + ", limited source" };
@@ -120,7 +146,7 @@
   var E = null; // {id, c, its}
   function lowest(c, its) {
     var best = -1, bt = Infinity;
-    c.v.forEach(function (v, k) { var t = totals(v, its); if (listed(v) && t.full && t.tot < bt) { bt = t.tot; best = k; } });
+    c.v.forEach(function (v, k) { var t = totals(v, its); if (listed(v) && v.date && t.full && t.tot < bt) { bt = t.tot; best = k; } });
     return best;
   }
   function editor() {
@@ -129,7 +155,9 @@
     var head = "<tr><th style=\"min-width:220px\">Item</th><th class=\"num\">Qty</th>" + c.v.map(function (v, k) {
       return "<th class=\"fs-csv" + (k === low ? " low" : "") + "\">Vendor " + (k + 1) + (c.v.length > MIN ? " <button type=\"button\" class=\"btn sm\" data-csdel=\"" + k + "\" title=\"Remove this vendor\">×</button>" : "") +
         vSel(k, v, vendors) +
-        "<div class=\"fs-cs2\">" + cell(k, "ref", "", "Quote ref") + "<input type=\"date\" data-csv=\"" + k + "\" data-csf=\"date\" value=\"" + h(v.date || "") + "\"></div></th>";
+        "<div class=\"fs-cs2\"><input readonly class=\"fs-csro\" title=\"Quote reference (automatic)\" value=\"" + h(qref(PR, k)) + "\">" +
+          "<input type=\"date\" title=\"Quotation date (required)\" class=\"" + (String(v.name || "").trim() && !v.date ? "fs-csreq" : "") + "\" data-csv=\"" + k + "\" data-csf=\"date\" value=\"" + h(v.date || "") + "\"></div>" +
+          (String(v.name || "").trim() && !v.date ? "<small class=\"fs-csbad\">Quotation date is required.</small>" : "") + "</th>";
     }).join("") + "</tr>";
     var body = its.map(function (it, i) {
       var best = Infinity; c.v.forEach(function (v) { var p = num(v.prices && v.prices[i]); if (p > 0 && p < best) best = p; });
@@ -150,8 +178,8 @@
       "<div class=\"tw fs-cstw\"><table class=\"fs-cst\"><thead>" + head + "</thead><tbody>" + body + calc("Subtotal", "sub") +
       row("Tax %", "tax", "e.g. 18") + calc("Tax", "tax") + calc("Total (PKR)", "tot", 1) +
       "<tr><td colspan=\"2\"><b>Prices are</b></td>" + c.v.map(function (v, k) { return "<td class=\"fs-csv" + (k === low ? " low" : "") + "\"><select data-csv=\"" + k + "\" data-csf=\"basis\">" + ["Cash", "Credit"].map(function (o) { return "<option" + ((v.basis || "Cash") === o ? " selected" : "") + ">" + o + "</option>"; }).join("") + "</select></td>"; }).join("") + "</tr>" +
-      "<tr><td colspan=\"2\"><b>Quotation expiry</b></td>" + c.v.map(function (v, k) { return "<td class=\"fs-csv" + (k === low ? " low" : "") + "\"><input type=\"date\" data-csv=\"" + k + "\" data-csf=\"expiry\" value=\"" + h(v.expiry || "") + "\"></td>"; }).join("") + "</tr>" +
-      row("Delivery time", "delivery", "e.g. 10 days") + row("Payment terms", "terms", "e.g. Full advance") + row("Delivery place", "place", "e.g. Ex-shop") + row("Validity", "validity", "e.g. 30 days") +
+      "<tr><td colspan=\"2\"><b>Quotation expiry</b></td>" + c.v.map(function (v, k) { return "<td class=\"fs-csv" + (k === low ? " low" : "") + "\"><input type=\"date\" readonly class=\"fs-csro\" tabindex=\"-1\" title=\"Quotation date + validity (automatic)\" value=\"" + h(expiryOf(v)) + "\">" + (expiryOf(v) ? "" : "<small>Fills in from the quotation date and validity</small>") + "</td>"; }).join("") + "</tr>" +
+      row("Delivery time", "delivery", "e.g. 10 days") + termsRow(c, low) + row("Delivery place", "place", "e.g. Ex-shop") + row("Validity", "validity", "e.g. 30 days (sets the expiry)") +
       row("Carriage", "carriage", "–") + row("Installation", "installation", "–") + row("Freight", "freight", "–") + row("Remarks", "remarks", "") +
       "<tr><td colspan=\"2\"><b>Vendor's quotation (scan / PDF)</b></td>" + c.v.map(function (v, k) {
         var fl = filesOf(v);
@@ -164,6 +192,15 @@
       "<label class=\"fs-csw\"><span><input type=\"checkbox\" id=\"fsCsEx\"" + (c.exempt ? " checked" : "") + "> Fewer than " + MIN + " quotations (single or limited source)</span><textarea id=\"fsCsExWhy\" rows=\"2\" placeholder=\"Why three quotations could not be obtained (sole agent, OEM spare, emergency …)\">" + h(c.exemptWhy || "") + "</textarea></label></div>" +
       "<p class=\"" + (st.ok ? "fs-csok" : "fs-csno") + "\">" + (st.ok ? "✓ " : "") + h(st.txt) + (st.ok ? ". A purchase order can be raised." : ". A purchase order cannot be raised yet.") + "</p>" +
       "<p class=\"err\" id=\"fsCsErr\"></p></div></div>";
+  }
+  function termsRow(c, low) {
+    return "<tr><td colspan=\"2\"><b>Payment terms</b></td>" + c.v.map(function (v, k) {
+      var tt = ttOf(v), cr = isCr(tt), a = function (f) { return " data-csv=\"" + k + "\" data-csf=\"" + f + "\""; };
+      return "<td class=\"fs-csv" + (k === low ? " low" : "") + "\"><select" + a("tt") + "><option value=\"\">Choose…</option>" + TT.map(function (o) { return "<option" + (o === tt ? " selected" : "") + ">" + o + "</option>"; }).join("") + "</select>" +
+        (cr ? "<div class=\"fs-cs2 fs-cscr\"><label>On credit %<input class=\"num\" inputmode=\"decimal\"" + a("cpct") + " value=\"" + h(v.cpct == null || v.cpct === "" ? (tt === TT[2] ? "100" : "") : v.cpct) + "\" placeholder=\"%\"></label>" +
+          "<label>Days<input class=\"num\" inputmode=\"numeric\"" + a("cdays") + " value=\"" + h(v.cdays || "") + "\" placeholder=\"e.g. 30\"></label></div>" : "") +
+        (cr ? "<small>" + h(termText(Object.assign({}, v, { tt: tt, cpct: v.cpct == null || v.cpct === "" ? (tt === TT[2] ? 100 : "") : v.cpct }))) + "</small>" : "") + "</td>";
+    }).join("") + "</tr>";
   }
   function vSel(k, v, vendors) {
     var cur = String(v.name || "").trim(), x = cur && vendOf(cur), opts = vendors.slice();
@@ -217,6 +254,10 @@
       var v = E.c.v[+el.dataset.csv]; if (!v) return;
       if (el.dataset.csp !== undefined) { v.prices = v.prices || []; v.prices[+el.dataset.csp] = el.value.trim(); } else v[el.dataset.csf] = el.value;
     });
+    E.c.v.forEach(function (v, k) {
+      v.ref = qref(PR, k); v.expiry = expiryOf(v);
+      if (v.tt !== undefined) { if (!isCr(v.tt)) { v.cpct = ""; v.cdays = ""; } else if (v.tt === TT[2] && (v.cpct == null || v.cpct === "")) v.cpct = "100"; else if (v.tt === TT[3] && num(v.cpct) >= 100) v.cpct = ""; v.terms = termText(v); }
+    });
     var p = document.querySelector("#fsCsOv input[name=fsCsPick]:checked"); E.c.pick = p ? +p.value : null;
     var w = document.getElementById("fsCsWhy"); if (w) E.c.why = w.value;
     var x = document.getElementById("fsCsEx"); if (x) E.c.exempt = x.checked;
@@ -228,12 +269,19 @@
     return out;
   }
   async function save(print) {
+    clearTimeout(tm); // a pending live-totals redraw would wipe the error message below
     readEd();
     var r = prOf(E.id); if (!r) return;
     var low = lowest(E.c, E.its), err = document.getElementById("fsCsErr");
     if (E.c.pick != null && low >= 0 && E.c.pick !== low && !String(E.c.why || "").trim()) { if (err) err.textContent = "Give the reason for not choosing the lowest quotation."; return; }
     var bad = E.c.v.filter(function (v) { return String(v.name || "").trim() && !listed(v); });
     if (bad.length) { if (err) err.textContent = "Not in the vendor list (or blocked): " + bad.map(function (v) { return v.name; }).join(", ") + ". Choose from the list or click + to add the vendor."; return; }
+    var nod = E.c.v.filter(function (v) { return String(v.name || "").trim() && !v.date; });
+    if (nod.length) { if (err) err.textContent = "Enter the quotation date for " + nod.map(function (v) { return v.name; }).join(", ") + "."; return; }
+    var crBad = E.c.v.filter(function (v) { return String(v.name || "").trim() && isCr(ttOf(v)) && !(num(v.cdays) > 0); });
+    if (crBad.length) { if (err) err.textContent = "Enter the credit days for " + crBad.map(function (v) { return v.name; }).join(", ") + "."; return; }
+    var pBad = E.c.v.filter(function (v) { var p = num(v.cpct); return String(v.name || "").trim() && isCr(ttOf(v)) && (ttOf(v) === TT[3] ? !(p > 0 && p < 100) : !(p > 0 && p <= 100)); });
+    if (pBad.length) { if (err) err.textContent = "Enter how much is on credit (%) for " + pBad.map(function (v) { return v.name; }).join(", ") + (pBad.some(function (v) { return ttOf(v) === TT[3]; }) ? ": with part advance it must be between 1 and 99." : "."); return; }
     var nm = E.c.v.map(function (v) { return key(v.name); }).filter(Boolean);
     if (nm.some(function (x, i) { return nm.indexOf(x) !== i; })) { if (err) err.textContent = "The same vendor is entered twice. Each column must be a different vendor."; return; }
     if (E.c.exempt && !String(E.c.exemptWhy || "").trim()) { if (err) err.textContent = "Give the reason fewer than " + MIN + " quotations were obtained."; return; }
@@ -244,7 +292,7 @@
       await Store.save("requisitions", Object.assign({}, r, { cs: c }));
       var fresh = prOf(E.id); if (fresh) fresh.cs = c;
       if (typeof F !== "undefined" && F && F.c === "requisitions" && F.rec && F.rec.id === E.id) F.rec.cs = c;
-      E.c = cs0({ cs: c });
+      E.c = cs0(Object.assign({}, r, { cs: c }));
       say("Comparative statement saved: " + state(Object.assign({}, r, { cs: c })).txt + ".");
       draw(); refreshBox(true);
       if (print) printCs(Object.assign({}, r, { cs: c }));
@@ -260,7 +308,7 @@
     var fl = filesOf(v), pics = fl.filter(function (f) { return /^image\//.test(f.mime); });
     return "<section class=\"fs-qpage\"><div class=\"fs-qtop\"><div class=\"fs-qco\">" + h(String(v.name).toUpperCase()) + "</div><div class=\"fs-qr\"><b>" + h(v.name) + "</b><br>Date: " + h(fd(v.date) || "–") + "<br>Ref No: " + h(v.ref || qno) + "</div></div>" +
       "<h2 class=\"fs-qh\">Quotation</h2><p>M/S: " + h(legal) + "</p><p class=\"fs-qc\"><b>Quotation No.:</b> " + h(qno) + "</p>" +
-      "<div class=\"fs-qrow\"><span><b>Quotation Date:</b> " + h(fd(v.date) || "–") + "</span><span><b>Expiry Date:</b> " + h(fd(v.expiry) || "__________") + "</span><span><b>Indent No.:</b> " + h(r.prNo || "") + "</span></div>" +
+      "<div class=\"fs-qrow\"><span><b>Quotation Date:</b> " + h(fd(v.date) || "–") + "</span><span><b>Expiry Date:</b> " + h(fd(expiryOf(v) || v.expiry) || "__________") + "</span><span><b>Indent No.:</b> " + h(r.prNo || "") + "</span></div>" +
       "<div class=\"fs-qrow\"><span><b>Vendor:</b> " + h(String(v.name).toUpperCase()) + "</span><span><b>Department:</b> " + h(String(r.dept || "").toUpperCase()) + "</span></div>" +
       "<table class=\"fs-qt\"><thead><tr><th style=\"width:40px\">S/No</th><th>Items Description</th><th style=\"width:60px\">Qty.</th><th style=\"width:90px\">Unit Rate</th><th style=\"width:100px\">Total Amount</th></tr></thead><tbody>" +
       its.map(function (it, i) { var p = num(v.prices && v.prices[i]); return "<tr><td>" + (i + 1) + "</td><td>" + h(it.i) + (it.s ? " (" + h(it.s) + ")" : "") + "</td><td class=\"c\">" + h(it.q) + (it.u ? " " + h(it.u) : "") + "</td><td class=\"num\">" + (p ? money(p) : "–") + "</td><td class=\"num\">" + (p ? money(p * it.q) : "–") + "</td></tr>"; }).join("") +
@@ -403,7 +451,7 @@
       if (sel) { var q = "#fsCsOv [data-csv=\"" + sel[0] + "\"]" + (sel[2] !== undefined ? "[data-csp=\"" + sel[2] + "\"]" : "[data-csf=\"" + sel[1] + "\"]"); var el = document.querySelector(q); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (x) { /* date inputs */ } } } }, 700);
   });
   document.addEventListener("change", function (e) { if (E && e.target.dataset && e.target.dataset.csfile !== undefined && e.target.files && e.target.files[0]) attach(+e.target.dataset.csfile, e.target.files[0]); });
-  document.addEventListener("change", function (e) { if (E && e.target.closest && e.target.closest("#fsCsOv") && (e.target.name === "fsCsPick" || e.target.id === "fsCsEx" || e.target.dataset.csf === "name")) { readEd(); draw(); } });
+  document.addEventListener("change", function (e) { if (E && e.target.closest && e.target.closest("#fsCsOv") && (e.target.name === "fsCsPick" || e.target.id === "fsCsEx" || e.target.dataset.csf === "name" || e.target.dataset.csf === "tt")) { readEd(); draw(); } });
 
   function hook() {
     if (typeof S === "undefined" || !S.requisitions || typeof Store === "undefined" || !Store.data) return false;
@@ -422,6 +470,8 @@
     ".fs-cst input{width:100%;box-sizing:border-box;margin-top:3px}.fs-cst small{display:block;color:#667;text-align:right}.fs-cs2{display:flex;gap:4px}.fs-cs2 input{flex:1;min-width:0}" +
     ".fs-cst tr.fs-cstot td{background:#f3f6f9}.fs-cst tr.fs-cstot td.low{background:#dff2e5}.fs-cspick{display:flex;gap:6px;align-items:center;font-weight:600}" +
     ".fs-csfoot{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.fs-csw{display:flex;flex-direction:column;gap:4px}.fs-csw textarea{width:100%;box-sizing:border-box}" +
+    ".fs-cscr{margin-top:4px}.fs-cscr label{display:flex;flex-direction:column;font-size:11px;color:#556;flex:1}" +
+    ".fs-csro{background:#f1f4f7!important;color:#445}.fs-csreq{border-color:#c62828!important}" +
     ".fs-csvsel{display:flex;gap:4px;margin-top:3px}.fs-csvsel select{flex:1;min-width:0}.fs-csvsel select.bad{border-color:#c62828;color:#b0412e}" +
     ".fs-csplus{background:#2e9c58!important;color:#fff!important;border-color:#2e9c58!important;font-weight:700;padding:0 9px}.fs-csbad{color:#b0412e!important;text-align:left!important}" +
     ".fs-nvbox{width:min(460px,94vw)}.fs-nvbox .fs-csw{margin-bottom:8px}.fs-nvbox input,.fs-nvbox textarea{width:100%;box-sizing:border-box}#fsCsNv{z-index:10001}" +
