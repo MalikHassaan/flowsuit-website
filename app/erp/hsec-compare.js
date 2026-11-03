@@ -476,8 +476,81 @@
   document.addEventListener("change", function (e) { if (E && e.target.dataset && e.target.dataset.csfile !== undefined && e.target.files && e.target.files[0]) attach(+e.target.dataset.csfile, e.target.files[0]); });
   document.addEventListener("change", function (e) { if (E && e.target.closest && e.target.closest("#fsCsOv") && (e.target.name === "fsCsPick" || e.target.id === "fsCsEx" || e.target.dataset.csf === "name" || e.target.dataset.csf === "tt")) { readEd(); draw(); } });
 
+  // ---- Goods receipt against a PO (hassan, 2026-11-03: "while selecting the PO why the details below are not showing, it
+  // should show what is in it"). The PO raised from a requisition carries no item lines of its own, so they come from the
+  // requisition's items at the chosen vendor's unit prices: shown on the GRN, and the GRN lines filled from them once.
+  // An item not yet in the item master is added to it (code ITM-0001 …) when "Fill lines from PO" is pressed.
+  function poLines(po) {
+    var r = po && po.prRef && prOf(po.prRef); if (!r) return null;
+    var its = items(r), c = r.cs || {}, v = c.v && c.pick != null ? c.v[c.pick] : null;
+    return its.map(function (it, i) {
+      var raw = (r.descriptionRows || []).filter(function (x) { return x && (x.i || x.q || x.p); })[i] || {};
+      var p = v ? num(v.prices && v.prices[i]) : num(raw.p);
+      return { i: it.i, s: it.s, q: it.q, u: it.u || raw.u || "", p: p };
+    });
+  }
+  var itemKey = function (t) { return String(t || "").trim().toLowerCase().replace(/\s+/g, " "); };
+  function itemFor(l, ent) {
+    return safe(function () { return Store.data.items.find(function (x) { return (!x.entity || x.entity === ent) && (itemKey(x.description) === itemKey(l.i) || itemKey(x.code) === itemKey(l.i)); }); }, null);
+  }
+  function nextItemCode() {
+    var mx = 0; safe(function () { Store.data.items.forEach(function (x) { var m = /^ITM-(\d+)$/.exec(String(x.code || "")); if (m) mx = Math.max(mx, +m[1]); }); }, null);
+    return "ITM-" + String(mx + 1).padStart(4, "0");
+  }
+  function grnPanel(po, ent) {
+    var L = poLines(po);
+    if (!L) return "<div class=\"fs-grnpo\"><b>" + h(po.poNo) + "</b>: " + h(po.description || "no item details") + " · Rs " + money(num(po.amount)) +
+      "<br><small class=\"muted\">This PO was not raised from a requisition, so its items are not listed. Add the lines below.</small></div>";
+    var miss = L.filter(function (l) { return !itemFor(l, ent); }).length, tot = L.reduce(function (s, l) { return s + l.q * l.p; }, 0);
+    return "<div class=\"fs-grnpo\"><div class=\"fs-grnh\"><b>What is on " + h(po.poNo) + "</b><span style=\"flex:1\"></span><button type=\"button\" class=\"btn sm pri\" id=\"fsGrnFill\">Fill lines from PO" + (miss ? " (adds " + miss + " new item" + (miss > 1 ? "s" : "") + " to the item master)" : "") + "</button></div>" +
+      "<table class=\"fs-grnt\"><thead><tr><th>#</th><th>Item</th><th>Specification</th><th class=\"num\">Qty ordered</th><th>Unit</th><th class=\"num\">Unit price</th><th class=\"num\">Amount</th><th>In item master</th></tr></thead><tbody>" +
+      L.map(function (l, k) { var it = itemFor(l, ent); return "<tr><td>" + (k + 1) + "</td><td>" + h(l.i) + "</td><td>" + h(l.s || "") + "</td><td class=\"num\">" + h(l.q) + "</td><td>" + h(l.u) + "</td><td class=\"num\">" + money(l.p) + "</td><td class=\"num\">" + money(l.q * l.p) + "</td><td>" + (it ? h(it.code) : "<span class=\"muted\">not yet</span>") + "</td></tr>"; }).join("") +
+      "</tbody><tfoot><tr><td colspan=\"6\"><b>Total before tax</b></td><td class=\"num\"><b>" + money(tot) + "</b></td><td></td></tr></tfoot></table></div>";
+  }
+  async function grnFill() {
+    if (typeof F === "undefined" || !F || !F.inv || !F.rec || F.rec.type !== "grn") return;
+    safe(function () { readInv(); }, null); // eslint-disable-line no-undef
+    var r = F.rec, po = safe(function () { return poOf(r.po); }, null), L = po && poLines(po); if (!L) return; // eslint-disable-line no-undef
+    var b = document.getElementById("fsGrnFill"); if (b) b.disabled = true;
+    try {
+      var lines = [];
+      for (var k = 0; k < L.length; k++) {
+        var l = L[k], it = itemFor(l, r.entity);
+        if (!it) {
+          var rec = { code: nextItemCode(), description: l.i, category: "Other", entity: r.entity, uom: l.u || "pcs", qty: 0, unitCost: 0 };
+          var id = await Store.save("items", rec); it = safe(function () { return Store.data.items.find(function (x) { return x.id === id; }); }, null) || Object.assign({ id: id }, rec);
+          if (!Store.data.items.some(function (x) { return x.id === it.id; })) Store.data.items.push(it);
+        }
+        lines.push({ item: it.id, qty: l.q, cost: l.p });
+      }
+      r.lines = lines; r._fsFilled = r.po;
+      safe(function () { drawInv(); }, null); // eslint-disable-line no-undef
+      say("Lines filled from " + po.poNo + ". Change the quantity if only part was delivered.");
+    } catch (x) { if (b) b.disabled = false; say((x && x.message) || "Could not fill the lines."); }
+  }
+  function grnHook() {
+    if (typeof drawInv !== "function" || drawInv.fsGrn) return; // eslint-disable-line no-undef
+    var old = drawInv; // eslint-disable-line no-undef
+    drawInv = function () { // eslint-disable-line no-global-assign
+      var out = old.apply(this, arguments);
+      safe(function () {
+        var r = F.rec; if (!r || r.type !== "grn" || r.docNo || !r.po) return;
+        var po = poOf(r.po); if (!po) return; // eslint-disable-line no-undef
+        var at = document.querySelector("#invFrm .jhead"); if (!at || document.querySelector("#invFrm .fs-grnpo")) return;
+        at.insertAdjacentHTML("beforebegin", grnPanel(po, r.entity));
+        // first time this PO is picked and the lines are still empty: fill them when every item is already in the item master
+        var empty = !(r.lines || []).some(function (l) { return l.item; });
+        if (empty && r._fsFilled !== r.po) { var L = poLines(po); if (L && L.length && L.every(function (l) { return itemFor(l, r.entity); })) setTimeout(grnFill, 0); }
+      }, null);
+      return out;
+    };
+    drawInv.fsGrn = true; // eslint-disable-line no-undef
+  }
+  document.addEventListener("click", function (e) { if (e.target.closest && e.target.closest("#fsGrnFill")) { e.preventDefault(); grnFill(); } }, true);
+
   function hook() {
     if (typeof S === "undefined" || !S.requisitions || typeof Store === "undefined" || !Store.data) return false;
+    safe(grnHook, null);
     var cols = S.requisitions.cols;
     if (Array.isArray(cols) && !cols.some(function (c) { return c[0] === "cs"; })) {
       var at = cols.findIndex(function (c) { return c[0] === "status"; });
@@ -495,6 +568,8 @@
     ".fs-csfoot{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.fs-csw{display:flex;flex-direction:column;gap:4px}.fs-csw textarea{width:100%;box-sizing:border-box}" +
     "#frm.fs-locked [id^='f_']:disabled,#frm.fs-locked [data-gk]:disabled,#frm.fs-locked .ssb:disabled{background:#f4f6f8;color:#333;opacity:1;-webkit-text-fill-color:#333}" +
     "#frm.fs-locked [data-gadd],#frm.fs-locked [data-gdel]{display:none}" +
+    ".fs-grnpo{border:1px solid #cfe0f1;background:#f6faff;border-radius:8px;padding:10px 12px;margin:10px 0}.fs-grnh{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}" +
+    ".fs-grnt{width:100%;border-collapse:collapse;font-size:12.5px}.fs-grnt th,.fs-grnt td{border-bottom:1px solid #e3e8ee;padding:4px 6px;text-align:left}.fs-grnt .num{text-align:right}" +
     ".fs-cscr{margin-top:4px}.fs-cscr label{display:flex;flex-direction:column;font-size:11px;color:#556;flex:1}" +
     ".fs-csro{background:#f1f4f7!important;color:#445}.fs-csreq{border-color:#c62828!important}" +
     ".fs-csvsel{display:flex;gap:4px;margin-top:3px}.fs-csvsel select{flex:1;min-width:0}.fs-csvsel select.bad{border-color:#c62828;color:#b0412e}" +
