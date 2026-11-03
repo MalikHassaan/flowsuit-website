@@ -345,7 +345,7 @@
     if (at === 0) act = "<p class=\"fs-csnext\">Next: the requisition must be submitted and approved under the authority matrix. Store vetting opens after that.</p>";
     else if (F5[1].stop) act = svForm + "<p class=\"fs-csno\">The store has the items: issue them from stock. No purchase order is needed. Change the store check if that is wrong.</p>";
     else if (at === 1) act = "<p class=\"fs-csnext\">Next: the store checks its stock.</p>" + svForm;
-    else if (at === 2) act = "<p class=\"fs-csnext\">Next: collect at least " + MIN + " vendors' quotations, compare them and choose a vendor.</p>" + (counted(r.cs || {}, items(r)).length ? "" : svForm) +
+    else if (at === 2) act = "<p class=\"fs-csnext\">Next: collect at least " + MIN + " vendors' quotations, compare them and choose a vendor.</p>" +
       "<div class=\"fs-csbtns\"><button type=\"button\" class=\"btn sm pri\" data-csopen=\"" + h(r.id) + "\">Enter quotations &amp; compare</button>" + printB + "</div>";
     else if (at === 3) act = "<p class=\"fs-csnext\">Next: approve the comparative statement (" + h(S2.join(", then ")) + ").</p><div class=\"fs-csbtns\">" + apr +
       "<button type=\"button\" class=\"btn sm\" data-csopen=\"" + h(r.id) + "\">View / change quotations</button>" + printB + "</div>";
