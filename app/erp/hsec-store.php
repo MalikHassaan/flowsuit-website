@@ -149,6 +149,8 @@ function hsec_api(string $rest): void
         hsec_sync(max(0, (int) ($_GET['v'] ?? 0)));
     } elseif ($rest === '/doc' && $method === 'POST') {
         hsec_write($me);
+    } elseif ($rest === '/hist' && $method === 'GET') {
+        hsec_hist($me);
     } elseif (str_starts_with($rest, '/att')) {
         hsec_att_api($me, substr($rest, 4), $method);
     }
@@ -199,6 +201,48 @@ function hsec_sync(int $since): void
         $out['members'] = $members;
     }
     taj_json($out);
+}
+
+// /hist?k=coll/id,coll/id: who created each record and who changed its status, and when, from hsec_history (the
+// purchase order's Workflow history, hassan 2026-11-03). Only the status moves are sent, never the record's figures.
+function hsec_hist(array $me): void
+{
+    $keys = array_slice(array_values(array_unique(array_filter(explode(',', (string) ($_GET['k'] ?? ''))))), 0, 80);
+    $db = hsec_db();
+    $allowed = hsec_allowed($me);
+    $names = [];
+    foreach ($db->query('SELECT id, name FROM users') as $u) {
+        $names[(int) $u['id']] = $u['name'];
+    }
+    $doc = $db->prepare('SELECT data FROM hsec_docs WHERE coll = ? AND id = ?');
+    $st = $db->prepare('SELECT at, by_user, op, old_data, new_data FROM hsec_history WHERE coll = ? AND id = ? ORDER BY seq');
+    $out = [];
+    foreach ($keys as $k) {
+        $p = explode('/', $k, 2);
+        if (count($p) !== 2 || !preg_match('/^[A-Za-z]{1,40}$/', $p[0]) || $p[1] === '') {
+            continue;
+        }
+        $doc->execute($p);
+        $cur = $doc->fetchColumn();
+        if ($cur !== false && $cur !== null && !hsec_visible($allowed, json_decode((string) $cur, true))) {
+            continue;
+        }
+        $st->execute($p);
+        $ev = [];
+        foreach ($st->fetchAll() as $row) {
+            $o = $row['old_data'] === null ? null : json_decode((string) $row['old_data'], true);
+            $n = $row['new_data'] === null ? null : json_decode((string) $row['new_data'], true);
+            $s0 = is_array($o) ? (string) ($o['status'] ?? '') : '';
+            $s1 = is_array($n) ? (string) ($n['status'] ?? '') : '';
+            if ($row['op'] === 'UPDATE' && $s0 === $s1) {
+                continue;
+            }
+            $ev[] = ['at' => date('c', strtotime((string) $row['at'])), 'by' => $names[(int) $row['by_user']] ?? '', 'op' => $row['op'],
+                'from' => $s0, 'to' => $s1];
+        }
+        $out[$k] = $ev;
+    }
+    taj_json(['hist' => $out]);
 }
 
 // Why a change is refused, or null when it is allowed. $old and $new are decoded records (null = none).
