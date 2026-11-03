@@ -74,7 +74,13 @@
     return tt || String(v.terms || "");
   }
   // quotations that count: a listed vendor, its quotation date and a price for every item
-  function counted(c, its) { return (c.v || []).filter(function (v) { return listed(v) && v.date && totals(v, its).full; }); }
+  // Rules apply from when they went live: a statement saved before the vendor-list rule (2026-11-03 05:14 UTC) or the
+  // quotation-date rule (09:53 UTC) is judged as it was then, so one already approved and turned into a PO stays complete.
+  function qOk(v, c) {
+    var at = String(c.at || "9");
+    return (at >= "2026-11-03T05:14" ? listed(v) : !!String(v.name || "").trim()) && (at >= "2026-11-03T09:53" ? !!v.date : true);
+  }
+  function counted(c, its) { return (c.v || []).filter(function (v) { return qOk(v, c) && totals(v, its).full; }); }
   function state(r) {
     var c = r.cs || {}, its = items(r), q = counted(c, its), pick = c.pick != null && c.v && c.v[c.pick] && q.indexOf(c.v[c.pick]) >= 0;
     if (c.exempt && String(c.exemptWhy || "").trim() && q.length >= 1 && pick) return { ok: true, n: q.length, txt: q.length + " quotation" + (q.length === 1 ? "" : "s") + ", limited source" };
@@ -146,7 +152,7 @@
   var E = null; // {id, c, its}
   function lowest(c, its) {
     var best = -1, bt = Infinity;
-    c.v.forEach(function (v, k) { var t = totals(v, its); if (listed(v) && v.date && t.full && t.tot < bt) { bt = t.tot; best = k; } });
+    c.v.forEach(function (v, k) { var t = totals(v, its); if (qOk(v, c) && t.full && t.tot < bt) { bt = t.tot; best = k; } });
     return best;
   }
   function editor() {
@@ -554,7 +560,9 @@
     var cols = S.requisitions.cols;
     if (Array.isArray(cols) && !cols.some(function (c) { return c[0] === "cs"; })) {
       var at = cols.findIndex(function (c) { return c[0] === "status"; });
-      cols.splice(at < 0 ? cols.length : at, 0, ["cs", "Quotations", function (r) { var st = state(r); var F5 = flow(r), nx = F5.find(function (x) { return !x.ok; }); return "<button type=\"button\" class=\"btn sm" + (st.ok ? "" : " warn") + "\" data-cslist=\"" + h(r.id) + "\" title=\"" + h(nx ? "Next: " + nx.t : "Done") + "\">" + h(st.ok ? "✓ " + st.n : st.n + " of " + MIN) + "</button>" + (nx ? "<br><small class=\"muted\">Next: " + h(nx.t) + "</small>" : ""); }]);
+      cols.splice(at < 0 ? cols.length : at, 0, ["cs", "Quotations", function (r) { var st = state(r);
+        var po = safe(function () { return Store.data.pos.find(function (p) { return p.prRef === r.id && p.status !== "Cancelled"; }); }, null);
+        if (po) return "<button type=\"button\" class=\"btn sm\" data-cslist=\"" + h(r.id) + "\" title=\"Comparative statement\">✓ " + h(st.n || "") + (st.n ? " · " : "") + h(po.poNo || "PO raised") + "</button>" + (st.ok ? "" : "<br><small class=\"muted\">Statement incomplete under today's rules</small>"); var F5 = flow(r), nx = F5.find(function (x) { return !x.ok; }); return "<button type=\"button\" class=\"btn sm" + (st.ok ? "" : " warn") + "\" data-cslist=\"" + h(r.id) + "\" title=\"" + h(nx ? "Next: " + nx.t : "Done") + "\">" + h(st.ok ? "✓ " + st.n : st.n + " of " + MIN) + "</button>" + (nx ? "<br><small class=\"muted\">Next: " + h(nx.t) + "</small>" : ""); }]);
     }
     return true;
   }
