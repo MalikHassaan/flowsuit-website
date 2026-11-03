@@ -226,6 +226,12 @@
     build();
     dock();
     setInterval(dock, 700);
+    // HSEC rebuilds its top bar on every redraw (e.g. changing company). Waiting up to 700 ms to put the pill back made
+    // the bar jump twice, which hassan saw as flicker (2026-11-03); re-dock in the same frame instead.
+    new MutationObserver(function () {
+      var bar = document.querySelector("#topbar") || document.querySelector(".erp-main header.page-top, .erp-main .home-hero");
+      if (bar ? pill.parentNode !== bar : pill.parentNode !== root) dock();
+    }).observe(document.body, { childList: true, subtree: true });
     load();
     timer = setInterval(function () { if (!document.hidden) { paint(); gateSync(); } }, 30000);
     setInterval(function () { if (!document.hidden && card.hidden) load(); }, 300000);
