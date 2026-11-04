@@ -58,12 +58,18 @@
     months().forEach(function (m) {
       L.forEach(function (p) {
         if (!safe(function () { return amcDue(p, m); }, false) || billedKey(p, m)) return;
-        var tx = safe(function () { return amcTax(p); }, 0), k = ST.mode === "lump" ? [client(p), p.entity, m, tx].join("|") : p.id + "|" + m;
+        var tx = window.FS_AMCINV ? window.FS_AMCINV.taxOf(p) : safe(function () { return amcTax(p); }, 0), k = ST.mode === "lump" ? [client(p), p.entity, m, tx].join("|") : p.id + "|" + m;
         if (!by[k]) { by[k] = { key: k, client: client(p), entity: p.entity, m: m, tax: tx, items: [] }; G.push(by[k]); }
         by[k].items.push(p);
       });
     });
     return G;
+  }
+  function blocked(G) {
+    var seen = {}, out = [];
+    if (!window.FS_AMCINV) return out;
+    G.forEach(function (g) { g.items.forEach(function (p) { if (seen[p.id]) return; seen[p.id] = 1; var m = window.FS_AMCINV.missing(p); if (m.length) out.push({ p: p, m: m }); }); });
+    return out;
   }
   function charge(p) { var k = safe(function () { return AMC_STEP[p.amcFreq]; }, 1) || 1, sub = Math.round(num(p.amcFee) * k); return { k: k, sub: sub }; }
 
@@ -71,7 +77,9 @@
     var u = num(p.amcUnits), rt = num(p.amcRate), fee = num(p.amcFee), per = k > 1 ? (p.amcFreq || "") + " charge, " + mLabel(m) + " to " + mLabel(addM(m, k - 1)) : "Monthly charge for " + mLabel(m);
     var specs = [p.code ? "Contract: " + p.code : "", num(p.amcFloors) ? "Floors: " + p.amcFloors : "", u ? "Units (lifts): " + u : "", u && rt ? "Rate per unit per month: " + money(rt) : "", k > 1 ? "Months: " + k : ""].filter(Boolean).join("; ");
     var byUnit = u && rt && Math.abs(u * rt - fee) < 0.5;
-    return { name: "Annual maintenance services – " + (p.name || "") + " – " + per, specs: specs, qty: byUnit ? u * k : k, unit: byUnit ? rt : fee };
+    var MS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], ms = function (x) { return MS[+x.slice(5, 7) - 1]; };
+    var period = k > 1 ? ms(m) + " " + m.slice(0, 4) + " to " + ms(addM(m, k - 1)) + " " + addM(m, k - 1).slice(0, 4) : ms(m) + ", " + m.slice(0, 4);
+    return { name: (k > 1 ? (p.amcFreq || "") + " maintenance" : "Monthly maintenance") + " and trouble shooting of elevators – " + (p.name || ""), period: period, specs: specs, qty: byUnit ? u : 1, unit: byUnit ? rt * k : fee * k };
   }
   async function create(G) {
     var name = safe(function () { return approverName(); }, "") || "Accounts", made = [];
@@ -81,8 +89,8 @@
         var p = g.items[i], c = charge(p), tx = Math.round(c.sub * g.tax / 100), ar = arrears([p.id], date);
         var rec = { entity: p.entity, projectId: p.id, customer: p.name, project: p.code, invoiceNo: ivNextNo(p.entity), invoiceDate: date, dueDate: iso(addDays(s, 30)), amount: c.sub + tx, outputTax: tx,
           revAccount: idc("410201"), taxAcc: idc("220304"), status: "Open", amcKey: p.id + "|" + g.m,
-          doc: { layout: "standard", title: tx ? "SALES TAX INVOICE" : "INVOICE", to: { name: g.client, address: "", attn: "" }, poRef: p.code || "", poDate: "", lines: [line(p, g.m, c.k)], taxPct: g.tax, taxLabel: "Sales tax on services", notes: "", bank: "", signoff: "For and on behalf of\n" + ivCo(p.entity),
-            arrears: ar.amt ? { amt: ar.amt, refs: ar.refs, asOf: todayStr() } : null } };
+          doc: Object.assign({ layout: "standard", title: tx ? "SALES TAX INVOICE" : "INVOICE", to: { name: g.client, address: "", attn: "" }, poRef: p.code || "", poDate: "", taxPct: g.tax, taxLabel: "Sales tax on services", notes: "", bank: "", signoff: "For and on behalf of\n" + ivCo(p.entity) },
+            window.FS_AMCINV ? window.FS_AMCINV.docFor(p, g.tax) : {}, { lines: [line(p, g.m, c.k)], arrears: ar.amt ? { amt: ar.amt, refs: ar.refs, asOf: todayStr() } : null }) };
         if (gid) rec.amcGroup = gid;
         rec.id = await Store.save("receivables", rec);
         var j = await makeAutoJv("receivables", rec, "invoice", null, name); rec.jvId = j.id; await Store.save("receivables", rec);
@@ -120,7 +128,7 @@
     });
     ar.refs.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)) || String(a.no).localeCompare(String(b.no)); });
     var nos = G.map(function (x) { return x.invoiceNo; });
-    return { id: f.id, entity: f.entity, customer: (d0.to || {}).name || f.customer, project: "", invoiceNo: nos.length > 2 ? nos[0] + " to " + nos[nos.length - 1] : nos.join(", "), invoiceDate: f.invoiceDate, dueDate: f.dueDate,
+    return { id: f.id, amcKey: f.amcKey, projectId: f.projectId, entity: f.entity, customer: (d0.to || {}).name || f.customer, project: "", invoiceNo: nos.length > 2 ? nos[0] + " to " + nos[nos.length - 1] : nos.join(", "), invoiceDate: f.invoiceDate, dueDate: f.dueDate,
       doc: Object.assign({}, d0, { poRef: "", lines: lines, arrears: ar.amt ? ar : null }) };
   }
   function printSet(R, lh) {
@@ -150,7 +158,7 @@
   }
   function view() {
     var C = contracts(), clients = {}; C.forEach(function (p) { clients[client(p)] = 1; });
-    var M = months(), G = plan(), n = G.reduce(function (t, g) { return t + g.items.length; }, 0);
+    var M = months(), G = plan(), n = G.reduce(function (t, g) { return t + g.items.length; }, 0), miss = blocked(G);
     var opts = "<option value=\"\">All clients</option>" + Object.keys(clients).sort().map(function (c) { return "<option" + (ST.cli === c ? " selected" : "") + ">" + h(c) + "</option>"; }).join("");
     var prev = G.map(function (g) {
       var sub = g.items.reduce(function (t, p) { return t + charge(p).sub; }, 0), tx = g.items.reduce(function (t, p) { return t + Math.round(charge(p).sub * g.tax / 100); }, 0);
@@ -163,7 +171,8 @@
       "<p class=\"muted\">" + (G.length ? G.length + " invoice" + (G.length === 1 ? "" : "s") + " to make (" + n + " contract-month" + (n === 1 ? "" : "s") + ")." : "Nothing left to bill for " + h(mLabel(M[0])) + (M.length > 1 ? " to " + h(mLabel(M[M.length - 1])) : "") + ".") +
       "</p>" +
       (G.length ? "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th>Month</th><th>Client</th><th>Contracts</th><th class=\"num\">Invoice amount (with tax)</th></tr></thead><tbody>" + prev + "</tbody></table></div>" +
-        "<div class=\"actions\"><button type=\"button\" class=\"btn pri\" id=\"fsAbGo\">Create " + G.length + " invoice" + (G.length === 1 ? "" : "s") + "</button></div>" : "") +
+        (miss.length ? "<div class=\"fs-ab-miss\"><b>Fill in these contracts' customer details first</b> (the invoice prints them):<ul>" + miss.map(function (x) { return "<li>" + h(x.p.name) + " <span class=\"muted\">" + h(x.p.code || "") + "</span>: " + h(x.m.join(", ")) + " <button type=\"button\" class=\"btn sm\" data-acedit=\"" + h(x.p.id) + "\">✎ Edit</button></li>"; }).join("") + "</ul></div>" : "") +
+        "<div class=\"actions\"><button type=\"button\" class=\"btn pri\" id=\"fsAbGo\"" + (miss.length ? " disabled" : "") + ">Create " + G.length + " invoice" + (G.length === 1 ? "" : "s") + "</button></div>" : "") +
       "<p class=\"err\" id=\"fsAbErr\"></p></div>";
     var D = made(), tot = function (k) { return D.reduce(function (t, x) { return t + x[k]; }, 0); };
     var list = "<div class=\"card fs-ab\"><h3>Invoices made: " + h(mLabel(M[0])) + (M.length > 1 ? " to " + h(mLabel(M[M.length - 1])) : "") + (ST.cli ? " · " + h(ST.cli) : "") + "</h3>" +
@@ -177,6 +186,8 @@
           "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(id) + "\" data-lh=\"1\">Letterhead</button> <button type=\"button\" class=\"btn sm\" data-abprint=\"" + h(id) + "\" data-lh=\"0\">Plain</button></td></tr>";
       }).join("") || "<tr><td colspan=\"8\" class=\"muted\">No AMC invoices in these months yet.</td></tr>") + "</tbody>" +
       (D.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + money(tot("amt")) + "</b></td><td class=\"num\"><b>" + money(tot("out")) + "</b></td><td></td></tr></tfoot>" : "") + "</table></div></div>";
+    var ents = {}; C.forEach(function (p) { if (p.entity) ents[p.entity] = 1; });
+    list += safe(function () { return window.FS_AMCINV ? window.FS_AMCINV.panel(Object.keys(ents).sort()) : ""; }, "");
     return { card: card, list: list };
   }
   var CUT = function (html, startMark, endMark) { var a = html.indexOf(startMark); if (a < 0) return null; var b = html.indexOf(endMark, a); if (b < 0) return null; return [a, b + endMark.length]; };
@@ -220,7 +231,7 @@
       printSet(R, b.getAttribute("data-abbulk") === "1"); return;
     }
     if (busy) return;
-    var G = plan(); if (!G.length) return;
+    var G = plan(); if (!G.length || blocked(G).length) return;
     if (!confirm("Create " + G.length + " AMC invoice" + (G.length === 1 ? "" : "s") + "? Each posts Dr debtors / Cr AMC revenue and sales tax and waits for signature.")) return;
     busy = true; b.disabled = true; b.textContent = "Creating…";
     try {
@@ -238,7 +249,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
-    ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}";
+    ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
   (document.head || document.documentElement).appendChild(css);
   function start() { if (!hook()) setTimeout(start, 400); }
   start();

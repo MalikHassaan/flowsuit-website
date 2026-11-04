@@ -25,7 +25,7 @@
   var D = function (s) { var p = String(s || "").split("-"); return p.length === 3 ? new Date(+p[0], +p[1] - 1, +p[2]) : null; };
   var dayDiff = function (a, b) { return Math.round((b - a) / 86400000); };
 
-  function rate(p) { return num(p.amcTaxPct) || safe(function () { return num((pstRates().find(function (x) { return x[0] === p.province; }) || [0, 0])[1]); }, 0); }
+  function rate(p) { if (p.amcTaxMode === "Exempt") return 0; return num(p.amcTaxPct) || safe(function () { return num((pstRates().find(function (x) { return x[0] === p.province; }) || [0, 0])[1]); }, 0); }
   // "8 months 27 days" between two dates (a <= b)
   function span(a, b) {
     var m = (b.getFullYear() - a.getFullYear()) * 12 + b.getMonth() - a.getMonth(), x = new Date(a.getFullYear(), a.getMonth() + m, a.getDate());
