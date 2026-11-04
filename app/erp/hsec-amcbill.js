@@ -123,7 +123,7 @@
     var G = r.amcGroup ? group(r.amcGroup) : [r]; if (G.length < 2) return r;
     var f = G[0], d0 = f.doc || {}, lines = [], ar = { amt: 0, refs: [] };
     G.forEach(function (x) {
-      ((x.doc || {}).lines || []).forEach(function (l) { lines.push(Object.assign({}, l, { specs: ["Invoice: " + (x.invoiceNo || "")].concat(l.specs ? [l.specs] : []).join("; ") })); });
+      ((x.doc || {}).lines || []).forEach(function (l, li) { lines.push(Object.assign({}, l, { _rid: x.id, _li: li, specs: ["Invoice: " + (x.invoiceNo || "")].concat(l.specs ? [l.specs] : []).join("; ") })); });
       var a = (x.doc || {}).arrears; if (a && num(a.amt) > 0) { ar.amt += num(a.amt); ar.refs = ar.refs.concat(a.refs || []); }
     });
     ar.refs.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)) || String(a.no).localeCompare(String(b.no)); });

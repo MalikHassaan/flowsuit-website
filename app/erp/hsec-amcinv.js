@@ -37,7 +37,7 @@
   function docFor(p, tax) {
     var c = co(p.entity), ex = exempt(p);
     var bank = [c.title ? "Account title: " + c.title : "", c.iban ? "IBAN: " + c.iban : "", c.bank ? "Bank: " + c.bank : ""].filter(Boolean).join("\n");
-    return { layout: "amctax", title: ex || !tax ? "INVOICE" : "SALES TAX INVOICE", to: { name: String(p.customer || p.name || "").trim(), address: String(p.custAddress || "").trim(), attn: "" },
+    return { layout: "amctax", title: "INVOICE", to: { name: String(p.customer || p.name || "").trim(), address: String(p.custAddress || "").trim(), attn: "" },
       buyerTax: String(p.custNtn || "").trim(), buyerStrn: String(p.custStrn || "").trim(), poRef: String(p.poNo || "").trim(), poDate: "",
       taxPct: ex ? 0 : tax, exempt: ex, exemptRef: ex ? String(p.amcTaxNote || "").trim() : "", taxLabel: taxShort(p), currency: "PKR",
       sellerNtn: c.ntn || "", sellerStrn: c.strn || "", bank: bank, signoff: [c.signName || "", c.signTitle || ""].filter(Boolean).join("\n") };
@@ -62,12 +62,15 @@
     });
     var rows = L.map(function (l, i) {
       var g = num(l.amount), t = ex ? 0 : Math.round(g * pct) / 100; gross += g; tax += t;
-      return "<tr><td class=\"c\">" + (i + 1) + ".</td><td>" + h(l.name) + (l.period ? "<br><b>(" + h(l.period) + ")</b>" : "") + (l.specs ? "<div class=\"fs-ai-sp\">" + h(l.specs) + "</div>" : "") + "</td>" +
+      // the description can be typed over on the printed invoice before printing; it is saved to the invoice (hassan, 2026-11-04)
+      var rid = l._rid || r.id, li = l._li != null ? l._li : i;
+      var txt = l.desc != null ? h(l.desc).replace(/\n/g, "<br>") : h(l.name) + (l.period ? "<br><b>(" + h(l.period) + ")</b>" : "") + (l.specs ? "<div class=\"fs-ai-sp\">" + h(l.specs) + "</div>" : "");
+      return "<tr><td class=\"c\">" + (i + 1) + ".</td><td class=\"fs-ai-ed\" contenteditable=\"true\" spellcheck=\"false\" data-rid=\"" + h(rid) + "\" data-li=\"" + li + "\" title=\"Click to change the description\">" + txt + "</td>" +
         "<td class=\"c\">" + h(String(num(l.qty)).padStart(2, "0")) + "</td><td class=\"r\">" + m2(num(l.unit)) + "</td><td class=\"r\">" + m2(g) + "</td><td class=\"r\">" + (ex ? "Exempt" : m2(t)) + "</td><td class=\"r\">" + m2(g + t) + "</td></tr>";
     }).join("");
     var meta = [["Invoice Number", h(r.invoiceNo || "")], ["Invoice Date", dd(r.invoiceDate)]].concat(po ? [["PO Number", h(po)]] : []).concat([["Currency", h(d.currency || "PKR")]])
       .concat(sN ? [["NTN", h(sN)]] : []).concat(sS ? [["STRN", h(sS)]] : []);
-    return "<div class=\"iv fs-ai\"><h1>" + h(ex ? "INVOICE" : (d.title || "SALES TAX INVOICE")) + "</h1>" +
+    return "<div class=\"iv fs-ai\"><h1>INVOICE</h1>" +
       "<table class=\"ivb fs-ai-head\"><colgroup><col style=\"width:52%\"><col></colgroup><tr><td><div class=\"fs-ai-to\">" + [h(name)].concat(addr.map(h)).join("<br>") +
       (ntn ? "<br>NTN: " + h(ntn) : "") + (strn ? "<br>STRN: " + h(strn) : "") + "</div></td><td><table class=\"fs-ai-meta\">" +
       meta.map(function (x) { return "<tr><td>" + x[0] + "</td><td>: " + x[1] + "</td></tr>"; }).join("") + "</table></td></tr></table>" +
@@ -96,6 +99,20 @@
     var n = notesOf(c, e); if (!n.list.length && !n.sys) return "";
     return "<div class=\"fs-ai-notes\">" + (n.list.length ? "<ul>" + n.list.map(function (x) { return "<li>" + h(x) + "</li>"; }).join("") + "</ul>" : "") + (n.sys ? "<p class=\"fs-ai-sys\">" + h(n.sys) + "</p>" : "") + "</div>";
   }
+
+  // saving a typed-over description
+  document.addEventListener("focusout", function (e) {
+    var td = e.target && e.target.closest && e.target.closest(".fs-ai-ed"); if (!td) return;
+    var id = td.getAttribute("data-rid"), li = +td.getAttribute("data-li"), txt = td.innerText.replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+    var r = safe(function () { return Store.data.receivables.find(function (x) { return x.id === id; }); }, null); if (!r || !r.doc || !r.doc.lines || !r.doc.lines[li]) return;
+    var l = r.doc.lines[li], before = l.desc != null ? l.desc : null;
+    if (before === txt) return;
+    if (before == null) { var tmp = document.createElement("div"); tmp.innerHTML = td.getAttribute("data-orig") || ""; if (td.getAttribute("data-orig") != null && tmp.innerText.trim() === txt) return; }
+    var rec = JSON.parse(JSON.stringify(r)); rec.doc.lines[li].desc = txt;
+    Store.save("receivables", rec).then(function () { safe(function () { toast("Description saved on invoice " + (r.invoiceNo || "") + "."); }, null); })
+      .catch(function (x) { safe(function () { toast("Could not save the description: " + ((x && x.message) || "not allowed") + ". It still prints as typed."); }, null); });
+  });
+  document.addEventListener("focusin", function (e) { var td = e.target && e.target.closest && e.target.closest(".fs-ai-ed"); if (td && td.getAttribute("data-orig") == null) td.setAttribute("data-orig", td.innerHTML); });
 
   // ---- project form fields
   var NEW = [
@@ -185,7 +202,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".qsheet .fs-ai .fs-ai-head td{vertical-align:top}.fs-ai-to{margin:4px 2px;line-height:1.55}.qsheet .fs-ai table.fs-ai-meta{border-collapse:collapse}.qsheet .fs-ai table.fs-ai-meta td{border:0!important;padding:1px 6px 1px 0}" +
-    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
+    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-ed{cursor:text}.fs-ai-ed:hover{outline:1px dashed #1F6FB8;outline-offset:-3px}.fs-ai-ed:focus{outline:2px solid #1F6FB8;outline-offset:-3px;background:#f5f9ff}@media print{.fs-ai-ed:hover,.fs-ai-ed:focus{outline:0!important;background:none!important}}body.printing .fs-ai-ed{outline:0!important;background:none!important}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
     ".fs-ai-set{margin:12px 0}.fs-ai-set summary{cursor:pointer}.fs-ai-co{border-top:1px solid #e3e8ee;padding:8px 0}.fs-ai-co h4{margin:4px 0 6px}" +
     ".fs-ai-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.fs-ai-g label{display:flex;flex-direction:column;gap:3px;font-size:12px}@media (max-width:900px){.fs-ai-g{grid-template-columns:1fr 1fr}}";
   (document.head || document.documentElement).appendChild(css);
