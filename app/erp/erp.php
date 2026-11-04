@@ -388,6 +388,24 @@ function erp_intro_due(): bool
         return false;
     }
     unset($_SESSION['intro_due']);
+    // hassan, 2026-11-04: "the login video should only be shown once on first login in a day": a person's later
+    // sign-ins on the same day (any browser) get the short loading card only.
+    $uid = (int) ($_SESSION['uid'] ?? 0);
+    if ($uid > 0) {
+        try {
+            $db = erp_db();
+            $db->exec('CREATE TABLE IF NOT EXISTS intro_seen (user_id INTEGER PRIMARY KEY, day TEXT NOT NULL)');
+            $today = date('Y-m-d');
+            $st = $db->prepare('SELECT day FROM intro_seen WHERE user_id = ?');
+            $st->execute([$uid]);
+            if ($st->fetchColumn() === $today) {
+                return false;
+            }
+            $db->prepare('INSERT INTO intro_seen (user_id, day) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET day = excluded.day')->execute([$uid, $today]);
+        } catch (Throwable $e) {
+            // can't tell: play it
+        }
+    }
     return true;
 }
 
