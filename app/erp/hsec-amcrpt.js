@@ -188,6 +188,7 @@
         openForm = function (c, id, pre) { // eslint-disable-line no-global-assign
           if (c === "projects" && !id && (V.mod === "amcm" || amcOnly())) pre = Object.assign({ type: AMC_T[0] }, pre || {});
           var out = oF.call(this, c, id, pre);
+          if (c === "projects") safe(shapeProj, null);
           if (c === "projects" && amcOnly()) safe(function () {
             var s = document.getElementById("f_type"); if (!s) return;
             Array.prototype.slice.call(s.options).forEach(function (o) { if (AMC_T.indexOf(o.value) < 0) o.remove(); });
@@ -201,8 +202,57 @@
     safe(function () { render(); }, null);
     return true;
   }
+  // The project form for maintenance contracts and spare parts supply (hassan, 2026-11-04: "for amc and spare parts
+  // supply the form should be changed and precise"): only the fields those jobs use are shown; the others stay hidden
+  // (their values are kept). Choosing another type shows the full form again. An AMC's contract value is worked out
+  // from the monthly fee and the AMC dates until it is typed by hand.
+  var PF_KEEP = {
+    "Maintenance contract (AMC)": ["code", "name", "customer", "entity", "type", "province", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "budgetCost", "pm", "status"],
+    "Supply only": ["code", "name", "customer", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "budgetCost", "advPct", "lcExpected", "paymentTerms", "start", "end", "pm", "status"]
+  };
+  var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"] };
+  var PF_LBL = {
+    "Maintenance contract (AMC)": { contractValue: "Contract value for the whole AMC period (PKR)", budgetCost: "Budgeted cost for the whole AMC period (PKR)", pm: "Service engineer / account manager" },
+    "Supply only": { start: "Order date", end: "Delivery date", pm: "Sales / supply person", contractValue: "Order value (PKR)", budgetCost: "Budgeted cost of the parts (PKR)" }
+  };
+  function pfLabel(w, txt) {
+    var lab = w.querySelector("label") || w.firstElementChild; if (!lab) return;
+    var t = null; for (var i = 0; i < lab.childNodes.length; i++) if (lab.childNodes[i].nodeType === 3 && lab.childNodes[i].nodeValue.trim()) { t = lab.childNodes[i]; break; }
+    if (!t) return;
+    if (lab.getAttribute("data-fs-orig") == null) lab.setAttribute("data-fs-orig", t.nodeValue);
+    var o = lab.getAttribute("data-fs-orig");
+    t.nodeValue = txt == null ? o : txt + (/\*\s*$/.test(o) ? " *" : "") + (/\s$/.test(o) ? " " : "");
+  }
+  function shapeProj() {
+    var s = document.getElementById("f_type"), f = document.getElementById("frm");
+    if (!s || !f || !document.getElementById("f_amcFee")) return;
+    var keep = PF_KEEP[s.value], lbl = PF_LBL[s.value] || {}, box = PF_BOX[s.value] || [];
+    f.querySelectorAll("[id^=f_]").forEach(function (e) {
+      var k = e.id.slice(2), w = e.closest(".f"); if (!w || !f.contains(w)) return;
+      w.classList.toggle("fs-pf-hide", !!keep && keep.indexOf(k) < 0);
+      pfLabel(w, lbl[k]);
+    });
+    ["fsMsBox", "fsGtBox", "calcBox"].forEach(function (id) { var b = document.getElementById(id); if (b) b.classList.toggle("fs-pf-hide", box.indexOf(id) >= 0); });
+  }
+  function amcValue() {
+    var s = document.getElementById("f_type"), cv = document.getElementById("f_contractValue");
+    if (!s || !cv || s.value !== "Maintenance contract (AMC)") return;
+    var fee = parseFloat(String((document.getElementById("f_amcFee") || {}).value || "").replace(/,/g, "")) || 0;
+    var a = String((document.getElementById("f_amcStart") || {}).value || ""), b = String((document.getElementById("f_amcEnd") || {}).value || "");
+    if (!fee || !/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b) || b < a) return;
+    var months = Math.max(1, Math.round((new Date(b) - new Date(a)) / 86400000 / 30.44));
+    if (cv.value && cv.getAttribute("data-fs-auto") !== cv.value) return; // typed by hand: leave it
+    var v = String(Math.round(fee * months)); cv.value = v; cv.setAttribute("data-fs-auto", v);
+    cv.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  document.addEventListener("change", function (e) {
+    if (!e.target || !e.target.id) return;
+    if (e.target.id === "f_type") { safe(shapeProj, null); setTimeout(function () { safe(shapeProj, null); safe(amcValue, null); }, 0); }
+    if (/^f_amc(Fee|Start|End)$/.test(e.target.id)) safe(amcValue, null);
+  });
+
   var css = document.createElement("style");
-  css.textContent = ".fs-amcr-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.fs-amcr-ctl{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.fs-amcr-ctl label{display:flex;flex-direction:column;font-size:12px;gap:3px}" +
+  css.textContent = ".fs-pf-hide{display:none!important}.fs-amcr-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.fs-amcr-ctl{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.fs-amcr-ctl label{display:flex;flex-direction:column;font-size:12px;gap:3px}" +
     ".fs-amcr{overflow:auto}.fs-amcr-t{border-collapse:collapse;width:100%;font-size:12.5px}.fs-amcr-t th,.fs-amcr-t td{border:1px solid #d5dbe2;padding:4px 6px;text-align:left;white-space:nowrap}.fs-amcr-t th{background:#eef1f5}.fs-amcr-t .num{text-align:right}.fs-amcr-t .c{text-align:center}" +
     ".fs-amcr-t td.rc,.fs-amcr-t th.rc{background:#f2faf4}.fs-amcr-t tfoot td{font-weight:700;background:#f6f8fa}.fs-amcr-t td.bad{color:#b0412e;font-weight:600}.fs-amcr-t .warn{color:#9a5b00}" +
     ".fs-amcr-info{border:1px solid #c9d1da;padding:8px 12px;margin:0 0 10px}.fs-amcr-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.fs-amcr-g div{display:flex;flex-direction:column}.fs-amcr-g small{color:#556;font-weight:600}" +
