@@ -195,15 +195,30 @@
     return "<div class=\"fs-ai-bk\" data-aibk=\"1\"><label>Account title<input data-bk=\"title\" value=\"" + h(x.title || "") + "\"></label><label>IBAN / account number<input data-bk=\"iban\" value=\"" + h(x.iban || "") + "\"></label>" +
       "<label>Bank and branch<input data-bk=\"bank\" value=\"" + h(x.bank || "") + "\"></label><button type=\"button\" class=\"btn sm\" data-aibkdel=\"1\" title=\"Remove this account\">✕</button></div>";
   }
+  var AITAB = "", AIOPEN = false;
+  document.addEventListener("toggle", function (e) { if (e.target && e.target.classList && e.target.classList.contains("fs-ai-set")) AIOPEN = e.target.open; }, true);
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-aitab]"); if (!t) return;
+    e.preventDefault(); AITAB = t.getAttribute("data-aitab");
+    var set = t.closest(".fs-ai-set");
+    set.querySelectorAll("[data-aitab]").forEach(function (b) { var on = b === t; b.classList.toggle("on", on); b.setAttribute("aria-selected", String(on)); });
+    set.querySelectorAll("[data-aico]").forEach(function (d) { d.hidden = d.getAttribute("data-aico") !== AITAB; });
+  });
   function panel(ents) {
     if (!window.FS_ADMIN) return "";
     // every company an AMC invoice can be printed on (hassan: "give me same for the JPL as well")
     ents = ents.slice(); safe(function () { lhList(ents[0]).concat(ENTS()).forEach(function (k) { if (typeof k === "string" && k && ents.indexOf(k) < 0) ents.push(k); }); }, null);
     ents = ents.filter(Boolean); if (!ents.length) return "";
-    return "<details class=\"card fs-ai-set\"><summary><b>Invoice details per company</b> <span class=\"muted\">(bank account, NTN / STRN and signatory printed on AMC invoices)</span></summary>" +
+    // one company at a time, picked from tabs (hassan, 2026-11-04: "instead of head wise separate form give tabs")
+    if (ents.indexOf(AITAB) < 0) AITAB = ents[0];
+    return "<details class=\"card fs-ai-set\"" + (AIOPEN ? " open" : "") + "><summary><b>Invoice details per company</b> <span class=\"muted\">(bank account, NTN / STRN and signatory printed on AMC invoices)</span></summary>" +
+      "<div class=\"fs-ai-tabs\" role=\"tablist\">" + ents.map(function (e) {
+        var c = co(e), done = !!(c.iban || c.title);
+        return "<button type=\"button\" role=\"tab\" class=\"fs-ai-tab" + (e === AITAB ? " on" : "") + "\" data-aitab=\"" + h(e) + "\" aria-selected=\"" + (e === AITAB) + "\" title=\"" + h(safe(function () { return coLabel(e); }, e)) + "\">" + h(e) + (done ? " <span class=\"fs-ai-ok\">✓</span>" : "") + "</button>";
+      }).join("") + "</div>" +
       ents.map(function (e) {
         var c = co(e);
-        return "<div class=\"fs-ai-co\" data-aico=\"" + h(e) + "\"><h4>" + h(safe(function () { return coLabel(e); }, e)) + "</h4><div class=\"fs-ai-g\">" +
+        return "<div class=\"fs-ai-co\" data-aico=\"" + h(e) + "\"" + (e === AITAB ? "" : " hidden") + "><h4>" + h(safe(function () { return coLabel(e); }, e)) + "</h4><div class=\"fs-ai-g\">" +
           KEYS.map(function (k) { return "<label>" + h(k[1]) + "<input data-aik=\"" + k[0] + "\" value=\"" + h(c[k[0]] || "") + "\"></label>"; }).join("") +
           "</div><div class=\"fs-ai-nt\"><b>More bank accounts of " + h(e) + "</b> <span class=\"muted\">(printed under the main account on " + h(e) + " letterhead invoices)</span><div data-aibks>" + banks(c.more).map(bkRow).join("") + "</div>" +
           "<button type=\"button\" class=\"btn sm\" data-aibkadd=\"1\">+ Add bank account</button></div><label class=\"fs-ai-nt\">Notes on invoices (one per line; blank = the standard cheque / payment / system-generated lines; - = none)<textarea data-aik=\"notes\" rows=\"3\">" + h(c.notes || "") + "</textarea></label><button type=\"button\" class=\"btn sm pri\" data-aisave=\"" + h(e) + "\">Save " + h(e) + "</button> <span class=\"muted\" data-aimsg=\"" + h(e) + "\"></span></div>";
@@ -257,7 +272,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".qsheet .fs-ai .fs-ai-head td{vertical-align:top}.fs-ai-to{margin:4px 2px;line-height:1.55}.qsheet .fs-ai table.fs-ai-meta{border-collapse:collapse}.qsheet .fs-ai table.fs-ai-meta td{border:0!important;padding:1px 6px 1px 0}" +
-    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-ed{cursor:text}.fs-ai-ed:hover{outline:1px dashed #1F6FB8;outline-offset:-3px}.fs-ai-ed:focus{outline:2px solid #1F6FB8;outline-offset:-3px;background:#f5f9ff}@media print{.fs-ai-ed:hover,.fs-ai-ed:focus{outline:0!important;background:none!important}}body.printing .fs-ai-ed{outline:0!important;background:none!important}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-ai-bank p{margin:0 0 3px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}.fs-ai-bk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin:6px 0}.fs-ai-bk label{display:flex;flex-direction:column;gap:3px;font-size:12px}.fs-ai-nt [data-aibkadd]{align-self:flex-start;margin-top:4px}@media(max-width:700px){.fs-ai-bk{grid-template-columns:1fr}}" +
+    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-ed{cursor:text}.fs-ai-ed:hover{outline:1px dashed #1F6FB8;outline-offset:-3px}.fs-ai-ed:focus{outline:2px solid #1F6FB8;outline-offset:-3px;background:#f5f9ff}@media print{.fs-ai-ed:hover,.fs-ai-ed:focus{outline:0!important;background:none!important}}body.printing .fs-ai-ed{outline:0!important;background:none!important}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-ai-bank p{margin:0 0 3px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}.fs-ai-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px;border-bottom:2px solid #dbe3ec}.fs-ai-tab{border:1px solid #d3dce6;border-bottom:0;background:#f4f7fa;border-radius:8px 8px 0 0;padding:7px 16px;font:inherit;font-weight:700;cursor:pointer;color:#33475b;margin-bottom:-2px}.fs-ai-tab.on{background:#fff;color:#1F6FB8;border-color:#1F6FB8;border-bottom:2px solid #fff}.fs-ai-ok{color:#2e7d32}.fs-ai-co[hidden]{display:none!important}.fs-ai-bk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin:6px 0}.fs-ai-bk label{display:flex;flex-direction:column;gap:3px;font-size:12px}.fs-ai-nt [data-aibkadd]{align-self:flex-start;margin-top:4px}@media(max-width:700px){.fs-ai-bk{grid-template-columns:1fr}}" +
     ".fs-ai-set{margin:12px 0}.fs-ai-set summary{cursor:pointer}.fs-ai-co{border-top:1px solid #e3e8ee;padding:8px 0}.fs-ai-co h4{margin:4px 0 6px}" +
     ".fs-ai-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.fs-ai-g label{display:flex;flex-direction:column;gap:3px;font-size:12px}@media (max-width:900px){.fs-ai-g{grid-template-columns:1fr 1fr}}";
   (document.head || document.documentElement).appendChild(css);
