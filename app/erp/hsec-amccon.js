@@ -9,8 +9,11 @@
 //    received, balance and its invoices (printable, on the letterhead).
 //  * Project form: choosing the site province fills "AMC sales tax %" with that province's rate (Settings rates), and a
 //    maintenance contract starts as Active instead of Tendering.
+//  * (hassan, 2026-11-04: "cover these as well in project creation as well as in amc contracts", with a list of
+//    S No. | Project | Floor | Units | Rate/Month) Floors, Units (lifts) and Rate per unit per month on the AMC form;
+//    the monthly fee is Units × Rate until it is typed by hand, and the list and details show all three.
 (function () {
-  /* global Store, MODS, TAB_HOME, TITLE, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, openForm, AMC_STEP, pstRates, pill */
+  /* global S, Store, MODS, TAB_HOME, TITLE, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, openForm, AMC_STEP, pstRates, pill */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -68,18 +71,19 @@
       card("due", "Renewal due (60 days)", due.length, due.length ? "contact these customers" : "none") +
       card("exp", "Expired", exp.length, exp.length ? "renew or close" : "none") + "</div>" +
       "<div class=\"fs-ac-bar\"><button class=\"btn pri\" data-acnew=\"1\">+ New AMC contract</button><input id=\"fsAcQ\" placeholder=\"Search contract, customer or engineer\" value=\"" + h(ST.q) + "\"><span class=\"muted\">" + rows.length + " contract" + (rows.length === 1 ? "" : "s") + "</span></div>" +
-      "<div class=\"tw\"><table class=\"fs-ac-t\"><thead><tr><th>Contract</th><th>Site / project</th><th>Customer</th><th class=\"num\">Monthly charge</th><th>Period</th><th>Time left</th><th>Status</th><th></th></tr></thead><tbody>" +
-      (rows.map(function (x) {
+      "<div class=\"tw\"><table class=\"fs-ac-t\"><thead><tr><th class=\"num\">S No.</th><th>Contract</th><th>Site / project</th><th>Customer</th><th class=\"num\">Floors</th><th class=\"num\">Units</th><th class=\"num\">Rate / month</th><th class=\"num\">Monthly charge</th><th>Period</th><th>Time left</th><th>Status</th><th></th></tr></thead><tbody>" +
+      (rows.map(function (x, i) {
         var p = x.p, s = x.s, r = rate(p);
-        return "<tr><td><b class=\"mono\">" + h(p.code || "") + "</b><br><small class=\"muted\">" + h(p.amcFreq || "Monthly") + " billing</small></td>" +
+        return "<tr><td class=\"num\">" + (i + 1) + "</td><td><b class=\"mono\">" + h(p.code || "") + "</b><br><small class=\"muted\">" + h(p.amcFreq || "Monthly") + " billing</small></td>" +
           "<td><b>" + h(p.name || "") + "</b>" + (p.pm ? "<br><small class=\"muted\">Engineer: " + h(p.pm) + "</small>" : "") + "</td>" +
           "<td>" + h(p.customer || "") + (p.province ? "<br><small class=\"muted\">" + h(p.province) + "</small>" : "") + "</td>" +
+          "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + "</td><td class=\"num\">" + (num(p.amcRate) ? money(num(p.amcRate)) : "–") + "</td>" +
           "<td class=\"num\">Rs " + money(num(p.amcFee)) + "<br><small class=\"muted\">+ " + r + "% tax = " + money(num(p.amcFee) * (1 + r / 100)) + "</small></td>" +
           "<td style=\"white-space:nowrap\">" + h(fd(p.amcStart) || "–") + " –<br>" + h(fd(p.amcEnd) || "–") + "</td>" +
           "<td class=\"" + (s.bad ? "bad" : s.warn ? "warnt" : "") + "\">" + h(s.left) + "</td><td>" + badge(s) + "</td>" +
           "<td class=\"fs-ac-act\"><button class=\"btn sm\" data-acview=\"" + h(p.id) + "\" title=\"Contract details\">👁 View</button> <button class=\"btn sm\" data-acedit=\"" + h(p.id) + "\" title=\"Edit\">✎ Edit</button></td></tr>";
-      }).join("") || "<tr><td colspan=\"8\" class=\"empty\">" + (all.length ? "No contract matches." : "No AMC contracts yet. Click “+ New AMC contract”.") + "</td></tr>") +
-      "</tbody></table></div></div>";
+      }).join("") || "<tr><td colspan=\"12\" class=\"empty\">" + (all.length ? "No contract matches." : "No AMC contracts yet. Click “+ New AMC contract”.") + "</td></tr>") +
+      "</tbody>" + (rows.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + rows.reduce(function (t, x) { return t + num(x.p.amcUnits); }, 0) + "</b></td><td></td><td class=\"num\"><b>Rs " + money(rows.reduce(function (t, x) { return t + num(x.p.amcFee); }, 0)) + "</b></td><td colspan=\"4\"></td></tr></tfoot>" : "") + "</table></div></div>";
   }
 
   function detail(id) {
@@ -93,6 +97,7 @@
       "<div class=\"fs-ac-dg\"><table class=\"fs-ac-kv\"><tbody>" +
       row("Customer", h(p.customer || "–")) + row("Site / project", h(p.name || "–")) + row("Company", h(p.entity || "")) +
       row("Service engineer", h(p.pm || "–")) + row("Site province", h(p.province || "–")) +
+      row("Floors", h(p.amcFloors || "–")) + row("Units (lifts)", h(p.amcUnits || "–")) + row("Rate per unit per month", num(p.amcRate) ? "Rs " + money(num(p.amcRate)) : "–") +
       row("Period", h((fd(p.amcStart) || "–") + " to " + (fd(p.amcEnd) || "–")) + (months ? " (" + months + " months)" : "")) +
       "</tbody></table><table class=\"fs-ac-kv\"><tbody>" +
       row("Monthly charge (excl. tax)", "<b>Rs " + money(fee) + "</b>") + row("Sales tax " + r + "%", "Rs " + money(fee * r / 100)) +
@@ -117,8 +122,19 @@
       if (r !== "" && r != null) { tx.value = String(r); tx.setAttribute("data-fs-auto", tx.value); tx.dispatchEvent(new Event("input", { bubbles: true })); }
     }
   }
+  // monthly fee = units × rate per unit, unless the fee was typed by hand
+  function feeCalc() {
+    var u = num((document.getElementById("f_amcUnits") || {}).value), r = num((document.getElementById("f_amcRate") || {}).value), fe = document.getElementById("f_amcFee");
+    if (!fe || !u || !r) return;
+    if (fe.value && num(fe.getAttribute("data-fs-auto")) !== num(fe.value)) return; // typed by hand: leave it
+    var v = String(Math.round(u * r * 100) / 100); if (num(fe.value) === num(v)) return;
+    fe.value = v; fe.setAttribute("data-fs-auto", v);
+    fe.dispatchEvent(new Event("input", { bubbles: true })); fe.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  document.addEventListener("input", function (e) { if (e.target && /^f_amc(Units|Rate)$/.test(e.target.id)) safe(feeCalc, null); });
   document.addEventListener("change", function (e) {
     var id = e.target && e.target.id;
+    if (id === "f_amcUnits" || id === "f_amcRate") safe(feeCalc, null);
     if (id === "f_province") safe(function () { formFix("prov"); }, null);
     if (id === "f_type") setTimeout(function () { safe(formFix, null); }, 30);
     if (id === "fsAcQ") { ST.q = e.target.value; safe(render, null); }
@@ -136,8 +152,16 @@
   var hooked = false;
   function hook() {
     if (hooked) return true;
-    if (typeof special !== "function" || typeof MODS === "undefined" || !MODS.amcm || typeof Store === "undefined") return false;
+    if (typeof special !== "function" || typeof MODS === "undefined" || !MODS.amcm || typeof Store === "undefined" || typeof S === "undefined" || !S.projects) return false;
     hooked = true;
+    safe(function () {
+      var f = S.projects.fields; if (f.some(function (x) { return x.k === "amcUnits"; })) return;
+      var at = f.findIndex(function (x) { return x.k === "amcFee"; });
+      f.splice(at < 0 ? f.length : at, 0,
+        { k: "amcFloors", l: "Floors", t: "number", hint: "Maintenance contracts only." },
+        { k: "amcUnits", l: "Units (lifts)", t: "number" },
+        { k: "amcRate", l: "Rate per unit per month (PKR)", t: "money", hint: "The AMC fee per month becomes Units × Rate." });
+    }, null);
     special = (function (old) { return function (tab) { return tab === "amccon" ? safe(view, "<p class=\"muted\">Could not build the AMC contracts list.</p>") : old.apply(this, arguments); }; })(special); // eslint-disable-line no-global-assign
     var T = MODS.amcm.tabs;
     if (!T.some(function (t) { return t[0] === "amccon"; })) T.unshift(["amccon", "AMC contracts"]);
@@ -152,7 +176,7 @@
     ".fs-ac-card{display:flex;flex-direction:column;gap:2px;text-align:left;background:#fff;border:1px solid #d9e0e8;border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit}" +
     ".fs-ac-card.m{cursor:default;background:#f2f8ff}.fs-ac-card.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18)}.fs-ac-card small{color:#556;font-weight:600}.fs-ac-card b{font-size:20px}.fs-ac-card span{font-size:12px;color:#667}" +
     ".fs-ac-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.fs-ac-bar input{min-width:280px}" +
-    ".fs-ac-t{width:100%;border-collapse:collapse}.fs-ac-t td,.fs-ac-t th{padding:8px 10px;border-bottom:1px solid #e6eaef;vertical-align:top;text-align:left}.fs-ac-t .num{text-align:right}" +
+    ".fs-ac-t{width:100%;border-collapse:collapse}.fs-ac-t td,.fs-ac-t th{padding:8px 10px;border-bottom:1px solid #e6eaef;vertical-align:top;text-align:left}.fs-ac-t .num{text-align:right}.fs-ac-t tfoot td{background:#f6f8fa;border-top:2px solid #d9e0e8}" +
     ".fs-ac-t td.bad{color:#c0392b;font-weight:600}.fs-ac-t td.warnt{color:#a15c00;font-weight:600}.fs-ac-act{white-space:nowrap}" +
     ".fs-ac-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#e9edf2;color:#334}.fs-ac-pill.good{background:#2e7d32;color:#fff}.fs-ac-pill.bad{background:#d32f2f;color:#fff}.fs-ac-pill.warn{background:#f2a516;color:#fff}" +
     ".fs-ac-dg{display:grid;grid-template-columns:1fr 1fr;gap:14px}.fs-ac-kv{width:100%;border-collapse:collapse}.fs-ac-kv th,.fs-ac-kv td{border:1px solid #dde3ea;padding:5px 8px;text-align:left;font-size:13px}.fs-ac-kv th{background:#f4f6f9;width:45%}" +
