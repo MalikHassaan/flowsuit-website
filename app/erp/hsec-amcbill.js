@@ -176,10 +176,14 @@
   function printSet(R, lh) {
     var ents = {}; R.forEach(function (r) { ents[(r.doc && r.doc.lhCo) || r.entity] = 1; });
     if (lh && Object.keys(ents).length > 1) { safe(function () { toast("Tick invoices on one letterhead at a time: each letterhead prints its own header and footer."); }, null); return; }
-    var html = R.map(function (r, i) { return (i ? "<div style=\"break-before:page;page-break-before:always\"></div>" : "") + ivDoc(r, lh); }).join("");
+    // each invoice is its own A4 page with the letterhead footer pinned to that page's bottom (hassan, 2026-11-04: "when
+    // we go to print the footer disappears"): the app's footer is position:fixed, which Chrome drops or stacks when
+    // several invoices print together, so it is moved into the invoice's own page box
+    var html = R.map(function (r) { return "<div class=\"fs-pg\">" + ivDoc(r, lh) + "</div>"; }).join("");
     sheetOpen(html);
     var s = document.querySelector("#printLayer .sheet"); if (s) s.classList.add("qsheet");
-    
+    safe(function () { s.querySelectorAll(".fs-pg").forEach(function (pg) { var f = pg.querySelector(".iv-ffix"); if (f) { f.classList.add("fs-pg-foot"); pg.appendChild(f); } }); }, null);
+
     safe(function () { toast(R.length + " invoice" + (R.length === 1 ? "" : "s") + " open " + (lh ? "on the letterhead" : "on plain paper") + ". Each prints on its own page."); }, null);
   }
 
@@ -369,6 +373,10 @@
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
     ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-g th.c{text-align:center;white-space:nowrap;font-size:12px}.fs-g td{text-align:center;font-size:12px;white-space:nowrap}.fs-g td:first-child{text-align:left;white-space:normal;min-width:200px}.fs-g td.num{text-align:right}.fs-g-x{color:#aab}" +
     ".fs-g-pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}.fs-g-pill.ok{background:#2e7d32;color:#fff}.fs-g-pill.bl{background:#1F6FB8;color:#fff}.fs-g-pill.due{background:#f2a516;color:#fff}.fs-g-due{color:#a15c00;font-weight:600}" +
+    ".fs-pg{position:relative;box-sizing:border-box;min-height:286mm;padding-bottom:1px}.fs-pg+.fs-pg{break-before:page;page-break-before:always;margin-top:12px;border-top:1px dashed #ccd}" +
+    ".fs-pg>.iv-ffix.fs-pg-foot{position:absolute!important;left:0!important;right:0!important;bottom:8mm!important;top:auto!important;margin:0}" +
+    "@media print{.fs-pg{min-height:286mm}.fs-pg+.fs-pg{margin-top:0;border-top:0}}" +
+    "body.printing .fs-pg{min-height:286mm}body.printing .fs-pg+.fs-pg{margin-top:0;border-top:0}" +
     ".fs-ai-mh td{background:#eef3f9;border-top:2px solid #cfd9e6}.fs-pk{position:fixed;inset:0;background:rgba(15,30,50,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px}.fs-pk-b{background:#fff;color:#1b2b3c;border-radius:12px;padding:18px 20px;width:min(440px,100%);box-shadow:0 20px 50px rgba(0,0,0,.3)}.fs-pk-b h3{margin:0 0 4px}.fs-pk-o{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #d6dfe9;border-radius:8px;margin:8px 0;cursor:pointer}.fs-pk-o input{position:absolute;opacity:0;pointer-events:none}.fs-pk-t{flex:none;width:20px;height:20px;border:2px solid #8aa0b8;border-radius:5px;display:inline-flex;align-items:center;justify-content:center}.fs-pk-o input:checked+.fs-pk-t{background:#1F6FB8;border-color:#1F6FB8}.fs-pk-o input:checked+.fs-pk-t::after{content:\"\\2713\";color:#fff;font-size:14px;font-weight:700}.fs-pk-o:has(input:checked){border-color:#1F6FB8;background:#eef5fc}.fs-pk-o input:focus-visible+.fs-pk-t{outline:2px solid #0B8BD0}@media print{.fs-pk{display:none!important}}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
   (document.head || document.documentElement).appendChild(css);
   function start() { if (!hook()) setTimeout(start, 400); }
