@@ -14,7 +14,7 @@
 //    print, each invoice on its own page); Print opens a window with a tick per letterhead and plain paper. Printing uses the normal invoice template and the
 //    company's letterhead (the imported JSPL letterhead for JSPL).
 (function () {
-  /* global ENTS, coLabel, special, MODS, TAB_HOME, TITLE, Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
+  /* global srcJvs, openForm, ENTS, coLabel, special, MODS, TAB_HOME, TITLE, Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -230,7 +230,7 @@
         return "<tr><td><input type=\"checkbox\" class=\"fsAbCk\" value=\"" + h(id) + "\"" + (ST.sel[id] ? " checked" : "") + "></td><td class=\"mono\"><b>" + h(nos.length > 2 ? nos[0] + " to " + nos[nos.length - 1] : nos.join(", ")) + "</b>" + (x.G.length > 1 ? "<br><small class=\"muted\">Lump sum, " + x.G.length + " contracts</small>" : "") + "</td>" +
           "<td>" + h(mLabel(x.m)) + "</td><td>" + h(((x.r.doc || {}).to || {}).name || x.r.customer || "") + "</td><td>" + x.P.map(function (p) { return h(p.name || ""); }).join("<br>") + "</td>" +
           "<td class=\"num\"><b>" + money(x.amt) + "</b></td><td class=\"num\">" + money(x.out) + "</td>" +
-          "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(id) + "\">🖨 Print</button></td></tr>";
+          "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(id) + "\">🖨 Print</button> <button type=\"button\" class=\"btn sm fs-ab-del\" data-abdel=\"" + h(id) + "\" title=\"Delete this invoice\">🗑 Delete</button></td></tr>";
       }).join("") || "<tr><td colspan=\"8\" class=\"muted\">No AMC invoices in these months yet.</td></tr>") + "</tbody>" +
       (D.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + money(tot("amt")) + "</b></td><td class=\"num\"><b>" + money(tot("out")) + "</b></td><td></td></tr></tfoot>" : "") + "</table></div></div>";
     var ents = {}; C.forEach(function (p) { if (p.entity) ents[p.entity] = 1; });
@@ -293,7 +293,7 @@
             var p = byId[projOf(r)] || {}, o = safe(function () { return outAR(r); }, 0);
             return "<tr><td><input type=\"checkbox\" class=\"fsAbCk\" value=\"" + h(r.id) + "\"" + (ST.sel[r.id] ? " checked" : "") + "></td><td class=\"mono\"><b>" + h(r.invoiceNo || "") + "</b>" + (r.amcGroup ? "<br><small class=\"muted\">part of a lump sum</small>" : "") + "</td><td>" + h(safe(function () { return fdate(r.invoiceDate); }, r.invoiceDate)) + "</td><td>" + h(((r.doc || {}).to || {}).name || client(p)) + "</td><td>" + h(p.name || r.customer || "") + "</td>" +
               "<td class=\"num\">" + money(num(r.amount) - num(r.outputTax)) + "</td><td class=\"num\">" + money(num(r.outputTax)) + "</td><td class=\"num\">" + money(num(r.amount)) + "</td><td class=\"num\">" + (o > 0 ? money(o) : "<span class=\"fs-g-pill ok\">Paid</span>") + "</td>" +
-              "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(r.id) + "\">🖨 Print</button></td></tr>";
+              "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(r.id) + "\">🖨 Print</button> <button type=\"button\" class=\"btn sm fs-ab-del\" data-abdel=\"" + h(r.id) + "\" title=\"Delete this invoice\">🗑 Delete</button></td></tr>";
           }).join("");
       }).join("") + "</tbody></table></div></div>" : "";
     return "<div class=\"fs-ait\">" + head + summary + detail + "</div>";
@@ -333,8 +333,36 @@
     else if (e.target.classList && e.target.classList.contains("fsAbCk")) { ST.sel[e.target.value] = e.target.checked; count(); }
   });
   function count() { var n = document.querySelectorAll(".fsAbCk:checked").length, s = document.getElementById("fsAbN"); if (s) s.textContent = n ? n + " ticked" : "Tick the invoices to print together"; }
+  // Delete an AMC invoice (hassan, 2026-11-04: "there is no delete option of the invoices once the invoices are
+  // created"). A lump-sum invoice is deleted with all its contracts' records. Allowed while nothing is received and its
+  // voucher is not yet posted: the unposted voucher(s) go with it and the month shows as Due again. A posted voucher
+  // must be reversed (the invoice's own "Reverse and delete", which posts a reversing voucher), so that is offered.
+  var vouchersOf = function (r) { return safe(function () { return typeof srcJvs === "function" ? srcJvs("receivables", r.id) : Store.data.journals.filter(function (j) { return j.source && j.source.c === "receivables" && j.source.id === r.id; }); }, []) || []; };
+  var isPosted = function (j) { return j.status === "Posted" || j.status === "Approved"; };
+  async function delInv(id) {
+    var r = safe(function () { return Store.data.receivables.find(function (x) { return x.id === id; }); }, null); if (!r) return;
+    var G = r.amcGroup ? group(r.amcGroup) : [r], nos = G.map(function (x) { return x.invoiceNo; }).join(", ");
+    var paid = G.filter(function (x) { return (x.receipts || []).length || num(x.received) || safe(function () { return outAR(x) < num(x.amount) - 0.5; }, false); });
+    if (paid.length) { alert("Invoice " + paid.map(function (x) { return x.invoiceNo; }).join(", ") + " already has money received against it, so it cannot be deleted. Reverse the receipt first, or issue a credit note."); return; }
+    var J = []; G.forEach(function (x) { vouchersOf(x).forEach(function (j) { if (J.indexOf(j) < 0) J.push(j); }); });
+    var P = J.filter(isPosted);
+    if (P.length) {
+      if (confirm("The voucher " + P.map(function (j) { return j.ref; }).join(", ") + " of invoice " + nos + " is already posted, so the invoice cannot simply be deleted: it has to be reversed (a reversing voucher is posted, then the invoice is deleted).\n\nOpen the invoice now? Use \"Reverse and delete\" at the bottom of it.")) safe(function () { openForm("receivables", G[0].id); }, null);
+      return;
+    }
+    if (!confirm("Delete invoice " + nos + (G.length > 1 ? " (lump sum, " + G.length + " contracts)" : "") + (J.length ? " and its unposted voucher " + J.map(function (j) { return j.ref || "(unnumbered)"; }).join(", ") : "") + "?\n\nThe month shows as Due again and can be invoiced afresh. This cannot be undone.")) return;
+    try {
+      for (var i = 0; i < J.length; i++) await Store.remove("journals", J[i].id);
+      for (var k = 0; k < G.length; k++) await Store.remove("receivables", G[k].id);
+      delete ST.sel[id]; G.forEach(function (x) { delete ST.sel[x.id]; });
+      safe(function () { toast("Invoice " + nos + " deleted."); }, null);
+    } catch (x) { alert("Could not delete: " + ((x && x.message) || "not allowed") + "."); }
+    safe(render, null);
+  }
   var busy = false;
   document.addEventListener("click", async function (e) {
+    var dl = e.target.closest && e.target.closest("[data-abdel]");
+    if (dl) { e.preventDefault(); e.stopPropagation(); await delInv(dl.getAttribute("data-abdel")); return; }
     var b = e.target.closest && e.target.closest("#fsAbGo,[data-abprint],[data-abbulk]"); if (!b) return;
     e.preventDefault(); e.stopPropagation();
     if (b.hasAttribute("data-abprint")) { pick([b.getAttribute("data-abprint")]); return; }
@@ -373,7 +401,7 @@
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
     ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-g th.c{text-align:center;white-space:nowrap;font-size:12px}.fs-g td{text-align:center;font-size:12px;white-space:nowrap}.fs-g td:first-child{text-align:left;white-space:normal;min-width:200px}.fs-g td.num{text-align:right}.fs-g-x{color:#aab}" +
     ".fs-g-pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}.fs-g-pill.ok{background:#2e7d32;color:#fff}.fs-g-pill.bl{background:#1F6FB8;color:#fff}.fs-g-pill.due{background:#f2a516;color:#fff}.fs-g-due{color:#a15c00;font-weight:600}" +
-    ".fs-pg{position:relative;box-sizing:border-box;min-height:286mm;padding-bottom:1px}.fs-pg+.fs-pg{break-before:page;page-break-before:always;margin-top:12px;border-top:1px dashed #ccd}" +
+    ".fs-ab-del{color:#b3261e;border-color:#e3b4b0}.fs-pg{position:relative;box-sizing:border-box;min-height:286mm;padding-bottom:1px}.fs-pg+.fs-pg{break-before:page;page-break-before:always;margin-top:12px;border-top:1px dashed #ccd}" +
     ".fs-pg>.iv-ffix.fs-pg-foot{position:absolute!important;left:0!important;right:0!important;bottom:8mm!important;top:auto!important;margin:0}" +
     "@media print{.fs-pg{min-height:286mm}.fs-pg+.fs-pg{margin-top:0;border-top:0}}" +
     "body.printing .fs-pg{min-height:286mm}body.printing .fs-pg+.fs-pg{margin-top:0;border-top:0}" +
