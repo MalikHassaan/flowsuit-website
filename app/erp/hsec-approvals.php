@@ -106,6 +106,9 @@ function hsec_nav_full(): array
         if ($name === 'Home') {
             $nav[$i][1][] = ['mgmt', 'Management dashboard'];
         }
+        if ($name === 'Projects') {
+            $nav[$i][1][] = ['amcm', 'AMC (maintenance contracts)']; // hsec-amcrpt.js
+        }
         if ($name === 'Setup & maintenance') {
             $nav[$i][1][] = ['s_fx', 'Currencies & exchange rates']; // hsec-currency.js
         }
