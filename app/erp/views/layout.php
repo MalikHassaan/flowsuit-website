@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/assets/css/erp.css?v=16">
 </head>
 <body class="<?= $user ? 'erp-app' : 'erp-auth' ?>">
+<?= erp_test_banner($user) ?>
 <?php if ($user): ?>
   <aside class="erp-side">
     <a class="erp-brand" href="/erp"><img src="/assets/logo/flowsuit-logo-white.svg" alt="FlowSuit" width="136" height="32"><span>ERP</span></a>
