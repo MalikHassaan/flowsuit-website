@@ -1,4 +1,4 @@
-// AMC billing by month range, client and lump sum, with arrears and bulk printing (hassan, 2026-11-04: "while invoice is
+// AMC billing by month range, client and lump sum, and bulk printing (arrears built, then switched off at hassan's ask) (hassan, 2026-11-04: "while invoice is
 // created invoice is not showed in printable in months; give month wise to and from so that multiple invoices can be made
 // and give bulk printing option; also give drop down of client wise detail and on that also give all option to make
 // invoices lumpsum of all the projects; and while creating the invoice if previous invoice is unpaid then balance should
@@ -37,8 +37,11 @@
   var projOf = function (r) { return String(r.amcKey || "").split("|")[0] || r.projectId; };
   var billedKey = function (p, m) { return safe(function () { return Store.data.receivables.find(function (r) { return r.amcKey === p.id + "|" + m && r.status !== "Void"; }); }, null); };
   // unpaid balance of earlier invoices of these contracts
+  // hassan, 2026-11-04 ("ignore the arrears"): switched off; invoices carry only their own charge
+  var ARREARS = false;
   function arrears(ids, date, skip) {
     var refs = [], amt = 0;
+    if (!ARREARS) return { amt: 0, refs: refs };
     safe(function () {
       Store.data.receivables.forEach(function (r) {
         if (r.status === "Void" || ids.indexOf(projOf(r)) < 0 || !(String(r.invoiceDate || "") < date) || (skip && skip.indexOf(r.id) >= 0)) return;
@@ -151,30 +154,29 @@
     var opts = "<option value=\"\">All clients</option>" + Object.keys(clients).sort().map(function (c) { return "<option" + (ST.cli === c ? " selected" : "") + ">" + h(c) + "</option>"; }).join("");
     var prev = G.map(function (g) {
       var sub = g.items.reduce(function (t, p) { return t + charge(p).sub; }, 0), tx = g.items.reduce(function (t, p) { return t + Math.round(charge(p).sub * g.tax / 100); }, 0);
-      var ar = arrears(g.items.map(function (p) { return p.id; }), iso(monthB(g.m).s)).amt;
-      return "<tr><td>" + h(mLabel(g.m)) + "</td><td>" + h(g.client) + "</td><td>" + g.items.map(function (p) { return h(p.name) + " <span class=\"muted\">" + h(p.code || "") + "</span>"; }).join("<br>") + "</td><td class=\"num\">" + money(sub + tx) + "</td><td class=\"num\">" + (ar ? money(ar) : "–") + "</td><td class=\"num\"><b>" + money(sub + tx + ar) + "</b></td></tr>";
+      return "<tr><td>" + h(mLabel(g.m)) + "</td><td>" + h(g.client) + "</td><td>" + g.items.map(function (p) { return h(p.name) + " <span class=\"muted\">" + h(p.code || "") + "</span>"; }).join("<br>") + "</td><td class=\"num\"><b>" + money(sub + tx) + "</b></td></tr>";
     }).join("");
     var card = "<div class=\"card fs-ab\"><h3>Create AMC invoices</h3><div class=\"ctls fs-ab-ctl\">" +
       "<label>Client <select id=\"fsAbCli\">" + opts + "</select></label>" +
       "<label>From month <input type=\"month\" id=\"fsAbFrom\" value=\"" + h(M[0]) + "\"></label><label>To month <input type=\"month\" id=\"fsAbTo\" value=\"" + h(M[M.length - 1]) + "\"></label>" +
       "<label>Invoices <select id=\"fsAbMode\"><option value=\"each\"" + (ST.mode === "each" ? " selected" : "") + ">One per contract</option><option value=\"lump\"" + (ST.mode === "lump" ? " selected" : "") + ">Lump sum: one per client per month (all projects)</option></select></label></div>" +
       "<p class=\"muted\">" + (G.length ? G.length + " invoice" + (G.length === 1 ? "" : "s") + " to make (" + n + " contract-month" + (n === 1 ? "" : "s") + ")." : "Nothing left to bill for " + h(mLabel(M[0])) + (M.length > 1 ? " to " + h(mLabel(M[M.length - 1])) : "") + ".") +
-      " Arrears are earlier unpaid invoices of the same contracts; they print under the total but are not posted again.</p>" +
-      (G.length ? "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th>Month</th><th>Client</th><th>Contracts</th><th class=\"num\">This invoice (with tax)</th><th class=\"num\">Arrears</th><th class=\"num\">Total payable</th></tr></thead><tbody>" + prev + "</tbody></table></div>" +
+      "</p>" +
+      (G.length ? "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th>Month</th><th>Client</th><th>Contracts</th><th class=\"num\">Invoice amount (with tax)</th></tr></thead><tbody>" + prev + "</tbody></table></div>" +
         "<div class=\"actions\"><button type=\"button\" class=\"btn pri\" id=\"fsAbGo\">Create " + G.length + " invoice" + (G.length === 1 ? "" : "s") + "</button></div>" : "") +
       "<p class=\"err\" id=\"fsAbErr\"></p></div>";
     var D = made(), tot = function (k) { return D.reduce(function (t, x) { return t + x[k]; }, 0); };
     var list = "<div class=\"card fs-ab\"><h3>Invoices made: " + h(mLabel(M[0])) + (M.length > 1 ? " to " + h(mLabel(M[M.length - 1])) : "") + (ST.cli ? " · " + h(ST.cli) : "") + "</h3>" +
       (D.length ? "<div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">Print ticked on letterhead</button> <button type=\"button\" class=\"btn\" data-abbulk=\"0\">Print ticked on plain paper</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" : "") +
-      "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th><input type=\"checkbox\" id=\"fsAbAll\" title=\"Tick all\"></th><th>Invoice</th><th>Month</th><th>Client</th><th>Contracts</th><th class=\"num\">Amount (with tax)</th><th class=\"num\">Arrears</th><th class=\"num\">Total payable</th><th class=\"num\">Unpaid now</th><th>Print</th></tr></thead><tbody>" +
+      "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th><input type=\"checkbox\" id=\"fsAbAll\" title=\"Tick all\"></th><th>Invoice</th><th>Month</th><th>Client</th><th>Contracts</th><th class=\"num\">Amount (with tax)</th><th class=\"num\">Unpaid now</th><th>Print</th></tr></thead><tbody>" +
       (D.map(function (x) {
         var id = x.r.id, nos = x.G.map(function (g) { return g.invoiceNo; });
         return "<tr><td><input type=\"checkbox\" class=\"fsAbCk\" value=\"" + h(id) + "\"" + (ST.sel[id] ? " checked" : "") + "></td><td class=\"mono\"><b>" + h(nos.length > 2 ? nos[0] + " to " + nos[nos.length - 1] : nos.join(", ")) + "</b>" + (x.G.length > 1 ? "<br><small class=\"muted\">Lump sum, " + x.G.length + " contracts</small>" : "") + "</td>" +
           "<td>" + h(mLabel(x.m)) + "</td><td>" + h(((x.r.doc || {}).to || {}).name || x.r.customer || "") + "</td><td>" + x.P.map(function (p) { return h(p.name || ""); }).join("<br>") + "</td>" +
-          "<td class=\"num\">" + money(x.amt) + "</td><td class=\"num\">" + (x.ar ? money(x.ar) : "–") + "</td><td class=\"num\"><b>" + money(x.amt + x.ar) + "</b></td><td class=\"num\">" + money(x.out) + "</td>" +
+          "<td class=\"num\"><b>" + money(x.amt) + "</b></td><td class=\"num\">" + money(x.out) + "</td>" +
           "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(id) + "\" data-lh=\"1\">Letterhead</button> <button type=\"button\" class=\"btn sm\" data-abprint=\"" + h(id) + "\" data-lh=\"0\">Plain</button></td></tr>";
-      }).join("") || "<tr><td colspan=\"10\" class=\"muted\">No AMC invoices in these months yet.</td></tr>") + "</tbody>" +
-      (D.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + money(tot("amt")) + "</b></td><td></td><td></td><td class=\"num\"><b>" + money(tot("out")) + "</b></td><td></td></tr></tfoot>" : "") + "</table></div></div>";
+      }).join("") || "<tr><td colspan=\"8\" class=\"muted\">No AMC invoices in these months yet.</td></tr>") + "</tbody>" +
+      (D.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + money(tot("amt")) + "</b></td><td class=\"num\"><b>" + money(tot("out")) + "</b></td><td></td></tr></tfoot>" : "") + "</table></div></div>";
     return { card: card, list: list };
   }
   var CUT = function (html, startMark, endMark) { var a = html.indexOf(startMark); if (a < 0) return null; var b = html.indexOf(endMark, a); if (b < 0) return null; return [a, b + endMark.length]; };
@@ -232,7 +234,7 @@
   function hook() {
     if (hooked) return true;
     if (typeof amcView !== "function" || typeof ivBody !== "function" || typeof Store === "undefined" || typeof makeAutoJv !== "function") return false;
-    hooked = true; hookView(); hookBody(); safe(render, null); return true;
+    hooked = true; hookView(); if (ARREARS) hookBody(); safe(render, null); return true;
   }
   var css = document.createElement("style");
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
