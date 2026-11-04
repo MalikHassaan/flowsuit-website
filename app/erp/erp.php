@@ -161,27 +161,27 @@ function erp_slot(?int $set = null): int
 
 function erp_slot_base(): string
 {
-    return erp_slot() > 1 ? '/erp/u/' . erp_slot() : '/erp';
+    return '/erp' . (fs_is_test() ? '/test' : '') . (erp_slot() > 1 ? '/u/' . erp_slot() : '');
 }
 
 // /erp addresses in a page, script or JSON (also written as \/erp) moved under this tab's account.
 function erp_slot_rewrite(string $s): string
 {
-    if (erp_slot() < 2) {
+    $b = erp_slot_base();
+    if ($b === '/erp') {
         return $s;
     }
-    $b = erp_slot_base();
-    $s = preg_replace('#(?<=["\'(=\s,:])/erp(?!/u/)(?=[/"\'?\#\s)<\\\\])#', $b, $s);
-    return preg_replace('#(?<=["\'])\\\\/erp(?!\\\\/u\\\\/)(?=\\\\/|["\'?])#', str_replace('/', '\\/', $b), $s);
+    $s = preg_replace('#(?<=["\'(=\s,:])/erp(?!/u/)(?!/test(?=[/"\'?\#\s)<\\\\]))(?=[/"\'?\#\s)<\\\\])#', $b, $s);
+    return preg_replace('#(?<=["\'])\\\\/erp(?!\\\\/u\\\\/)(?!\\\\/test(?=\\\\/|["\'?]))(?=\\\\/|["\'?])#', str_replace('/', '\\/', $b), $s);
 }
 
 // A whole HTML page for an account tab: addresses rewritten and the account shown on screen.
 function erp_slot_html(string $html): string
 {
+    $html = erp_slot_rewrite($html);
     if (erp_slot() < 2) {
         return $html;
     }
-    $html = erp_slot_rewrite($html);
     try {
         $u = erp_user();
     } catch (Throwable $e) {
@@ -285,7 +285,7 @@ function erp_switch_page(): void
 function erp_start_session(bool $touch = true): void
 {
     $https = ($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
-    session_name(erp_slot() > 1 ? 'fs_erp_u' . erp_slot() : 'fs_erp');
+    session_name((fs_is_test() ? 'fs_erp_t' : 'fs_erp') . (erp_slot() > 1 ? '_u' . erp_slot() : ''));
     session_set_cookie_params(['path' => erp_slot_base(), 'secure' => $https, 'httponly' => true, 'samesite' => 'Lax']);
     session_start();
     if (isset($_SESSION['seen']) && time() - $_SESSION['seen'] > ERP_SESSION_IDLE) {
@@ -431,7 +431,8 @@ function erp_can(array $user, string $module, string $need = 'view'): bool
 
 function erp_redirect(string $to): void
 {
-    if (erp_slot() > 1 && ($to === '/erp' || str_starts_with($to, '/erp/') || str_starts_with($to, '/erp?')) && !str_starts_with($to, '/erp/u/')) {
+    if (erp_slot_base() !== '/erp' && ($to === '/erp' || str_starts_with($to, '/erp/') || str_starts_with($to, '/erp?'))
+        && !str_starts_with($to, '/erp/u/') && $to !== '/erp/test' && !preg_match('#^/erp/test[/?]#', $to)) {
         $to = erp_slot_base() . substr($to, 4);
     }
     header('Location: ' . $to, true, 303);
@@ -549,7 +550,11 @@ function erp_handle(string $path): void
     header('Referrer-Policy: same-origin');
     date_default_timezone_set('Asia/Karachi');
     erp_catch_errors();
-    if (preg_match('#^/erp(/u/[2-5])?/switch$#', $path)) {
+    if (preg_match('#^/erp/test(/.*)?$#', $path, $m)) {
+        fs_is_test(true);   // test copy: its own data folder, cookies and addresses (testenv.php)
+        $path = '/erp' . ($m[1] ?? '');
+    }
+    if (!fs_is_test() && preg_match('#^/erp(/u/[2-5])?/switch$#', $path)) {
         erp_switch_page();
         return;
     }
@@ -559,6 +564,8 @@ function erp_handle(string $path): void
         ob_start('erp_slot_output');
     } elseif (preg_match('#^/erp/u/#', $path)) {
         erp_redirect('/erp/switch');
+    } elseif (fs_is_test()) {
+        ob_start('erp_slot_output');
     }
 
     if (!class_exists('PDO') || !in_array('sqlite', PDO::getAvailableDrivers(), true)) {

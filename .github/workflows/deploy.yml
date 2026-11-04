@@ -56,21 +56,3 @@ jobs:
           local-dir: ./public/
           server-dir: public_html/
 
-      # Test site (test.flowsuit.net): the same public files plus a .flowsuit-test marker, so the ERP there keeps its
-      # records in ~/flowsuit-test-data (a copy of live) and never writes to the live data. Needs the "test" subdomain
-      # in cPanel with document root test.flowsuit.net.
-      - name: Prepare test site files
-        if: env.FTP_SERVER != ''
-        run: |
-          mkdir -p _testsite && cp -a public/. _testsite/ && echo "test" > _testsite/.flowsuit-test
-
-      - name: Upload test site
-        if: env.FTP_SERVER != ''
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          local-dir: ./_testsite/
-          server-dir: test.flowsuit.net/
