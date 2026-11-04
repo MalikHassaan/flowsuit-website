@@ -476,5 +476,6 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-grnbill.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-amcdef.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-amcrpt.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-rptlh.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-gantt.js') . '</script>';
 }
