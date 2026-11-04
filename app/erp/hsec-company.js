@@ -39,6 +39,13 @@
       var note = pick.querySelector("p.note"); if (note) note.remove();
     }
     if (!window.FS_ADMIN) return;
+    // admin only: Edit on each company tile changes its name (the short code stays; hassan, 2026-11-04)
+    grid.querySelectorAll(".co-card[data-co]").forEach(function (b) {
+      if (b.dataset.co === "All" || b.querySelector(".fs-coedit")) return;
+      var x = document.createElement("span");
+      x.className = "fs-coedit"; x.setAttribute("role", "button"); x.setAttribute("tabindex", "0"); x.dataset.code = b.dataset.co; x.textContent = "Edit";
+      x.title = "Change the company name"; b.appendChild(x);
+    });
     var add = document.createElement("div");
     add.className = "co-card fs-coadd";
     add.innerHTML = '<button type="button" class="fs-coplus" aria-label="Add company"><span class="pl">+</span><span class="cn">Add company</span><span class="cc">Name and short code</span></button>';
@@ -86,6 +93,39 @@
     if (typeof openPicker === "function") openPicker();
   }
 
+  function editForm(card) {
+    var code = card.dataset.co, tile = document.createElement("div");
+    tile.className = "co-card fs-coadd open fs-coren"; tile.dataset.code = code;
+    tile.innerHTML = '<span class="cn">Edit company</span>'
+      + '<label>Company name<input id="fsCoRen" maxlength="120" autocomplete="off" value="' + esc(nameOf(code) === code ? "" : nameOf(code)) + '"></label>'
+      + '<span class="cc">Short code: <b>' + esc(code) + '</b> (stays the same, it is on every record)</span>'
+      + '<span class="fs-coerr" role="alert"></span>'
+      + '<span class="fs-coact"><button type="button" class="btn pri" id="fsCoRenSave">Save</button><button type="button" class="btn" id="fsCoRenCancel">Cancel</button></span>';
+    card.replaceWith(tile);
+    var i = tile.querySelector("#fsCoRen"); i.focus(); i.select();
+  }
+  async function rename(tile) {
+    var err = tile.querySelector(".fs-coerr"), btn = tile.querySelector("#fsCoRenSave"), code = tile.dataset.code;
+    var name = tile.querySelector("#fsCoRen").value.trim(), fail = function (m) { err.textContent = m; };
+    if (!name) return fail("Type the company name.");
+    if (ENTS().some(function (e) { return e !== code && nameOf(e).toLowerCase() === name.toLowerCase(); })) return fail("Another company already has this name.");
+    var s = settings(), lg = Object.assign({}, s.legal || {}); lg[code] = name;
+    btn.disabled = true; fail("");
+    try { await Store.save("settings", Object.assign({}, s, { id: "main", legal: lg })); }
+    catch (x) { btn.disabled = false; return fail("Could not save. Only an admin can rename a company."); }
+    if (typeof toast === "function") toast("Company name changed to " + name);
+    if (typeof closePicker === "function") closePicker();
+    if (typeof openPicker === "function") openPicker();
+  }
+  addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest(".fs-coedit, .fs-coren button");
+    if (!t || !window.FS_ADMIN) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    if (t.classList.contains("fs-coedit")) return editForm(t.closest(".co-card"));
+    if (t.id === "fsCoRenSave") return rename(t.closest(".fs-coren"));
+    if (t.id === "fsCoRenCancel") { if (typeof closePicker === "function") closePicker(); if (typeof openPicker === "function") openPicker(); }
+  }, true);
+
   // Capture phase, so the app's own click handler never sees these buttons.
   addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest(".fs-coadd button");
@@ -98,8 +138,8 @@
   }, true);
   addEventListener("keydown", function (e) {
     var tile = e.target.closest && e.target.closest(".fs-coadd");
-    if (!tile) return;
-    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); save(tile); }
+    if (!tile) { var ed = e.target.closest && e.target.closest(".fs-coedit"); if (ed && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); editForm(ed.closest(".co-card")); } return; }
+    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (tile.classList.contains("fs-coren")) rename(tile); else save(tile); }
   }, true);
 
   function watch() {
@@ -120,6 +160,8 @@
     + ".fs-coadd label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted)}"
     + ".fs-coadd input{font:inherit;font-size:14px;padding:5px 7px;border:1px solid var(--line);color:var(--ink);background:var(--panel)}"
     + ".fs-coerr{color:#b42318;font-size:12px}.fs-coerr:empty{display:none}"
-    + ".fs-coact{display:flex;gap:6px;margin-top:4px}";
+    + ".fs-coact{display:flex;gap:6px;margin-top:4px}"
+    + ".co-card[data-co]{position:relative}.fs-coedit{position:absolute;top:8px;right:8px;font-size:12px;padding:2px 9px;border:1px solid var(--line,#ccd);border-radius:6px;background:var(--panel,#fff);color:var(--accent,#1F6FB8);cursor:pointer}"
+    + ".fs-coedit:hover{background:var(--accent,#1F6FB8);color:#fff}";
   (document.head || document.documentElement).appendChild(css);
 })();
