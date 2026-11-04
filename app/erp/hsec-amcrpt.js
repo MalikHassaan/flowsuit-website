@@ -12,7 +12,7 @@
 // AMC invoices are the ones AMC billing made (amcKey) or any invoice on an AMC project. "Received" counts receipts
 // whose voucher is posted, like the rest of Receivables; receipts still waiting for approval are shown as pending.
 (function () {
-  /* global Store, MODS, TAB_HOME, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, jvOf, AMC_STEP, cnFor */
+  /* global NAV, TITLE, NS_ALIAS, Store, MODS, TAB_HOME, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, jvOf, AMC_STEP, cnFor */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -168,12 +168,18 @@
   var hooked = false;
   function hook() {
     if (hooked) return true;
-    if (typeof special !== "function" || typeof MODS === "undefined" || !MODS.proj || !MODS.rpt || typeof Store === "undefined") return false;
+    if (typeof special !== "function" || typeof NAV === "undefined" || typeof MODS === "undefined" || !MODS.proj || !MODS.rpt || typeof Store === "undefined") return false;
     hooked = true;
     special = (function (old) { return function (tab) { return tab === "amcrpt" ? safe(view, "<p class=\"muted\">Could not build the AMC report.</p>") : old.apply(this, arguments); }; })(special); // eslint-disable-line no-global-assign
     if (!MODS.proj.tabs.some(function (t) { return t[0] === "amcrpt"; })) MODS.proj.tabs.push(["amcrpt", "AMC reports"]);
     if (!MODS.rpt.tabs.some(function (t) { return t[0] === "amcrpt"; })) MODS.rpt.tabs.push(["amcrpt", "AMC reports"]);
     safe(function () { if (!TAB_HOME.amcrpt) TAB_HOME.amcrpt = "proj"; }, null);
+    // its own menu area, so Users and access can give AMC alone (hassan, 2026-11-04: "AMC is not appearing")
+    if (!MODS.amcm) {
+      MODS.amcm = { sub: "Maintenance contracts: set them up, bill them each month and see who has paid", tabs: [["amc", "AMC billing"], ["amcrpt", "AMC reports"], ["projects", "AMC contracts"]] };
+      safe(function () { var g = NAV.find(function (x) { return x[0] === "Projects"; }); if (g && !g[1].some(function (i) { return i[0] === "amcm"; })) g[1].push(["amcm", "AMC (maintenance contracts)"]); }, null);
+      safe(function () { TITLE.amcm = "AMC (maintenance contracts)"; NS_ALIAS.amcm = "amc maintenance contract annual service billing recurring"; }, null);
+    }
     safe(function () { render(); }, null);
     return true;
   }
