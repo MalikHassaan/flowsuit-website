@@ -99,6 +99,7 @@
       row("Service engineer", h(p.pm || "–")) + row("Site province", h(p.province || "–")) +
       row("Floors", h(p.amcFloors || "–")) + row("Units (lifts)", h(p.amcUnits || "–")) + row("Rate per unit per month", num(p.amcRate) ? "Rs " + money(num(p.amcRate)) : "–") +
       row("Period", h((fd(p.amcStart) || "–") + " to " + (fd(p.amcEnd) || "–")) + (months ? " (" + months + " months)" : "")) +
+      row("Free maintenance months", h(safe(function () { var L = window.FS_AMCFREE.months(p); return L.length ? L.length + ": " + window.FS_AMCFREE.label(L) : ""; }, "") || "None")) +
       "</tbody></table><table class=\"fs-ac-kv\"><tbody>" +
       row("Monthly charge (excl. tax)", "<b>Rs " + money(fee) + "</b>") + row("Sales tax " + r + "%", "Rs " + money(fee * r / 100)) +
       row("Monthly charge with tax", "<b>Rs " + money(fee * (1 + r / 100)) + "</b>") +
