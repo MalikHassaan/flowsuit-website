@@ -52,9 +52,15 @@
     var bank = lines(d.bank || [c.title ? "Account title: " + c.title : "", c.iban ? "IBAN: " + c.iban : "", c.bank ? "Bank: " + c.bank : ""].filter(Boolean).join("\n"));
     var so = lines(d.signoff && !/^For and on behalf of/.test(d.signoff) ? d.signoff : [c.signName || "", c.signTitle || ""].filter(Boolean).join("\n"));
     var dd = function (x) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(x || "")); return m ? m[3] + "/" + m[2] + "/" + m[1] : h(x); };
-    var tl = (d.taxLabel || "Sales Tax") + (ex ? "" : " @" + (+pct.toFixed(2)) + "%");
+    var tl = (d.layout === "amctax" && d.taxLabel || taxShort(p)) + (ex ? "" : " @" + (+pct.toFixed(2)) + "%");
     var gross = 0, tax = 0;
-    var rows = T.L.map(function (l, i) {
+    // hassan, 2026-11-04: "Annual maintenance services, remove that" (invoices made before the new wording)
+    var MS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], km = String(r.amcKey || "").split("|")[1] || "";
+    var L = T.L.map(function (l) {
+      if (!/^Annual maintenance services/i.test(String(l.name || ""))) return l;
+      return Object.assign({}, l, { name: "Monthly maintenance and trouble shooting of elevators" + (p.name ? " – " + p.name : ""), period: l.period || (km ? MS[+km.slice(5, 7) - 1] + ", " + km.slice(0, 4) : "") });
+    });
+    var rows = L.map(function (l, i) {
       var g = num(l.amount), t = ex ? 0 : Math.round(g * pct) / 100; gross += g; tax += t;
       return "<tr><td class=\"c\">" + (i + 1) + ".</td><td>" + h(l.name) + (l.period ? "<br><b>(" + h(l.period) + ")</b>" : "") + (l.specs ? "<div class=\"fs-ai-sp\">" + h(l.specs) + "</div>" : "") + "</td>" +
         "<td class=\"c\">" + h(String(num(l.qty)).padStart(2, "0")) + "</td><td class=\"r\">" + m2(num(l.unit)) + "</td><td class=\"r\">" + m2(g) + "</td><td class=\"r\">" + (ex ? "Exempt" : m2(t)) + "</td><td class=\"r\">" + m2(g + t) + "</td></tr>";
@@ -70,7 +76,7 @@
       "<tr class=\"iv-tot\"><td colspan=\"4\" class=\"r\">TOTAL</td><td class=\"r\">" + m2(gross) + "</td><td class=\"r\">" + (ex ? "Exempt" : m2(tax)) + "</td><td class=\"r\">" + m2(gross + tax) + "</td></tr>" +
       "<tr><td colspan=\"7\"><b>Amount in words:</b> " + h(safe(function () { return ivWords(gross + tax); }, "")) + "</td></tr>" +
       (ex ? "<tr><td colspan=\"7\">Exempt from sales tax" + (d.exemptRef || p.amcTaxNote ? ": " + h(d.exemptRef || p.amcTaxNote) : ".") + "</td></tr>" : "") + "</tbody></table>" +
-      (bank.length ? "<div class=\"iv-bank\"><b>Please pay to:</b><br>" + bank.map(h).join("<br>") + "</div>" : "") +
+      (bank.length ? "<p class=\"fs-ai-bank\"><b>Bank details: " + bank.map(h).join(" &nbsp;|&nbsp; ") + "</b></p>" : "") +
       "<div class=\"fs-ai-sig\">" + (so.length ? so.map(h).join("<br>") : "") + "</div>" + notesHtml(c, r.entity) + "</div>";
   }
 
@@ -115,6 +121,30 @@
     else { var pv = document.getElementById("f_province"); if (pv) pv.dispatchEvent(new Event("change", { bubbles: true })); }
   });
 
+  // ---- AMC form: the customer is the project name unless "Customer is different" is ticked (hassan, 2026-11-04: "for AMC
+  // project name and customer is same; if it's not same make a check button so that we can change the customer name")
+  function cust() {
+    var t = document.getElementById("f_type"), c = document.getElementById("f_customer"), n = document.getElementById("f_name"); if (!t || !c || !n) return;
+    var w = c.closest(".f"); if (!w) return;
+    var ck = document.getElementById("fsCuDiff");
+    if (t.value !== "Maintenance contract (AMC)") { w.classList.remove("fs-cu-hide"); if (ck) ck.parentNode.classList.add("fs-cu-hide"); return; }
+    if (!ck) {
+      var lab = document.createElement("label"); lab.className = "fs-cu-ck";
+      lab.innerHTML = "<input type=\"checkbox\" id=\"fsCuDiff\"> Customer is different from the project name";
+      w.parentNode.insertBefore(lab, w); ck = lab.firstChild;
+      ck.checked = !!c.value.trim() && c.value.trim() !== n.value.trim();
+    }
+    ck.parentNode.classList.remove("fs-cu-hide");
+    w.classList.toggle("fs-cu-hide", !ck.checked);
+    if (!ck.checked && c.value !== n.value) { c.value = n.value; c.dispatchEvent(new Event("input", { bubbles: true })); }
+  }
+  document.addEventListener("input", function (e) { if (e.target && e.target.id === "f_name") safe(cust, null); });
+  document.addEventListener("change", function (e) { var id = e.target && e.target.id; if (id === "fsCuDiff" || id === "f_type" || id === "f_name") { safe(cust, null); if (id === "fsCuDiff" && e.target.checked) { var c = document.getElementById("f_customer"); if (c) c.focus(); } } });
+  (function watch() {
+    if (!document.body) return setTimeout(watch, 300);
+    new MutationObserver(function () { if (document.getElementById("f_customer") && !document.getElementById("fsCuDiff")) safe(cust, null); }).observe(document.body, { childList: true, subtree: true });
+  })();
+
   // ---- invoice details per company (admin; stored in settings.invCo)
   var KEYS = [["title", "Account title"], ["iban", "IBAN / account number"], ["bank", "Bank and branch"], ["ntn", "Our NTN"], ["strn", "Our STRN"], ["signName", "Signed by (name)"], ["signTitle", "Designation"]];
   function panel(ents) {
@@ -155,7 +185,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".qsheet .fs-ai .fs-ai-head td{vertical-align:top}.fs-ai-to{margin:4px 2px;line-height:1.55}.qsheet .fs-ai table.fs-ai-meta{border-collapse:collapse}.qsheet .fs-ai table.fs-ai-meta td{border:0!important;padding:1px 6px 1px 0}" +
-    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
+    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
     ".fs-ai-set{margin:12px 0}.fs-ai-set summary{cursor:pointer}.fs-ai-co{border-top:1px solid #e3e8ee;padding:8px 0}.fs-ai-co h4{margin:4px 0 6px}" +
     ".fs-ai-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.fs-ai-g label{display:flex;flex-direction:column;gap:3px;font-size:12px}@media (max-width:900px){.fs-ai-g{grid-template-columns:1fr 1fr}}";
   (document.head || document.documentElement).appendChild(css);
