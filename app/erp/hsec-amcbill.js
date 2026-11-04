@@ -10,11 +10,11 @@
 //    lump-sum invoice is those records printed as one document, numbered with their invoice numbers.
 //  * Arrears: the unpaid balance of earlier invoices of the same contract(s) at the time the invoice is made. It is
 //    printed under the invoice total with "Total amount payable"; it is NOT posted again (it is already in debtors).
-//  * "Invoices made" lists every AMC invoice in the range with Letterhead / Plain print buttons, tick boxes and
-//    "Print ticked" (one print, each invoice on its own page). Printing uses the normal invoice template and the
+//  * "Invoices made" lists every AMC invoice in the range with Print buttons, tick boxes and "Print ticked" (one
+//    print, each invoice on its own page); Print opens a window with a tick per letterhead and plain paper. Printing uses the normal invoice template and the
 //    company's letterhead (the imported JSPL letterhead for JSPL).
 (function () {
-  /* global coLabel, special, MODS, TAB_HOME, TITLE, Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
+  /* global ENTS, coLabel, special, MODS, TAB_HOME, TITLE, Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -131,36 +131,55 @@
     return { id: f.id, amcKey: f.amcKey, projectId: f.projectId, entity: f.entity, customer: (d0.to || {}).name || f.customer, project: "", invoiceNo: nos.length > 2 ? nos[0] + " to " + nos[nos.length - 1] : nos.join(", "), invoiceDate: f.invoiceDate, dueDate: f.dueDate,
       doc: Object.assign({}, d0, { poRef: "", lines: lines, arrears: ar.amt ? ar : null }) };
   }
-  // "Letterhead" choice on an open AMC invoice: the company's own or another company's (e.g. JSPL on Jeewajee); saved on
-  // the invoice (doc.lhCo) so reprints and bulk prints use it
-  var LAST = null;
-  function lhBar() {
-    var sh = document.querySelector("#printLayer .sheet"); if (!sh || sh.querySelector(".fs-lhco")) return;
-    var docs = sh.querySelectorAll(".fs-ai[data-rid]"); if (!docs.length || !window.FS_AMCINV || !window.FS_AMCINV.lhList) return;
-    var own = docs[0].getAttribute("data-own"), cur = docs[0].getAttribute("data-lhco"), L = window.FS_AMCINV.lhList(own); if (L.length < 2) return;
-    var bar = sh.querySelector(".bar"), wrap = document.createElement("label"); wrap.className = "fs-lhco";
-    wrap.innerHTML = "Letterhead <select>" + L.map(function (e) { return "<option value=\"" + h(e) + "\"" + (e === cur ? " selected" : "") + ">" + h(safe(function () { return coLabel(e); }, e)) + (e === own ? " (own)" : "") + "</option>"; }).join("") + "</select>";
-    if (bar) bar.appendChild(wrap); else sh.insertBefore(wrap, sh.firstChild);
-    wrap.querySelector("select").addEventListener("change", async function (e) {
-      var to = e.target.value, ids = [].map.call(docs, function (d) { return d.getAttribute("data-rid"); }), find = function (id) { return safe(function () { return Store.data.receivables.find(function (r) { return r.id === id; }); }, null); };
-      var recs = []; ids.forEach(function (id) { var r = find(id); if (!r) return; (r.amcGroup ? group(r.amcGroup) : [r]).forEach(function (x) { recs.push(x); }); });
-      try { for (var i = 0; i < recs.length; i++) { var c = JSON.parse(JSON.stringify(recs[i])); c.doc = c.doc || {}; if (to === c.entity) delete c.doc.lhCo; else c.doc.lhCo = to; await Store.save("receivables", c); } }
-      catch (x) { safe(function () { toast("Could not save the letterhead choice: " + ((x && x.message) || "not allowed") + "."); }, null); }
-      var lh = LAST ? LAST.lh : true, R = ids.map(find).filter(Boolean).map(printable);
-      printSet(R, lh);
+  // Print choice (hassan, 2026-11-04: "when we tick the invoices and on top where print, a pop up appears: print on
+  // letterhead of JSPL or JPL or HSEC; instead of drop down give a tick selection"): every Print button opens one
+  // window listing each letterhead and plain paper as ticks. The letterhead picked is saved on the invoices (doc.lhCo)
+  // so reprints use it again.
+
+  var find = function (id) { return safe(function () { return Store.data.receivables.find(function (r) { return r.id === id; }); }, null); };
+  function lhOptions(R) {
+    var L = [];
+    R.forEach(function (r) { if (L.indexOf(r.entity) < 0) L.push(r.entity); });
+    safe(function () { window.FS_AMCINV.lhList(L[0]).forEach(function (k) { if (L.indexOf(k) < 0) L.push(k); }); }, null);
+    safe(function () { ENTS().forEach(function (k) { if (typeof k === "string" && L.indexOf(k) < 0) L.push(k); }); }, null); // every group company (JSPL, JPL, HSEC…)
+    return L.filter(Boolean);
+  }
+  function pick(ids) {
+    var recs = ids.map(find).filter(Boolean); if (!recs.length) return;
+    var L = lhOptions(recs), d0 = recs[0].doc || {}, cur = d0.lhCo || recs[0].entity;
+    var old = document.getElementById("fsAbPick"); if (old) old.remove();
+    var opt = function (v, label, on) { return "<label class=\"fs-pk-o\"><input type=\"radio\" name=\"fsPk\" value=\"" + h(v) + "\"" + (on ? " checked" : "") + "><span class=\"fs-pk-t\"></span><span>" + label + "</span></label>"; };
+    var w = document.createElement("div"); w.id = "fsAbPick"; w.className = "fs-pk";
+    w.innerHTML = "<div class=\"fs-pk-b\" role=\"dialog\" aria-modal=\"true\"><h3>Print " + recs.length + " invoice" + (recs.length === 1 ? "" : "s") + "</h3><p class=\"muted\">Tick the paper to print on.</p>" +
+      L.map(function (e) { return opt(e, "On <b>" + h(e) + "</b> letterhead <span class=\"muted\">" + h(safe(function () { return coLabel(e); }, "")) + "</span>", e === cur); }).join("") +
+      opt("", "Plain paper <span class=\"muted\">(letterhead space left blank)</span>", false) +
+      "<div class=\"actions\"><button type=\"button\" class=\"btn pri\" data-pkgo=\"1\">Print</button> <button type=\"button\" class=\"btn\" data-pkno=\"1\">Cancel</button></div><p class=\"err\" id=\"fsPkErr\"></p></div>";
+    document.body.appendChild(w);
+    w.addEventListener("click", async function (e) {
+      if (e.target === w || e.target.closest("[data-pkno]")) { w.remove(); return; }
+      var go = e.target.closest("[data-pkgo]"); if (!go) return;
+      var c = w.querySelector("input[name=fsPk]:checked"), to = c ? c.value : "";
+      go.disabled = true;
+      if (to) {
+        var all = []; recs.forEach(function (r) { (r.amcGroup ? group(r.amcGroup) : [r]).forEach(function (x) { if (all.indexOf(x) < 0) all.push(x); }); });
+        try {
+          for (var i = 0; i < all.length; i++) {
+            var want = to === all[i].entity ? undefined : to; if (((all[i].doc || {}).lhCo || undefined) === want) continue;
+            var x = JSON.parse(JSON.stringify(all[i])); x.doc = x.doc || {}; if (want) x.doc.lhCo = want; else delete x.doc.lhCo; await Store.save("receivables", x);
+          }
+        } catch (er) { var el = document.getElementById("fsPkErr"); if (el) el.textContent = "Could not save the letterhead choice: " + ((er && er.message) || "not allowed") + "."; go.disabled = false; return; }
+      }
+      w.remove();
+      printSet(ids.map(find).filter(Boolean).map(printable), !!to);
     });
   }
-  (function watchLh() {
-    if (!document.body) return setTimeout(watchLh, 300);
-    new MutationObserver(function () { safe(lhBar, null); }).observe(document.body, { childList: true, subtree: true });
-  })();
   function printSet(R, lh) {
     var ents = {}; R.forEach(function (r) { ents[(r.doc && r.doc.lhCo) || r.entity] = 1; });
-    if (Object.keys(ents).length > 1) { safe(function () { toast("Tick invoices on one letterhead at a time: each letterhead prints its own header and footer."); }, null); return; }
+    if (lh && Object.keys(ents).length > 1) { safe(function () { toast("Tick invoices on one letterhead at a time: each letterhead prints its own header and footer."); }, null); return; }
     var html = R.map(function (r, i) { return (i ? "<div style=\"break-before:page;page-break-before:always\"></div>" : "") + ivDoc(r, lh); }).join("");
     sheetOpen(html);
     var s = document.querySelector("#printLayer .sheet"); if (s) s.classList.add("qsheet");
-    LAST = { R: R, lh: lh };
+    
     safe(function () { toast(R.length + " invoice" + (R.length === 1 ? "" : "s") + " open " + (lh ? "on the letterhead" : "on plain paper") + ". Each prints on its own page."); }, null);
   }
 
@@ -200,14 +219,14 @@
       "<p class=\"err\" id=\"fsAbErr\"></p></div>";
     var D = made(), tot = function (k) { return D.reduce(function (t, x) { return t + x[k]; }, 0); };
     var list = "<div class=\"card fs-ab\"><h3>Invoices made: " + h(mLabel(M[0])) + (M.length > 1 ? " to " + h(mLabel(M[M.length - 1])) : "") + (ST.cli ? " · " + h(ST.cli) : "") + "</h3>" +
-      (D.length ? "<div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">Print ticked on letterhead</button> <button type=\"button\" class=\"btn\" data-abbulk=\"0\">Print ticked on plain paper</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" : "") +
+      (D.length ? "<div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">🖨 Print ticked</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" : "") +
       "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th><input type=\"checkbox\" id=\"fsAbAll\" title=\"Tick all\"></th><th>Invoice</th><th>Month</th><th>Client</th><th>Contracts</th><th class=\"num\">Amount (with tax)</th><th class=\"num\">Unpaid now</th><th>Print</th></tr></thead><tbody>" +
       (D.map(function (x) {
         var id = x.r.id, nos = x.G.map(function (g) { return g.invoiceNo; });
         return "<tr><td><input type=\"checkbox\" class=\"fsAbCk\" value=\"" + h(id) + "\"" + (ST.sel[id] ? " checked" : "") + "></td><td class=\"mono\"><b>" + h(nos.length > 2 ? nos[0] + " to " + nos[nos.length - 1] : nos.join(", ")) + "</b>" + (x.G.length > 1 ? "<br><small class=\"muted\">Lump sum, " + x.G.length + " contracts</small>" : "") + "</td>" +
           "<td>" + h(mLabel(x.m)) + "</td><td>" + h(((x.r.doc || {}).to || {}).name || x.r.customer || "") + "</td><td>" + x.P.map(function (p) { return h(p.name || ""); }).join("<br>") + "</td>" +
           "<td class=\"num\"><b>" + money(x.amt) + "</b></td><td class=\"num\">" + money(x.out) + "</td>" +
-          "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(id) + "\" data-lh=\"1\">Letterhead</button> <button type=\"button\" class=\"btn sm\" data-abprint=\"" + h(id) + "\" data-lh=\"0\">Plain</button></td></tr>";
+          "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(id) + "\">🖨 Print</button></td></tr>";
       }).join("") || "<tr><td colspan=\"8\" class=\"muted\">No AMC invoices in these months yet.</td></tr>") + "</tbody>" +
       (D.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + money(tot("amt")) + "</b></td><td class=\"num\"><b>" + money(tot("out")) + "</b></td><td></td></tr></tfoot>" : "") + "</table></div></div>";
     var ents = {}; C.forEach(function (p) { if (p.entity) ents[p.entity] = 1; });
@@ -260,7 +279,7 @@
     var summary = "<div class=\"card fs-ab\"><h3>Month by month</h3><div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th>Month</th><th class=\"num\">Invoices</th><th class=\"num\">Amount excl. tax</th><th class=\"num\">Sales tax</th><th class=\"num\">Total</th><th class=\"num\">Received</th><th class=\"num\">Unpaid</th></tr></thead><tbody>" +
       (M.map(function (m) { var t = sum(G[m]); return "<tr><td><a href=\"#fsAiM" + m + "\">" + h(mLabel(m)) + "</a></td><td class=\"num\">" + t.n + "</td><td class=\"num\">" + money(t.ex) + "</td><td class=\"num\">" + money(t.tx) + "</td><td class=\"num\"><b>" + money(t.tot) + "</b></td><td class=\"num\">" + money(t.tot - t.out) + "</td><td class=\"num\">" + money(t.out) + "</td></tr>"; }).join("") || "<tr><td colspan=\"7\" class=\"muted\">No AMC invoices yet.</td></tr>") +
       "</tbody>" + (M.length > 1 ? "<tfoot><tr><td><b>Total</b></td><td class=\"num\"><b>" + GT.n + "</b></td><td class=\"num\"><b>" + money(GT.ex) + "</b></td><td class=\"num\"><b>" + money(GT.tx) + "</b></td><td class=\"num\"><b>" + money(GT.tot) + "</b></td><td class=\"num\"><b>" + money(GT.tot - GT.out) + "</b></td><td class=\"num\"><b>" + money(GT.out) + "</b></td></tr></tfoot>" : "") + "</table></div></div>";
-    var detail = M.length ? "<div class=\"card fs-ab\"><h3>Invoices</h3><div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">Print ticked on letterhead</button> <button type=\"button\" class=\"btn\" data-abbulk=\"0\">Print ticked on plain paper</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" +
+    var detail = M.length ? "<div class=\"card fs-ab\"><h3>Invoices</h3><div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">🖨 Print ticked</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" +
       "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th><input type=\"checkbox\" id=\"fsAbAll\" title=\"Tick all\"></th><th>Invoice</th><th>Date</th><th>Client</th><th>Contract</th><th class=\"num\">Excl. tax</th><th class=\"num\">Tax</th><th class=\"num\">Total</th><th class=\"num\">Unpaid</th><th>Print</th></tr></thead><tbody>" +
       M.map(function (m) {
         var t = sum(G[m]);
@@ -269,7 +288,7 @@
             var p = byId[projOf(r)] || {}, o = safe(function () { return outAR(r); }, 0);
             return "<tr><td><input type=\"checkbox\" class=\"fsAbCk\" value=\"" + h(r.id) + "\"" + (ST.sel[r.id] ? " checked" : "") + "></td><td class=\"mono\"><b>" + h(r.invoiceNo || "") + "</b>" + (r.amcGroup ? "<br><small class=\"muted\">part of a lump sum</small>" : "") + "</td><td>" + h(safe(function () { return fdate(r.invoiceDate); }, r.invoiceDate)) + "</td><td>" + h(((r.doc || {}).to || {}).name || client(p)) + "</td><td>" + h(p.name || r.customer || "") + "</td>" +
               "<td class=\"num\">" + money(num(r.amount) - num(r.outputTax)) + "</td><td class=\"num\">" + money(num(r.outputTax)) + "</td><td class=\"num\">" + money(num(r.amount)) + "</td><td class=\"num\">" + (o > 0 ? money(o) : "<span class=\"fs-g-pill ok\">Paid</span>") + "</td>" +
-              "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(r.id) + "\" data-lh=\"1\">Letterhead</button> <button type=\"button\" class=\"btn sm\" data-abprint=\"" + h(r.id) + "\" data-lh=\"0\">Plain</button></td></tr>";
+              "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(r.id) + "\">🖨 Print</button></td></tr>";
           }).join("");
       }).join("") + "</tbody></table></div></div>" : "";
     return "<div class=\"fs-ait\">" + head + summary + detail + "</div>";
@@ -313,12 +332,11 @@
   document.addEventListener("click", async function (e) {
     var b = e.target.closest && e.target.closest("#fsAbGo,[data-abprint],[data-abbulk]"); if (!b) return;
     e.preventDefault(); e.stopPropagation();
-    var find = function (id) { return safe(function () { return Store.data.receivables.find(function (r) { return r.id === id; }); }, null); };
-    if (b.hasAttribute("data-abprint")) { var r = find(b.getAttribute("data-abprint")); if (r) printSet([printable(r)], b.getAttribute("data-lh") === "1"); return; }
+    if (b.hasAttribute("data-abprint")) { pick([b.getAttribute("data-abprint")]); return; }
     if (b.hasAttribute("data-abbulk")) {
-      var R = []; document.querySelectorAll(".fsAbCk:checked").forEach(function (c) { var x = find(c.value); if (x) R.push(printable(x)); });
+      var R = []; document.querySelectorAll(".fsAbCk:checked").forEach(function (c) { if (find(c.value)) R.push(c.value); });
       if (!R.length) { var s = document.getElementById("fsAbN"); if (s) s.textContent = "Tick at least one invoice first."; return; }
-      printSet(R, b.getAttribute("data-abbulk") === "1"); return;
+      pick(R); return;
     }
     if (busy) return;
     var G = plan(); if (!G.length || blocked(G).length) return;
@@ -350,7 +368,7 @@
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
     ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-g th.c{text-align:center;white-space:nowrap;font-size:12px}.fs-g td{text-align:center;font-size:12px;white-space:nowrap}.fs-g td:first-child{text-align:left;white-space:normal;min-width:200px}.fs-g td.num{text-align:right}.fs-g-x{color:#aab}" +
     ".fs-g-pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}.fs-g-pill.ok{background:#2e7d32;color:#fff}.fs-g-pill.bl{background:#1F6FB8;color:#fff}.fs-g-pill.due{background:#f2a516;color:#fff}.fs-g-due{color:#a15c00;font-weight:600}" +
-    ".fs-ai-mh td{background:#eef3f9;border-top:2px solid #cfd9e6}.fs-lhco{display:inline-flex;gap:6px;align-items:center;margin-left:10px;font-size:13px}@media print{.fs-lhco{display:none!important}}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
+    ".fs-ai-mh td{background:#eef3f9;border-top:2px solid #cfd9e6}.fs-pk{position:fixed;inset:0;background:rgba(15,30,50,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px}.fs-pk-b{background:#fff;color:#1b2b3c;border-radius:12px;padding:18px 20px;width:min(440px,100%);box-shadow:0 20px 50px rgba(0,0,0,.3)}.fs-pk-b h3{margin:0 0 4px}.fs-pk-o{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #d6dfe9;border-radius:8px;margin:8px 0;cursor:pointer}.fs-pk-o input{position:absolute;opacity:0;pointer-events:none}.fs-pk-t{flex:none;width:20px;height:20px;border:2px solid #8aa0b8;border-radius:5px;display:inline-flex;align-items:center;justify-content:center}.fs-pk-o input:checked+.fs-pk-t{background:#1F6FB8;border-color:#1F6FB8}.fs-pk-o input:checked+.fs-pk-t::after{content:\"\\2713\";color:#fff;font-size:14px;font-weight:700}.fs-pk-o:has(input:checked){border-color:#1F6FB8;background:#eef5fc}.fs-pk-o input:focus-visible+.fs-pk-t{outline:2px solid #0B8BD0}@media print{.fs-pk{display:none!important}}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
   (document.head || document.documentElement).appendChild(css);
   function start() { if (!hook()) setTimeout(start, 400); }
   start();
