@@ -246,6 +246,7 @@
       var cells = M.map(function (m) {
         var b = billedKey(p, m);
         if (b) { nB++; var paid = safe(function () { return outAR(b); }, 1) <= 0; return "<td class=\"fs-g-b\" title=\"" + h(b.invoiceNo) + (paid ? " paid" : " unpaid") + "\"><span class=\"mono\">" + h(String(b.invoiceNo || "").replace(/^.*?(\d+)$/, "$1")) + "</span><br><span class=\"fs-g-pill " + (paid ? "ok" : "bl") + "\">" + (paid ? "Paid" : "Billed") + "</span></td>"; }
+        if (safe(function () { return window.FS_AMCFREE.is(p, m); }, false) && (!s || m >= s) && (!e || m <= e)) return "<td class=\"fs-g-d\" title=\"Free maintenance month\"><span class=\"fs-g-pill free\">Free</span></td>";
         if (safe(function () { return amcDue(p, m); }, false)) { nD++; return "<td class=\"fs-g-d\"><span class=\"fs-g-pill due\">Due</span></td>"; }
         if ((s && m < s) || (e && m > e)) return "<td class=\"fs-g-x\"></td>";
         return "<td class=\"fs-g-x\" title=\"Covered by a " + h((p.amcFreq || "").toLowerCase()) + " bill\">·</td>";

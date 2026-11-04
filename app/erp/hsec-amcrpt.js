@@ -62,7 +62,11 @@
     });
     var names = Object.keys(cl).sort(), T = { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 };
     names.forEach(function (n) { var c = cl[n]; M.forEach(function (m) { T.inv[m] = (T.inv[m] || 0) + (c.inv[m] || 0); T.rec[m] = (T.rec[m] || 0) + (c.rec[m] || 0); }); T.ti += c.ti; T.tr += c.tr; T.bal += c.bal; });
-    var cell = function (c, m) { var a = c.inv[m] || 0, b = c.rec[m] || 0; return "<td class=\"num\">" + (a ? money(a) : "") + "</td><td class=\"num rc\">" + (b ? money(b) : "") + "</td>"; };
+    // a month free for every contract of the client (hassan, 2026-11-04: free maintenance months "same in reporting")
+    var freeP = {}; projs().forEach(function (p) { var n = clientOf(p); (freeP[n] = freeP[n] || []).push(p); });
+    var free = function (c, m) { var P = c.name && freeP[c.name]; return !!(P && P.length && P.every(function (p) { return safe(function () { return window.FS_AMCFREE.is(p, m); }, false); })); };
+    names.forEach(function (n) { cl[n].name = n; });
+    var cell = function (c, m) { var a = c.inv[m] || 0, b = c.rec[m] || 0; if (!a && !b && free(c, m)) return "<td class=\"free\" colspan=\"2\">Free</td>"; return "<td class=\"num\">" + (a ? money(a) : "") + "</td><td class=\"num rc\">" + (b ? money(b) : "") + "</td>"; };
     var head = "<tr><th rowspan=\"2\">Client</th>" + M.map(function (m) { return "<th colspan=\"2\" class=\"c\">" + h(mName(m)) + "</th>"; }).join("") + "<th rowspan=\"2\" class=\"num\">Invoiced</th><th rowspan=\"2\" class=\"num\">Received</th><th rowspan=\"2\" class=\"num\">Balance (all time)</th></tr><tr>" + M.map(function () { return "<th class=\"num\">Inv.</th><th class=\"num rc\">Rec.</th>"; }).join("") + "</tr>";
     var body = names.map(function (n) { var c = cl[n]; return "<tr><td>" + h(n) + "</td>" + M.map(function (m) { return cell(c, m); }).join("") + "<td class=\"num\"><b>" + money(c.ti) + "</b></td><td class=\"num\"><b>" + money(c.tr) + "</b></td><td class=\"num\"><b>" + money(c.bal) + "</b></td></tr>"; }).join("");
     var csv = [["Client"].concat(M.map(function (m) { return [m + " invoiced", m + " received"]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat(["Invoiced", "Received", "Balance"])]
@@ -103,7 +107,7 @@
     ev.sort(function (a, b) { return String(a.d).localeCompare(String(b.d)) || (a.dr ? -1 : 1); });
     var led = ev.map(function (e) { run += e.dr - e.cr; return "<tr><td style=\"white-space:nowrap\">" + h(fd(e.d)) + "</td><td>" + h(e.t) + "</td><td>" + h(e.desc) + "</td><td class=\"mono\">" + h(e.ref) + "</td><td class=\"num\">" + (e.dr ? money(e.dr) : "") + "</td><td class=\"num\">" + (e.cr ? money(e.cr) : "") + "</td><td class=\"num\">" + money(run) + "</td></tr>"; }).join("");
     var info = "<div class=\"fs-amcr-info\"><h4>Client information</h4><div class=\"fs-amcr-g\">" +
-      [["Client", ST.client], ["Contract", P.map(function (q) { return (q.code ? q.code + " " : "") + q.name; }).join("; ")], ["Billing", p.amcFreq || "Monthly"], ["Fee per month (excl. tax)", p.amcFee ? money(num(p.amcFee)) : ""], ["Start", fd(p.amcStart)], ["End / renewal", fd(p.amcEnd)], ["Company", p.entity || ""], ["Balance", "PKR " + money(tb)]]
+      [["Client", ST.client], ["Contract", P.map(function (q) { return (q.code ? q.code + " " : "") + q.name; }).join("; ")], ["Billing", p.amcFreq || "Monthly"], ["Free maintenance months", P.map(function (q) { return safe(function () { return window.FS_AMCFREE.label(window.FS_AMCFREE.months(q)); }, ""); }).filter(Boolean).join("; ") || "None"], ["Fee per month (excl. tax)", p.amcFee ? money(num(p.amcFee)) : ""], ["Start", fd(p.amcStart)], ["End / renewal", fd(p.amcEnd)], ["Company", p.entity || ""], ["Balance", "PKR " + money(tb)]]
         .map(function (x) { return "<div><small>" + h(x[0]) + "</small><b>" + h(x[1] || "–") + "</b></div>"; }).join("") + "</div></div>";
     var csv = [["Invoice date", "Invoice no", "Due date", "Period from", "Period to", "Invoice amount", "Received", "Received on", "Balance"]].concat(X.map(function (x) { return [x.r.invoiceDate, x.r.invoiceNo || "", x.r.dueDate || "", x.m, x.to, Math.round(num(x.r.amount)), Math.round(x.rec), x.rc.filter(function (q) { return q.posted; }).map(function (q) { return q.date; }).join(" "), Math.round(x.bal)]; }));
     return { title: "AMC customer ledger – " + ST.client, sub: "All AMC invoices and receipts for this client.", csv: csv,
@@ -207,7 +211,7 @@
   // (their values are kept). Choosing another type shows the full form again. An AMC's contract value is worked out
   // from the monthly fee and the AMC dates until it is typed by hand.
   var PF_KEEP = {
-    "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "pm", "status"],
+    "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "amcFree", "contractValue", "pm", "status"],
     "Supply only": ["code", "name", "customer", "custAddress", "custNtn", "custStrn", "poNo", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"]
   };
   var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"] };
@@ -264,6 +268,10 @@
     var a = String((document.getElementById("f_amcStart") || {}).value || ""), b = String((document.getElementById("f_amcEnd") || {}).value || "");
     if (!fee || !/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b) || b < a) return;
     var months = Math.max(1, Math.round((new Date(b) - new Date(a)) / 86400000 / 30.44));
+    // free maintenance months inside the AMC period are not charged
+    var fr = safe(function () { return window.FS_AMCFREE.parse((document.getElementById("f_amcFree") || {}).value).months; }, []) || [];
+    months = Math.max(0, months - fr.filter(function (m) { return m >= a.slice(0, 7) && m <= b.slice(0, 7); }).length);
+    if (!months) return;
     if (cv.value && num(cv.getAttribute("data-fs-auto")) !== num(cv.value)) return; // typed by hand: leave it
     var v = String(Math.round(fee * months)); cv.value = v; cv.setAttribute("data-fs-auto", v);
     cv.dispatchEvent(new Event("input", { bubbles: true }));
@@ -272,7 +280,7 @@
   document.addEventListener("change", function (e) {
     if (!e.target || !e.target.id) return;
     if (e.target.id === "f_type") { safe(shapeProj, null); setTimeout(function () { safe(shapeProj, null); safe(amcValue, null); }, 0); }
-    if (/^f_amc(Fee|Start|End)$/.test(e.target.id)) safe(amcValue, null);
+    if (/^f_amc(Fee|Start|End|Free)$/.test(e.target.id)) safe(amcValue, null);
   });
 
   var css = document.createElement("style");
