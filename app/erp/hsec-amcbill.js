@@ -223,7 +223,7 @@
       "<p class=\"err\" id=\"fsAbErr\"></p></div>";
     var D = made(), tot = function (k) { return D.reduce(function (t, x) { return t + x[k]; }, 0); };
     var list = "<div class=\"card fs-ab\"><h3>Invoices made: " + h(mLabel(M[0])) + (M.length > 1 ? " to " + h(mLabel(M[M.length - 1])) : "") + (ST.cli ? " · " + h(ST.cli) : "") + "</h3>" +
-      (D.length ? "<div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">🖨 Print ticked</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" : "") +
+      (D.length ? "<div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">🖨 Print ticked</button> <button type=\"button\" class=\"btn fs-ab-del\" data-abdelt=\"1\">🗑 Delete ticked</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" : "") +
       "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th><input type=\"checkbox\" id=\"fsAbAll\" title=\"Tick all\"></th><th>Invoice</th><th>Month</th><th>Client</th><th>Contracts</th><th class=\"num\">Amount (with tax)</th><th class=\"num\">Unpaid now</th><th>Print</th></tr></thead><tbody>" +
       (D.map(function (x) {
         var id = x.r.id, nos = x.G.map(function (g) { return g.invoiceNo; });
@@ -284,7 +284,7 @@
     var summary = "<div class=\"card fs-ab\"><h3>Month by month</h3><div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th>Month</th><th class=\"num\">Invoices</th><th class=\"num\">Amount excl. tax</th><th class=\"num\">Sales tax</th><th class=\"num\">Total</th><th class=\"num\">Received</th><th class=\"num\">Unpaid</th></tr></thead><tbody>" +
       (M.map(function (m) { var t = sum(G[m]); return "<tr><td><a href=\"#fsAiM" + m + "\">" + h(mLabel(m)) + "</a></td><td class=\"num\">" + t.n + "</td><td class=\"num\">" + money(t.ex) + "</td><td class=\"num\">" + money(t.tx) + "</td><td class=\"num\"><b>" + money(t.tot) + "</b></td><td class=\"num\">" + money(t.tot - t.out) + "</td><td class=\"num\">" + money(t.out) + "</td></tr>"; }).join("") || "<tr><td colspan=\"7\" class=\"muted\">No AMC invoices yet.</td></tr>") +
       "</tbody>" + (M.length > 1 ? "<tfoot><tr><td><b>Total</b></td><td class=\"num\"><b>" + GT.n + "</b></td><td class=\"num\"><b>" + money(GT.ex) + "</b></td><td class=\"num\"><b>" + money(GT.tx) + "</b></td><td class=\"num\"><b>" + money(GT.tot) + "</b></td><td class=\"num\"><b>" + money(GT.tot - GT.out) + "</b></td><td class=\"num\"><b>" + money(GT.out) + "</b></td></tr></tfoot>" : "") + "</table></div></div>";
-    var detail = M.length ? "<div class=\"card fs-ab\"><h3>Invoices</h3><div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">🖨 Print ticked</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" +
+    var detail = M.length ? "<div class=\"card fs-ab\"><h3>Invoices</h3><div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">🖨 Print ticked</button> <button type=\"button\" class=\"btn fs-ab-del\" data-abdelt=\"1\">🗑 Delete ticked</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" +
       "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th><input type=\"checkbox\" id=\"fsAbAll\" title=\"Tick all\"></th><th>Invoice</th><th>Date</th><th>Client</th><th>Contract</th><th class=\"num\">Excl. tax</th><th class=\"num\">Tax</th><th class=\"num\">Total</th><th class=\"num\">Unpaid</th><th>Print</th></tr></thead><tbody>" +
       M.map(function (m) {
         var t = sum(G[m]);
@@ -339,30 +339,53 @@
   // must be reversed (the invoice's own "Reverse and delete", which posts a reversing voucher), so that is offered.
   var vouchersOf = function (r) { return safe(function () { return typeof srcJvs === "function" ? srcJvs("receivables", r.id) : Store.data.journals.filter(function (j) { return j.source && j.source.c === "receivables" && j.source.id === r.id; }); }, []) || []; };
   var isPosted = function (j) { return j.status === "Posted" || j.status === "Approved"; };
-  async function delInv(id) {
-    var r = safe(function () { return Store.data.receivables.find(function (x) { return x.id === id; }); }, null); if (!r) return;
-    var G = r.amcGroup ? group(r.amcGroup) : [r], nos = G.map(function (x) { return x.invoiceNo; }).join(", ");
-    var paid = G.filter(function (x) { return (x.receipts || []).length || num(x.received) || safe(function () { return outAR(x) < num(x.amount) - 0.5; }, false); });
-    if (paid.length) { alert("Invoice " + paid.map(function (x) { return x.invoiceNo; }).join(", ") + " already has money received against it, so it cannot be deleted. Reverse the receipt first, or issue a credit note."); return; }
-    var J = []; G.forEach(function (x) { vouchersOf(x).forEach(function (j) { if (J.indexOf(j) < 0) J.push(j); }); });
-    var P = J.filter(isPosted);
-    if (P.length) {
-      if (confirm("The voucher " + P.map(function (j) { return j.ref; }).join(", ") + " of invoice " + nos + " is already posted, so the invoice cannot simply be deleted: it has to be reversed (a reversing voucher is posted, then the invoice is deleted).\n\nOpen the invoice now? Use \"Reverse and delete\" at the bottom of it.")) safe(function () { openForm("receivables", G[0].id); }, null);
+  // one or many (hassan: "if we want to delete multiple invoices"): "Delete ticked" deletes every ticked invoice that
+  // can go and lists the ones that cannot (money received, or voucher posted) with the reason
+  async function delInv(ids) {
+    var find = function (id) { return safe(function () { return Store.data.receivables.find(function (x) { return x.id === id; }); }, null); };
+    var seen = {}, sets = [];
+    ids.map(find).filter(Boolean).forEach(function (r) {
+      var k = r.amcGroup || r.id; if (seen[k]) return; seen[k] = 1;
+      var G = r.amcGroup ? group(r.amcGroup) : [r], J = [];
+      G.forEach(function (x) { vouchersOf(x).forEach(function (j) { if (J.indexOf(j) < 0) J.push(j); }); });
+      var paid = G.some(function (x) { return (x.receipts || []).length || num(x.received) || safe(function () { return outAR(x) < num(x.amount) - 0.5; }, false); });
+      sets.push({ G: G, J: J, nos: G.map(function (x) { return x.invoiceNo; }).join(", "), why: paid ? "money received (reverse the receipt or issue a credit note)" : J.some(isPosted) ? "voucher " + J.filter(isPosted).map(function (j) { return j.ref; }).join(", ") + " is posted (open the invoice and use Reverse and delete)" : "" });
+    });
+    if (!sets.length) return;
+    var ok = sets.filter(function (x) { return !x.why; }), no = sets.filter(function (x) { return x.why; });
+    if (!ok.length) {
+      var one = no.length === 1 && no[0].why.indexOf("posted") >= 0;
+      if (one) { if (confirm("Invoice " + no[0].nos + " cannot simply be deleted: its " + no[0].why.replace(" (open the invoice and use Reverse and delete)", "") + ", so it has to be reversed (a reversing voucher is posted, then the invoice is deleted).\n\nOpen the invoice now? Use \"Reverse and delete\" at the bottom of it.")) safe(function () { openForm("receivables", no[0].G[0].id); }, null); }
+      else alert("Nothing deleted:\n" + no.map(function (x) { return "• " + x.nos + ": " + x.why; }).join("\n"));
       return;
     }
-    if (!confirm("Delete invoice " + nos + (G.length > 1 ? " (lump sum, " + G.length + " contracts)" : "") + (J.length ? " and its unposted voucher " + J.map(function (j) { return j.ref || "(unnumbered)"; }).join(", ") : "") + "?\n\nThe month shows as Due again and can be invoiced afresh. This cannot be undone.")) return;
+    var J = []; ok.forEach(function (x) { J = J.concat(x.J); });
+    var msg = "Delete " + (ok.length === 1 ? "invoice " + ok[0].nos + (ok[0].G.length > 1 ? " (lump sum, " + ok[0].G.length + " contracts)" : "") : ok.length + " invoices (" + ok.map(function (x) { return x.nos; }).join(", ") + ")") +
+      (J.length ? " and " + (J.length === 1 ? "its unposted voucher " : "their " + J.length + " unposted vouchers ") + J.map(function (j) { return j.ref || "(unnumbered)"; }).join(", ") : "") + "?\n\nThose months show as Due again and can be invoiced afresh. This cannot be undone." +
+      (no.length ? "\n\nNot deleted:\n" + no.map(function (x) { return "• " + x.nos + ": " + x.why; }).join("\n") : "");
+    if (!confirm(msg)) return;
+    var done = 0;
     try {
-      for (var i = 0; i < J.length; i++) await Store.remove("journals", J[i].id);
-      for (var k = 0; k < G.length; k++) await Store.remove("receivables", G[k].id);
-      delete ST.sel[id]; G.forEach(function (x) { delete ST.sel[x.id]; });
-      safe(function () { toast("Invoice " + nos + " deleted."); }, null);
-    } catch (x) { alert("Could not delete: " + ((x && x.message) || "not allowed") + "."); }
+      for (var s = 0; s < ok.length; s++) {
+        for (var i = 0; i < ok[s].J.length; i++) await Store.remove("journals", ok[s].J[i].id);
+        for (var k = 0; k < ok[s].G.length; k++) { await Store.remove("receivables", ok[s].G[k].id); delete ST.sel[ok[s].G[k].id]; }
+        done++;
+      }
+      safe(function () { toast(done === 1 ? "Invoice " + ok[0].nos + " deleted." : done + " invoices deleted."); }, null);
+    } catch (x) { alert("Deleted " + done + " of " + ok.length + ". Could not delete the rest: " + ((x && x.message) || "not allowed") + "."); }
     safe(render, null);
   }
   var busy = false;
   document.addEventListener("click", async function (e) {
     var dl = e.target.closest && e.target.closest("[data-abdel]");
-    if (dl) { e.preventDefault(); e.stopPropagation(); await delInv(dl.getAttribute("data-abdel")); return; }
+    if (dl) { e.preventDefault(); e.stopPropagation(); await delInv([dl.getAttribute("data-abdel")]); return; }
+    var dt = e.target.closest && e.target.closest("[data-abdelt]");
+    if (dt) {
+      e.preventDefault(); e.stopPropagation();
+      var T = [].map.call(document.querySelectorAll(".fsAbCk:checked"), function (c) { return c.value; });
+      if (!T.length) { var n = document.getElementById("fsAbN"); if (n) n.textContent = "Tick at least one invoice first."; return; }
+      await delInv(T); return;
+    }
     var b = e.target.closest && e.target.closest("#fsAbGo,[data-abprint],[data-abbulk]"); if (!b) return;
     e.preventDefault(); e.stopPropagation();
     if (b.hasAttribute("data-abprint")) { pick([b.getAttribute("data-abprint")]); return; }
