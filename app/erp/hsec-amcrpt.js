@@ -207,13 +207,13 @@
   // (their values are kept). Choosing another type shows the full form again. An AMC's contract value is worked out
   // from the monthly fee and the AMC dates until it is typed by hand.
   var PF_KEEP = {
-    "Maintenance contract (AMC)": ["code", "name", "customer", "entity", "type", "province", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "budgetCost", "pm", "status"],
-    "Supply only": ["code", "name", "customer", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "budgetCost", "advPct", "lcExpected", "paymentTerms", "start", "end", "pm", "status"]
+    "Maintenance contract (AMC)": ["code", "name", "customer", "entity", "type", "province", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "pm", "status"],
+    "Supply only": ["code", "name", "customer", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"]
   };
   var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"] };
   var PF_LBL = {
-    "Maintenance contract (AMC)": { contractValue: "Contract value for the whole AMC period (PKR)", budgetCost: "Budgeted cost for the whole AMC period (PKR)", pm: "Service engineer / account manager" },
-    "Supply only": { start: "Order date", end: "Delivery date", pm: "Sales / supply person", contractValue: "Order value (PKR)", budgetCost: "Budgeted cost of the parts (PKR)" }
+    "Maintenance contract (AMC)": { contractValue: "Contract value for the whole AMC period (PKR)", pm: "Service engineer / account manager" },
+    "Supply only": { start: "Order date", end: "Delivery date", pm: "Sales / supply person", contractValue: "Order value (PKR)" }
   };
   function pfLabel(w, txt) {
     var lab = w.querySelector("label") || w.firstElementChild; if (!lab) return;
@@ -232,8 +232,19 @@
       w.classList.toggle("fs-pf-hide", !!keep && keep.indexOf(k) < 0);
       pfLabel(w, lbl[k]);
     });
+    budgetSync();
     ["fsMsBox", "fsGtBox", "calcBox"].forEach(function (id) { var b = document.getElementById(id); if (b) b.classList.toggle("fs-pf-hide", box.indexOf(id) >= 0); });
   }
+  // Budgeted cost is required by the app but not asked for these jobs (hassan, 2026-11-04): while it is hidden it
+  // follows the contract value, unless someone typed a different figure before.
+  function budgetSync() {
+    var s = document.getElementById("f_type"), cv = document.getElementById("f_contractValue"), bc = document.getElementById("f_budgetCost");
+    if (!s || !cv || !bc || !PF_KEEP[s.value]) return;
+    if (bc.value && bc.getAttribute("data-fs-auto") !== bc.value) return;
+    bc.value = cv.value; bc.setAttribute("data-fs-auto", bc.value);
+    bc.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  document.addEventListener("input", function (e) { if (e.target && e.target.id === "f_contractValue") safe(budgetSync, null); });
   function amcValue() {
     var s = document.getElementById("f_type"), cv = document.getElementById("f_contractValue");
     if (!s || !cv || s.value !== "Maintenance contract (AMC)") return;
@@ -244,6 +255,7 @@
     if (cv.value && cv.getAttribute("data-fs-auto") !== cv.value) return; // typed by hand: leave it
     var v = String(Math.round(fee * months)); cv.value = v; cv.setAttribute("data-fs-auto", v);
     cv.dispatchEvent(new Event("input", { bubbles: true }));
+    budgetSync();
   }
   document.addEventListener("change", function (e) {
     if (!e.target || !e.target.id) return;
