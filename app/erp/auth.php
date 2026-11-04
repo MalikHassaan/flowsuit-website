@@ -149,7 +149,7 @@ function erp_sign_in(array $row): void
     $_SESSION['uid'] = (int) $row['id'];
     $_SESSION['admin'] = (bool) $row['is_admin'];
     $_SESSION['pwv'] = hash('sha256', $row['password_hash']);
-    $_SESSION['intro_due'] = 1; // the full opening film plays once, on the first app page after signing in
+    $_SESSION['intro_due'] = 1; // the full opening film plays on the first app page after the first sign-in of the day
     erp_db()->prepare('UPDATE users SET last_login = ? WHERE id = ?')->execute([erp_now(), $row['id']]);
 }
 
