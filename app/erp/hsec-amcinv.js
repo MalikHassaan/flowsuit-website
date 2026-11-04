@@ -13,7 +13,7 @@
 //  * The company's NTN, STRN, bank account and signatory are kept per company in settings (admin edits them in
 //    AMC billing › Invoice details per company), never in this public code.
 (function () {
-  /* global ivDoc, ivPdf, ivDocx, IV_LH, S, Store, settings, ivBody, ivWords, fmt, fmt2, fdate, esc, toast, render, ENTS, coLabel, amcTax, pstRates */
+  /* global ENTS, ivDoc, ivPdf, ivDocx, IV_LH, S, Store, settings, ivBody, ivWords, fmt, fmt2, fdate, esc, toast, render, ENTS, coLabel, amcTax, pstRates */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -181,24 +181,50 @@
 
   // ---- invoice details per company (admin; stored in settings.invCo)
   var KEYS = [["title", "Account title"], ["iban", "IBAN / account number"], ["bank", "Bank and branch"], ["ntn", "Our NTN"], ["strn", "Our STRN"], ["signName", "Signed by (name)"], ["signTitle", "Designation"]];
-  // more accounts (hassan, 2026-11-04: "on Jeewajee there are multiple account numbers"): one account per line
+  // more accounts (hassan, 2026-11-04: "on Jeewajee there are multiple account numbers"; then "give add button so
+  // that multiple banks can be added"): one row per account with an Add button; still stored as one line per account
+  // in invCo[company].more, so printing is unchanged
+  function banks(t) {
+    return lines(t).map(function (l) {
+      var g = function (k) { var m = new RegExp(k + "\\s*:\\s*([^|]*)", "i").exec(l); return m ? m[1].trim() : ""; }, x = { title: g("Account title"), iban: g("IBAN"), bank: g("Bank") };
+      return x.title || x.iban || x.bank ? x : { title: l, iban: "", bank: "" };
+    });
+  }
+  function bkRow(x) {
+    x = x || {};
+    return "<div class=\"fs-ai-bk\" data-aibk=\"1\"><label>Account title<input data-bk=\"title\" value=\"" + h(x.title || "") + "\"></label><label>IBAN / account number<input data-bk=\"iban\" value=\"" + h(x.iban || "") + "\"></label>" +
+      "<label>Bank and branch<input data-bk=\"bank\" value=\"" + h(x.bank || "") + "\"></label><button type=\"button\" class=\"btn sm\" data-aibkdel=\"1\" title=\"Remove this account\">✕</button></div>";
+  }
   function panel(ents) {
-    if (!window.FS_ADMIN || !ents.length) return "";
+    if (!window.FS_ADMIN) return "";
+    // every company an AMC invoice can be printed on (hassan: "give me same for the JPL as well")
+    ents = ents.slice(); safe(function () { lhList(ents[0]).concat(ENTS()).forEach(function (k) { if (typeof k === "string" && k && ents.indexOf(k) < 0) ents.push(k); }); }, null);
+    ents = ents.filter(Boolean); if (!ents.length) return "";
     return "<details class=\"card fs-ai-set\"><summary><b>Invoice details per company</b> <span class=\"muted\">(bank account, NTN / STRN and signatory printed on AMC invoices)</span></summary>" +
       ents.map(function (e) {
         var c = co(e);
         return "<div class=\"fs-ai-co\" data-aico=\"" + h(e) + "\"><h4>" + h(safe(function () { return coLabel(e); }, e)) + "</h4><div class=\"fs-ai-g\">" +
           KEYS.map(function (k) { return "<label>" + h(k[1]) + "<input data-aik=\"" + k[0] + "\" value=\"" + h(c[k[0]] || "") + "\"></label>"; }).join("") +
-          "</div><label class=\"fs-ai-nt\">More bank accounts (one account per line, e.g. Account title: … | IBAN: … | Bank: …)<textarea data-aik=\"more\" rows=\"3\">" + h(c.more || "") + "</textarea></label><label class=\"fs-ai-nt\">Notes on invoices (one per line; blank = the standard cheque / payment / system-generated lines; - = none)<textarea data-aik=\"notes\" rows=\"3\">" + h(c.notes || "") + "</textarea></label><button type=\"button\" class=\"btn sm pri\" data-aisave=\"" + h(e) + "\">Save " + h(e) + "</button> <span class=\"muted\" data-aimsg=\"" + h(e) + "\"></span></div>";
+          "</div><div class=\"fs-ai-nt\"><b>More bank accounts of " + h(e) + "</b> <span class=\"muted\">(printed under the main account on " + h(e) + " letterhead invoices)</span><div data-aibks>" + banks(c.more).map(bkRow).join("") + "</div>" +
+          "<button type=\"button\" class=\"btn sm\" data-aibkadd=\"1\">+ Add bank account</button></div><label class=\"fs-ai-nt\">Notes on invoices (one per line; blank = the standard cheque / payment / system-generated lines; - = none)<textarea data-aik=\"notes\" rows=\"3\">" + h(c.notes || "") + "</textarea></label><button type=\"button\" class=\"btn sm pri\" data-aisave=\"" + h(e) + "\">Save " + h(e) + "</button> <span class=\"muted\" data-aimsg=\"" + h(e) + "\"></span></div>";
       }).join("") + "</details>";
   }
   window.FS_AMCINV.panel = panel;
-  window.FS_AMCINV.lhList = function (own) { var L = [own]; safe(function () { Object.keys(IV_LH).forEach(function (k) { if (L.indexOf(k) < 0) L.push(k); }); }, null); return L; };
+  function lhList(own) { var L = [own]; safe(function () { Object.keys(IV_LH).forEach(function (k) { if (L.indexOf(k) < 0) L.push(k); }); }, null); return L.filter(Boolean); }
+  window.FS_AMCINV.lhList = lhList;
   document.addEventListener("click", async function (e) {
+    var add = e.target.closest && e.target.closest("[data-aibkadd]");
+    if (add) { e.preventDefault(); var L = add.parentNode.querySelector("[data-aibks]"); L.insertAdjacentHTML("beforeend", bkRow()); L.lastChild.querySelector("input").focus(); return; }
+    var del = e.target.closest && e.target.closest("[data-aibkdel]");
+    if (del) { e.preventDefault(); del.closest("[data-aibk]").remove(); return; }
     var b = e.target.closest && e.target.closest("[data-aisave]"); if (!b) return;
     e.preventDefault();
     var ent = b.getAttribute("data-aisave"), box = b.closest("[data-aico]"), msg = box.querySelector("[data-aimsg]"), v = {};
     box.querySelectorAll("[data-aik]").forEach(function (i) { v[i.getAttribute("data-aik")] = i.value.trim(); });
+    v.more = [].map.call(box.querySelectorAll("[data-aibk]"), function (row) {
+      var g = function (k) { return row.querySelector("[data-bk=" + k + "]").value.replace(/\|/g, "/").trim(); }, t = g("title"), i = g("iban"), k = g("bank");
+      return [t ? "Account title: " + t : "", i ? "IBAN: " + i : "", k ? "Bank: " + k : ""].filter(Boolean).join(" | ");
+    }).filter(Boolean).join("\n");
     var s = safe(function () { return settings(); }, {}), all = Object.assign({}, s.invCo || {}); all[ent] = v;
     b.disabled = true;
     try { await Store.save("settings", Object.assign({}, s, { id: "main", invCo: all })); msg.textContent = "Saved. New and reprinted AMC invoices use it."; }
@@ -231,7 +257,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".qsheet .fs-ai .fs-ai-head td{vertical-align:top}.fs-ai-to{margin:4px 2px;line-height:1.55}.qsheet .fs-ai table.fs-ai-meta{border-collapse:collapse}.qsheet .fs-ai table.fs-ai-meta td{border:0!important;padding:1px 6px 1px 0}" +
-    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-ed{cursor:text}.fs-ai-ed:hover{outline:1px dashed #1F6FB8;outline-offset:-3px}.fs-ai-ed:focus{outline:2px solid #1F6FB8;outline-offset:-3px;background:#f5f9ff}@media print{.fs-ai-ed:hover,.fs-ai-ed:focus{outline:0!important;background:none!important}}body.printing .fs-ai-ed{outline:0!important;background:none!important}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-ai-bank p{margin:0 0 3px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
+    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-ed{cursor:text}.fs-ai-ed:hover{outline:1px dashed #1F6FB8;outline-offset:-3px}.fs-ai-ed:focus{outline:2px solid #1F6FB8;outline-offset:-3px;background:#f5f9ff}@media print{.fs-ai-ed:hover,.fs-ai-ed:focus{outline:0!important;background:none!important}}body.printing .fs-ai-ed{outline:0!important;background:none!important}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-ai-bank p{margin:0 0 3px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}.fs-ai-bk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin:6px 0}.fs-ai-bk label{display:flex;flex-direction:column;gap:3px;font-size:12px}.fs-ai-nt [data-aibkadd]{align-self:flex-start;margin-top:4px}@media(max-width:700px){.fs-ai-bk{grid-template-columns:1fr}}" +
     ".fs-ai-set{margin:12px 0}.fs-ai-set summary{cursor:pointer}.fs-ai-co{border-top:1px solid #e3e8ee;padding:8px 0}.fs-ai-co h4{margin:4px 0 6px}" +
     ".fs-ai-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.fs-ai-g label{display:flex;flex-direction:column;gap:3px;font-size:12px}@media (max-width:900px){.fs-ai-g{grid-template-columns:1fr 1fr}}";
   (document.head || document.documentElement).appendChild(css);
