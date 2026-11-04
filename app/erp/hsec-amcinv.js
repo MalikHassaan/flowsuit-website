@@ -3,8 +3,9 @@
 // while applying the tax, on some invoices sales tax is exempt, add that as well; and account details ... use this on
 // invoices as well", with a photo of a JPL sale tax invoice).
 //  * Project form (AMC and supply): Customer address, Customer NTN, Customer STRN, PO / agreement number, Sales tax
-//    (Taxable / Exempt) and an exemption reference. AMC billing will not make an invoice until the address, NTN and
-//    PO number are filled in.
+//    (Taxable / Exempt) and an exemption reference. AMC billing will not make an invoice until the address (and, at first, NTN and
+//    PO number are filled in. (Later the same day: "PO and NTN is optional"; only the customer name and address are
+//    required, and a blank PO number or NTN is left off the invoice.)
 //  * Invoices made by AMC billing print in the photo's layout: customer name, address and NTN on the left; invoice
 //    number, date, PO number, currency and the company's NTN / STRN on the right; a line table with Qty, Unit price,
 //    Gross amount, sales tax and Net amount and a TOTAL row; amount in words; the company's bank details; the signatory.
@@ -29,8 +30,7 @@
     var m = [];
     if (!String(p.customer || "").trim()) m.push("customer name");
     if (!String(p.custAddress || "").trim()) m.push("customer address");
-    if (!String(p.custNtn || "").trim()) m.push("customer NTN");
-    if (!String(p.poNo || "").trim()) m.push("PO / agreement number");
+    // hassan, 2026-11-04: "PO and NTN is optional"
     return m;
   }
   // the parts of a new AMC invoice's document that come from the project and the company
@@ -38,7 +38,7 @@
     var c = co(p.entity), ex = exempt(p);
     var bank = [c.title ? "Account title: " + c.title : "", c.iban ? "IBAN: " + c.iban : "", c.bank ? "Bank: " + c.bank : ""].filter(Boolean).join("\n");
     return { layout: "amctax", title: ex || !tax ? "INVOICE" : "SALES TAX INVOICE", to: { name: String(p.customer || p.name || "").trim(), address: String(p.custAddress || "").trim(), attn: "" },
-      buyerTax: String(p.custNtn || "").trim(), buyerStrn: String(p.custStrn || "").trim(), poRef: String(p.poNo || "").trim() || p.code || "", poDate: "",
+      buyerTax: String(p.custNtn || "").trim(), buyerStrn: String(p.custStrn || "").trim(), poRef: String(p.poNo || "").trim(), poDate: "",
       taxPct: ex ? 0 : tax, exempt: ex, exemptRef: ex ? String(p.amcTaxNote || "").trim() : "", taxLabel: taxShort(p), currency: "PKR",
       sellerNtn: c.ntn || "", sellerStrn: c.strn || "", bank: bank, signoff: [c.signName || "", c.signTitle || ""].filter(Boolean).join("\n") };
   }
@@ -48,7 +48,7 @@
   function body(M) {
     var r = M.r, d = M.d, p = proj(r) || {}, c = co(r.entity), T = M.T, ex = d.exempt || exempt(p) && !num(d.taxPct), pct = ex ? 0 : num(d.taxPct);
     var to = d.to || {}, name = to.name || p.customer || r.customer || "", addr = lines(to.address || p.custAddress), ntn = d.buyerTax || p.custNtn || "", strn = d.buyerStrn || p.custStrn || "";
-    var po = d.poRef || p.poNo || "", sN = d.sellerNtn || c.ntn || "", sS = d.sellerStrn || c.strn || "";
+    var po = d.poRef && d.poRef !== p.code ? d.poRef : (p.poNo || ""), sN = d.sellerNtn || c.ntn || "", sS = d.sellerStrn || c.strn || "";
     var bank = lines(d.bank || [c.title ? "Account title: " + c.title : "", c.iban ? "IBAN: " + c.iban : "", c.bank ? "Bank: " + c.bank : ""].filter(Boolean).join("\n"));
     var so = lines(d.signoff && !/^For and on behalf of/.test(d.signoff) ? d.signoff : [c.signName || "", c.signTitle || ""].filter(Boolean).join("\n"));
     var dd = function (x) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(x || "")); return m ? m[3] + "/" + m[2] + "/" + m[1] : h(x); };
@@ -59,7 +59,7 @@
       return "<tr><td class=\"c\">" + (i + 1) + ".</td><td>" + h(l.name) + (l.period ? "<br><b>(" + h(l.period) + ")</b>" : "") + (l.specs ? "<div class=\"fs-ai-sp\">" + h(l.specs) + "</div>" : "") + "</td>" +
         "<td class=\"c\">" + h(String(num(l.qty)).padStart(2, "0")) + "</td><td class=\"r\">" + m2(num(l.unit)) + "</td><td class=\"r\">" + m2(g) + "</td><td class=\"r\">" + (ex ? "Exempt" : m2(t)) + "</td><td class=\"r\">" + m2(g + t) + "</td></tr>";
     }).join("");
-    var meta = [["Invoice Number", h(r.invoiceNo || "")], ["Invoice Date", dd(r.invoiceDate)], ["PO Number", h(po)], ["Currency", h(d.currency || "PKR")]]
+    var meta = [["Invoice Number", h(r.invoiceNo || "")], ["Invoice Date", dd(r.invoiceDate)]].concat(po ? [["PO Number", h(po)]] : []).concat([["Currency", h(d.currency || "PKR")]])
       .concat(sN ? [["NTN", h(sN)]] : []).concat(sS ? [["STRN", h(sS)]] : []);
     return "<div class=\"iv fs-ai\"><h1>" + h(ex ? "INVOICE" : (d.title || "SALES TAX INVOICE")) + "</h1>" +
       "<table class=\"ivb fs-ai-head\"><colgroup><col style=\"width:52%\"><col></colgroup><tr><td><div class=\"fs-ai-to\">" + [h(name)].concat(addr.map(h)).join("<br>") +
@@ -77,9 +77,9 @@
   // ---- project form fields
   var NEW = [
     { k: "custAddress", l: "Customer address", t: "textarea", hint: "Printed on the invoice under the customer's name." },
-    { k: "custNtn", l: "Customer NTN", hint: "Printed on the invoice. Required for AMC invoices." },
+    { k: "custNtn", l: "Customer NTN", hint: "Optional. Printed on the invoice when filled in." },
     { k: "custStrn", l: "Customer STRN (if any)" },
-    { k: "poNo", l: "PO / agreement number", hint: "The customer's purchase order or the signed agreement number. Printed as PO Number." },
+    { k: "poNo", l: "PO / agreement number", hint: "Optional: the customer's purchase order or signed agreement number, printed as PO Number." },
     { k: "amcTaxMode", l: "Sales tax", t: "select", o: ["Taxable", "Exempt"], hint: "Exempt: invoices carry no sales tax." },
     { k: "amcTaxNote", l: "Exemption reference (if exempt)", hint: "e.g. the exemption certificate or SRO number; printed on the invoice." }
   ];
