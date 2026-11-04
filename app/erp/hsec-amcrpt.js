@@ -207,8 +207,8 @@
   // (their values are kept). Choosing another type shows the full form again. An AMC's contract value is worked out
   // from the monthly fee and the AMC dates until it is typed by hand.
   var PF_KEEP = {
-    "Maintenance contract (AMC)": ["code", "name", "customer", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "pm", "status"],
-    "Supply only": ["code", "name", "customer", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"]
+    "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "pm", "status"],
+    "Supply only": ["code", "name", "customer", "custAddress", "custNtn", "custStrn", "poNo", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"]
   };
   var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"] };
   var PF_LBL = {
