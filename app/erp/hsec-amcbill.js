@@ -14,7 +14,7 @@
 //    "Print ticked" (one print, each invoice on its own page). Printing uses the normal invoice template and the
 //    company's letterhead (the imported JSPL letterhead for JSPL).
 (function () {
-  /* global Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
+  /* global special, MODS, TAB_HOME, TITLE, Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -190,6 +190,72 @@
     list += safe(function () { return window.FS_AMCINV ? window.FS_AMCINV.panel(Object.keys(ents).sort()) : ""; }, "");
     return { card: card, list: list };
   }
+  // ---- month by month: which months of each contract are billed (hassan, 2026-11-04: "month wise segregation of which
+  // month invoices are being made are not shown on the screen")
+  var short = function (m) { return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+m.slice(5, 7) - 1] + " " + m.slice(2, 4); };
+  function grid() {
+    var C = contracts().filter(function (p) { return !ST.cli || client(p) === ST.cli; });
+    var to = ST.to || cur(), first = C.reduce(function (a, p) { var s = String(p.amcStart || "").slice(0, 7); return s && (!a || s < a) ? s : a; }, ""), from = addM(to, -11);
+    if (first && first > from) from = first; if (from > to) from = to;
+    var M = []; for (var m = from; m <= to; m = addM(m, 1)) M.push(m);
+    var rows = C.map(function (p) {
+      var s = String(p.amcStart || "").slice(0, 7), e = String(p.amcEnd || "").slice(0, 7), nB = 0, nD = 0;
+      var cells = M.map(function (m) {
+        var b = billedKey(p, m);
+        if (b) { nB++; var paid = safe(function () { return outAR(b); }, 1) <= 0; return "<td class=\"fs-g-b\" title=\"" + h(b.invoiceNo) + (paid ? " paid" : " unpaid") + "\"><span class=\"mono\">" + h(String(b.invoiceNo || "").replace(/^.*?(\d+)$/, "$1")) + "</span><br><span class=\"fs-g-pill " + (paid ? "ok" : "bl") + "\">" + (paid ? "Paid" : "Billed") + "</span></td>"; }
+        if (safe(function () { return amcDue(p, m); }, false)) { nD++; return "<td class=\"fs-g-d\"><span class=\"fs-g-pill due\">Due</span></td>"; }
+        if ((s && m < s) || (e && m > e)) return "<td class=\"fs-g-x\"></td>";
+        return "<td class=\"fs-g-x\" title=\"Covered by a " + h((p.amcFreq || "").toLowerCase()) + " bill\">·</td>";
+      }).join("");
+      return "<tr><td><b>" + h(p.name || "") + "</b> <span class=\"muted\">" + h(p.code || "") + "</span><br><small class=\"muted\">" + h(client(p)) + " · " + h(p.amcFreq || "Monthly") + " · Rs " + money(num(p.amcFee)) + "/month</small></td>" + cells +
+        "<td class=\"num\"><b>" + nB + "</b> billed" + (nD ? "<br><span class=\"fs-g-due\">" + nD + " due</span>" : "") + "</td></tr>";
+    }).join("");
+    return "<div class=\"card fs-ab\"><h3>Billing by month: " + h(mLabel(M[0])) + " to " + h(mLabel(M[M.length - 1])) + (ST.cli ? " · " + h(ST.cli) : "") + "</h3>" +
+      "<p class=\"muted\" style=\"margin-top:0\">Each box is one month: the invoice number when billed (Paid once received), Due when not billed yet. Change \"To month\" above to look further back.</p>" +
+      "<div class=\"tw\"><table class=\"fs-ab-t fs-g\"><thead><tr><th>Contract</th>" + M.map(function (m) { return "<th class=\"c\">" + h(short(m)) + "</th>"; }).join("") + "<th class=\"num\">Total</th></tr></thead><tbody>" +
+      (rows || "<tr><td colspan=\"" + (M.length + 2) + "\" class=\"muted\">No AMC contracts.</td></tr>") + "</tbody></table></div></div>";
+  }
+
+  // ---- AMC › AMC invoices: every AMC invoice, month by month, with totals (hassan, 2026-11-04: "give me invoices tab as
+  // well to see the total invoices month wise")
+  var IT = { cli: "", yr: "" };
+  var invMonth = function (r) { return String(r.amcKey || "").split("|")[1] || String(r.invoiceDate || "").slice(0, 7); };
+  function invTab() {
+    var C = contracts(), byId = {}; C.forEach(function (p) { byId[p.id] = p; });
+    var all = safe(function () { return byEnt(Store.data.receivables); }, []).filter(function (r) { return r.status !== "Void" && (r.amcKey || byId[r.projectId]); });
+    var yrs = {}; all.forEach(function (r) { yrs[invMonth(r).slice(0, 4)] = 1; });
+    var clients = {}; C.forEach(function (p) { clients[client(p)] = 1; });
+    var R = all.filter(function (r) { var p = byId[projOf(r)] || {}; return (!IT.cli || client(p) === IT.cli) && (!IT.yr || invMonth(r).slice(0, 4) === IT.yr); });
+    var G = {}; R.forEach(function (r) { var m = invMonth(r); (G[m] = G[m] || []).push(r); });
+    var M = Object.keys(G).sort().reverse();
+    var sum = function (L) { var t = { n: L.length, ex: 0, tx: 0, tot: 0, out: 0 }; L.forEach(function (r) { t.tot += num(r.amount); t.tx += num(r.outputTax); t.out += safe(function () { return outAR(r); }, 0); }); t.ex = t.tot - t.tx; return t; };
+    var GT = sum(R);
+    var head = "<div class=\"fs-ab-ctl\" style=\"margin-bottom:10px\"><label>Client <select id=\"fsAiCli\"><option value=\"\">All clients</option>" + Object.keys(clients).sort().map(function (c) { return "<option" + (IT.cli === c ? " selected" : "") + ">" + h(c) + "</option>"; }).join("") + "</select></label>" +
+      "<label>Year <select id=\"fsAiYr\"><option value=\"\">All years</option>" + Object.keys(yrs).sort().reverse().map(function (y) { return "<option" + (IT.yr === y ? " selected" : "") + ">" + h(y) + "</option>"; }).join("") + "</select></label>" +
+      "<span class=\"muted\">" + GT.n + " invoice" + (GT.n === 1 ? "" : "s") + " · Rs " + money(GT.tot) + " with tax · unpaid Rs " + money(GT.out) + "</span></div>";
+    var summary = "<div class=\"card fs-ab\"><h3>Month by month</h3><div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th>Month</th><th class=\"num\">Invoices</th><th class=\"num\">Amount excl. tax</th><th class=\"num\">Sales tax</th><th class=\"num\">Total</th><th class=\"num\">Received</th><th class=\"num\">Unpaid</th></tr></thead><tbody>" +
+      (M.map(function (m) { var t = sum(G[m]); return "<tr><td><a href=\"#fsAiM" + m + "\">" + h(mLabel(m)) + "</a></td><td class=\"num\">" + t.n + "</td><td class=\"num\">" + money(t.ex) + "</td><td class=\"num\">" + money(t.tx) + "</td><td class=\"num\"><b>" + money(t.tot) + "</b></td><td class=\"num\">" + money(t.tot - t.out) + "</td><td class=\"num\">" + money(t.out) + "</td></tr>"; }).join("") || "<tr><td colspan=\"7\" class=\"muted\">No AMC invoices yet.</td></tr>") +
+      "</tbody>" + (M.length > 1 ? "<tfoot><tr><td><b>Total</b></td><td class=\"num\"><b>" + GT.n + "</b></td><td class=\"num\"><b>" + money(GT.ex) + "</b></td><td class=\"num\"><b>" + money(GT.tx) + "</b></td><td class=\"num\"><b>" + money(GT.tot) + "</b></td><td class=\"num\"><b>" + money(GT.tot - GT.out) + "</b></td><td class=\"num\"><b>" + money(GT.out) + "</b></td></tr></tfoot>" : "") + "</table></div></div>";
+    var detail = M.length ? "<div class=\"card fs-ab\"><h3>Invoices</h3><div class=\"actions\" style=\"margin-bottom:8px\"><button type=\"button\" class=\"btn pri\" data-abbulk=\"1\">Print ticked on letterhead</button> <button type=\"button\" class=\"btn\" data-abbulk=\"0\">Print ticked on plain paper</button> <span class=\"muted\" id=\"fsAbN\"></span></div>" +
+      "<div class=\"tw\"><table class=\"fs-ab-t\"><thead><tr><th><input type=\"checkbox\" id=\"fsAbAll\" title=\"Tick all\"></th><th>Invoice</th><th>Date</th><th>Client</th><th>Contract</th><th class=\"num\">Excl. tax</th><th class=\"num\">Tax</th><th class=\"num\">Total</th><th class=\"num\">Unpaid</th><th>Print</th></tr></thead><tbody>" +
+      M.map(function (m) {
+        var t = sum(G[m]);
+        return "<tr class=\"fs-ai-mh\" id=\"fsAiM" + m + "\"><td colspan=\"5\"><b>" + h(mLabel(m)) + "</b> <span class=\"muted\">" + t.n + " invoice" + (t.n === 1 ? "" : "s") + "</span></td><td class=\"num\"><b>" + money(t.ex) + "</b></td><td class=\"num\"><b>" + money(t.tx) + "</b></td><td class=\"num\"><b>" + money(t.tot) + "</b></td><td class=\"num\"><b>" + money(t.out) + "</b></td><td></td></tr>" +
+          G[m].sort(function (a, b) { return String(a.invoiceNo).localeCompare(String(b.invoiceNo)); }).map(function (r) {
+            var p = byId[projOf(r)] || {}, o = safe(function () { return outAR(r); }, 0);
+            return "<tr><td><input type=\"checkbox\" class=\"fsAbCk\" value=\"" + h(r.id) + "\"" + (ST.sel[r.id] ? " checked" : "") + "></td><td class=\"mono\"><b>" + h(r.invoiceNo || "") + "</b>" + (r.amcGroup ? "<br><small class=\"muted\">part of a lump sum</small>" : "") + "</td><td>" + h(safe(function () { return fdate(r.invoiceDate); }, r.invoiceDate)) + "</td><td>" + h(((r.doc || {}).to || {}).name || client(p)) + "</td><td>" + h(p.name || r.customer || "") + "</td>" +
+              "<td class=\"num\">" + money(num(r.amount) - num(r.outputTax)) + "</td><td class=\"num\">" + money(num(r.outputTax)) + "</td><td class=\"num\">" + money(num(r.amount)) + "</td><td class=\"num\">" + (o > 0 ? money(o) : "<span class=\"fs-g-pill ok\">Paid</span>") + "</td>" +
+              "<td style=\"white-space:nowrap\"><button type=\"button\" class=\"btn sm pri\" data-abprint=\"" + h(r.id) + "\" data-lh=\"1\">Letterhead</button> <button type=\"button\" class=\"btn sm\" data-abprint=\"" + h(r.id) + "\" data-lh=\"0\">Plain</button></td></tr>";
+          }).join("");
+      }).join("") + "</tbody></table></div></div>" : "";
+    return "<div class=\"fs-ait\">" + head + summary + detail + "</div>";
+  }
+  document.addEventListener("change", function (e) {
+    var id = e.target && e.target.id;
+    if (id === "fsAiCli") { IT.cli = e.target.value; safe(render, null); }
+    if (id === "fsAiYr") { IT.yr = e.target.value; safe(render, null); }
+  });
+
   var CUT = function (html, startMark, endMark) { var a = html.indexOf(startMark); if (a < 0) return null; var b = html.indexOf(endMark, a); if (b < 0) return null; return [a, b + endMark.length]; };
   function hookView() {
     var old = amcView;
@@ -200,7 +266,7 @@
         var v = view(), c = CUT(html, "<div class=\"card\"><h3>Bill a month</h3>", "<p class=\"err\" id=\"docErr\"></p></div>");
         if (c) html = html.slice(0, c[0]) + v.card + html.slice(c[1]); else html = v.card + html;
         var t = CUT(html, "<div class=\"tw\"><table><thead><tr><th>Contract (project)</th>", "</tbody></table></div>");
-        return t ? html.slice(0, t[1]) + v.list + html.slice(t[1]) : html + v.list;
+        return t ? html.slice(0, t[0]) + safe(grid, "") + v.list + html.slice(t[1]) : html + v.list;
       }, html);
     };
   }
@@ -245,11 +311,22 @@
   function hook() {
     if (hooked) return true;
     if (typeof amcView !== "function" || typeof ivBody !== "function" || typeof Store === "undefined" || typeof makeAutoJv !== "function") return false;
-    hooked = true; hookView(); if (ARREARS) hookBody(); safe(render, null); return true;
+    hooked = true; hookView(); if (ARREARS) hookBody();
+    safe(function () {
+      special = (function (old) { return function (tab) { return tab === "amcinv" ? safe(invTab, "<p class=\"muted\">Could not build the AMC invoices list.</p>") : old.apply(this, arguments); }; })(special); // eslint-disable-line no-global-assign
+      if (typeof MODS !== "undefined" && MODS.amcm && !MODS.amcm.tabs.some(function (t) { return t[0] === "amcinv"; })) {
+        var T = MODS.amcm.tabs, i = T.findIndex(function (t) { return t[0] === "amc"; }); T.splice(i < 0 ? T.length : i + 1, 0, ["amcinv", "AMC invoices"]);
+      }
+      if (typeof TAB_HOME !== "undefined" && !TAB_HOME.amcinv) TAB_HOME.amcinv = "amcm";
+      if (typeof TITLE !== "undefined" && TITLE && !TITLE.amcinv) TITLE.amcinv = "AMC invoices";
+    }, null);
+    safe(render, null); return true;
   }
   var css = document.createElement("style");
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
-    ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
+    ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-g th.c{text-align:center;white-space:nowrap;font-size:12px}.fs-g td{text-align:center;font-size:12px;white-space:nowrap}.fs-g td:first-child{text-align:left;white-space:normal;min-width:200px}.fs-g td.num{text-align:right}.fs-g-x{color:#aab}" +
+    ".fs-g-pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}.fs-g-pill.ok{background:#2e7d32;color:#fff}.fs-g-pill.bl{background:#1F6FB8;color:#fff}.fs-g-pill.due{background:#f2a516;color:#fff}.fs-g-due{color:#a15c00;font-weight:600}" +
+    ".fs-ai-mh td{background:#eef3f9;border-top:2px solid #cfd9e6}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
   (document.head || document.documentElement).appendChild(css);
   function start() { if (!hook()) setTimeout(start, 400); }
   start();
