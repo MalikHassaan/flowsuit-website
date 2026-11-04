@@ -1,7 +1,7 @@
 <?php
-// Test site (hassan, 2026-11-04: "a test environment where I can post anything but it doesn't change the live
-// environment"). test.flowsuit.net runs the same code as flowsuit.net, but its web folder has a .flowsuit-test marker
-// (added by the deploy), so erp_data_dir() is ~/flowsuit-test-data. That folder starts as a copy of the live data;
+// Test ERP (hassan, 2026-11-04: "a test environment where I can post anything but it doesn't change the live
+// environment"). flowsuit.net/erp/test runs the same code as /erp (under the site's own padlock: GoDaddy's free SSL
+// does not cover a test. subdomain), but erp_handle() turns fs_is_test() on, so erp_data_dir() is ~/flowsuit-test-data. That folder starts as a copy of the live data;
 // an admin can wipe it and copy live again from the orange bar. Nothing here ever writes to ~/flowsuit-data.
 
 const ERP_TEST_COPY = ['modules', 'taj-assets', 'chat-files', 'att-photos', 'signatures', 'hsec-att'];
@@ -67,8 +67,7 @@ function erp_test_reset(bool $post): void
     }
     $me = erp_require_admin();
     if (!$post || !hash_equals((string) ($_SESSION['csrf'] ?? ''), (string) ($_POST['csrf'] ?? ''))) {
-        header('Location: /erp');
-        exit;
+        erp_redirect('/erp');
     }
     $dir = erp_data_dir();
     if (basename($dir) !== 'flowsuit-test-data') {
@@ -84,8 +83,7 @@ function erp_test_reset(bool $post): void
     }
     erp_test_seed($dir);
     $_SESSION = [];
-    header('Location: /erp/login');
-    exit;
+    erp_redirect('/erp/login');
 }
 
 function erp_test_when(): string

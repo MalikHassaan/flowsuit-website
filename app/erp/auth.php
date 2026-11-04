@@ -93,7 +93,7 @@ function erp_base_url(): string
 // Each account tab (/erp/u/N) has its own "remember me" cookie.
 function erp_remember_name(): string
 {
-    return erp_slot() > 1 ? ERP_REMEMBER_COOKIE . '_u' . erp_slot() : ERP_REMEMBER_COOKIE;
+    return ERP_REMEMBER_COOKIE . (fs_is_test() ? '_t' : '') . (erp_slot() > 1 ? '_u' . erp_slot() : '');
 }
 
 // "Remember me" is switched off (hassan, 2026-10-31: sign out after 10 minutes without activity). A 30-day cookie
