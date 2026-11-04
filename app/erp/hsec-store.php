@@ -41,6 +41,51 @@ function hsec_visible(?array $allowed, ?array $data): bool
         || $data['entity'] === '' || in_array($data['entity'], $allowed, true);
 }
 
+// AMC-only people (hassan, 2026-11-04: "the user with the AMC maintenance should only see AMC projects ... not the
+// all"): a non-admin whose menu areas include AMC (amcm) but neither Projects nor Business cycle gets only the
+// maintenance-contract projects from the server and may only add or change those. When they also lack every area
+// that lists customer invoices (Receivables, balances, Reports, Management), they get only the AMC invoices too.
+const HSEC_AMC_TYPE = 'Maintenance contract (AMC)';
+function hsec_amc_scope(array $me): int
+{
+    if (!empty($me['is_admin'])) {
+        return 0;
+    }
+    $mods = array_values(array_filter(explode(',', (string) ($me['hsec_mods'] ?? ''))));
+    if (!$mods || !in_array('amcm', $mods, true) || array_intersect(['proj', 'pw'], $mods)) {
+        return 0;
+    }
+    return array_intersect(['e_ar', 'r_party', 'rpt', 'mgmt'], $mods) ? 1 : 2;
+}
+function hsec_amc_ids(): array
+{
+    static $ids = null;
+    if ($ids === null) {
+        $ids = [];
+        foreach (hsec_db()->query("SELECT id, data FROM hsec_docs WHERE coll = 'projects' AND data IS NOT NULL") as $r) {
+            $d = json_decode((string) $r['data'], true);
+            if (($d['type'] ?? '') === HSEC_AMC_TYPE) {
+                $ids[$r['id']] = true;
+            }
+        }
+    }
+    return $ids;
+}
+// True when this AMC-only person must not get (or change) this record.
+function hsec_amc_hidden(int $scope, string $coll, ?array $data): bool
+{
+    if (!$scope || $data === null) {
+        return false;
+    }
+    if ($coll === 'projects') {
+        return ($data['type'] ?? '') !== HSEC_AMC_TYPE;
+    }
+    if ($coll === 'receivables' && $scope === 2) {
+        return empty($data['amcKey']) && !isset(hsec_amc_ids()[(string) ($data['projectId'] ?? '')]);
+    }
+    return false;
+}
+
 function hsec_file(): string
 {
     return erp_data_dir() . '/modules/hsec.html';
@@ -167,10 +212,11 @@ function hsec_sync(int $since): void
         : $db->prepare('SELECT coll, id, data FROM hsec_docs WHERE ver > ? AND data IS NOT NULL');
     $st->execute([$since]);
     $allowed = hsec_allowed(erp_user());
+    $amc = hsec_amc_scope(erp_user());
     $docs = [];
     foreach ($st->fetchAll() as $row) {
         $data = $row['data'] === null ? null : json_decode($row['data'], true);
-        if (!hsec_visible($allowed, $data)) {
+        if (!hsec_visible($allowed, $data) || hsec_amc_hidden($amc, $row['coll'], $data)) {
             // Another company's record: never sent. If it moved out of reach, the browser drops its copy.
             if ($since) {
                 $docs[] = ['path' => $row['coll'] . '/' . $row['id'], 'data' => null];
@@ -224,7 +270,7 @@ function hsec_hist(array $me): void
         }
         $doc->execute($p);
         $cur = $doc->fetchColumn();
-        if ($cur !== false && $cur !== null && !hsec_visible($allowed, json_decode((string) $cur, true))) {
+        if ($cur !== false && $cur !== null && (!hsec_visible($allowed, json_decode((string) $cur, true)) || hsec_amc_hidden(hsec_amc_scope($me), $p[0], json_decode((string) $cur, true)))) {
             continue;
         }
         $st->execute($p);
@@ -257,6 +303,11 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
     $allowed = hsec_allowed($me);
     if (!hsec_visible($allowed, $old) || !hsec_visible($allowed, $new)) {
         return 'Your access is limited to ' . implode(', ', $allowed ?? []) . '. This record belongs to another company.';
+    }
+    $amc = hsec_amc_scope($me);
+    if (hsec_amc_hidden($amc, $coll, $old) || hsec_amc_hidden($amc, $coll, $new)) {
+        return $coll === 'projects' ? 'You can only add or change maintenance contracts (AMC). Set the type to "' . HSEC_AMC_TYPE . '".'
+            : 'You can only work on AMC invoices.';
     }
     if ($coll === 'journals' && $old !== null && ($old['status'] ?? '') === 'Posted') {
         if ($new === null) {

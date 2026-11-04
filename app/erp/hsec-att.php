@@ -38,7 +38,8 @@ function hsec_att_doc_ok(array $me, string $coll, string $id): bool
     $st = hsec_db()->prepare('SELECT data FROM hsec_docs WHERE coll = ? AND id = ? AND data IS NOT NULL');
     $st->execute([$coll, $id]);
     $json = $st->fetchColumn();
-    return $json !== false && hsec_visible(hsec_allowed($me), json_decode((string) $json, true));
+    $d = $json === false ? null : json_decode((string) $json, true);
+    return $json !== false && hsec_visible(hsec_allowed($me), $d) && !hsec_amc_hidden(hsec_amc_scope($me), $coll, $d);
 }
 
 function hsec_att_key(string $key): ?array
@@ -60,11 +61,13 @@ function hsec_att_api(array $me, string $sub, string $method): void
     if ($sub === '/index' && $method === 'GET') {
         // How many files each record has, for the paperclip counts.
         $allowed = hsec_allowed($me);
+        $amc = hsec_amc_scope($me);
         $rows = $db->query('SELECT a.coll, a.doc_id, COUNT(*) AS n, d.data FROM hsec_atts a JOIN hsec_docs d ON d.coll = a.coll AND d.id = a.doc_id
             WHERE a.deleted_at IS NULL AND d.data IS NOT NULL GROUP BY a.coll, a.doc_id')->fetchAll();
         $out = [];
         foreach ($rows as $r) {
-            if ($allowed === null || hsec_visible($allowed, json_decode((string) $r['data'], true))) {
+            $d = json_decode((string) $r['data'], true);
+            if (($allowed === null || hsec_visible($allowed, $d)) && !hsec_amc_hidden($amc, $r['coll'], $d)) {
                 $out[$r['coll'] . '/' . $r['doc_id']] = (int) $r['n'];
             }
         }

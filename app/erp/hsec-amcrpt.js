@@ -12,7 +12,7 @@
 // AMC invoices are the ones AMC billing made (amcKey) or any invoice on an AMC project. "Received" counts receipts
 // whose voucher is posted, like the rest of Receivables; receipts still waiting for approval are shown as pending.
 (function () {
-  /* global NAV, TITLE, NS_ALIAS, Store, MODS, TAB_HOME, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, jvOf, AMC_STEP, cnFor */
+  /* global openForm, NAV, TITLE, NS_ALIAS, Store, MODS, TAB_HOME, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, jvOf, AMC_STEP, cnFor */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -178,6 +178,8 @@
     if (!MODS.amcm) {
       MODS.amcm = { sub: "Maintenance contracts: set them up, bill them each month and see who has paid", tabs: [["amc", "AMC billing"], ["amcrpt", "AMC reports"], ["projects", "AMC contracts"]] };
       safe(function () { var g = NAV.find(function (x) { return x[0] === "Projects"; }); if (g && !g[1].some(function (i) { return i[0] === "amcm"; })) g[1].push(["amcm", "AMC (maintenance contracts)"]); }, null);
+      // a new contract from this area is a maintenance contract
+      safe(function () { var oF = openForm; openForm = function (c, id, pre) { if (c === "projects" && !id && V.mod === "amcm") pre = Object.assign({ type: "Maintenance contract (AMC)" }, pre || {}); return oF.call(this, c, id, pre); }; }, null); // eslint-disable-line no-global-assign
       safe(function () { TITLE.amcm = "AMC (maintenance contracts)"; NS_ALIAS.amcm = "amc maintenance contract annual service billing recurring"; }, null);
     }
     safe(function () { render(); }, null);
