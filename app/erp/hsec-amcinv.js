@@ -117,6 +117,20 @@
   });
   document.addEventListener("focusin", function (e) { var td = e.target && e.target.closest && e.target.closest(".fs-ai-ed"); if (td && td.getAttribute("data-orig") == null) td.setAttribute("data-orig", td.innerHTML); });
 
+  // No "1/1", date or web address in the page margins (hassan, 2026-11-04: "on invoice footer don't show 1/1"): the browser
+  // prints those in the page margin, and leaves them out when the margin is 0, so an open AMC invoice sets the page margin
+  // to 0 and keeps the same white space inside the page instead.
+  var PAGE_CSS = "@page{size:A4;margin:0}body.printing #printLayer .sheet.qsheet{padding:0 14mm!important}" +
+    "body.printing .qsheet table.q-frame>thead>tr>td{padding-top:8mm!important}body.printing .qsheet table.q-frame>tfoot>tr>td{padding-bottom:8mm!important}" +
+    "body.printing .iv-ffix{bottom:8mm!important;left:14mm!important;right:14mm!important}";
+  (function pageWatch() {
+    if (!document.body) return setTimeout(pageWatch, 300);
+    new MutationObserver(function () {
+      var sh = document.querySelector("#printLayer .sheet"); if (!sh || !sh.querySelector(".fs-ai") || sh.querySelector("style.fs-ai-page")) return;
+      var st = document.createElement("style"); st.className = "fs-ai-page"; st.textContent = PAGE_CSS; sh.appendChild(st);
+    }).observe(document.body, { childList: true, subtree: true });
+  })();
+
   // ---- project form fields
   var NEW = [
     { k: "custAddress", l: "Customer address", t: "textarea", hint: "Printed on the invoice under the customer's name." },
