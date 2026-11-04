@@ -8,3 +8,5 @@ app/vendor-new/
 app/vendor-old/
 flowsuit-data/
 flowsuit-secrets.php
+flowsuit-test-data/
+public/.flowsuit-test

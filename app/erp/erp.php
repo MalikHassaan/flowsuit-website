@@ -15,6 +15,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/chat.php';
 require_once __DIR__ . '/attendance.php';
 require_once __DIR__ . '/help.php';
+require_once __DIR__ . '/testenv.php';
 
 // Signed out after 10 minutes with no mouse, keyboard or touch activity (hassan, 2026-10-31). idle.js pings the server
 // while the person is active and sends them to /erp/timeout when the 10 minutes run out in every open tab.
@@ -60,12 +61,20 @@ function erp_level_label(string $module, string $level): string
 function erp_data_dir(): string
 {
     // On the server this is ~/flowsuit-data, next to ~/flowsuit-app and ~/public_html.
-    $dir = dirname(__DIR__, 2) . '/flowsuit-data';
-    if (!is_dir($dir)) {
-        mkdir($dir, 0700, true);
-        file_put_contents($dir . '/.htaccess', "Require all denied\n");
+    // The test site uses ~/flowsuit-test-data instead, filled with a copy of the live data the first time (testenv.php).
+    static $dir = null;
+    if ($dir !== null) {
+        return $dir;
     }
-    return $dir;
+    $d = dirname(__DIR__, 2) . (fs_is_test() ? '/flowsuit-test-data' : '/flowsuit-data');
+    if (!is_dir($d)) {
+        mkdir($d, 0700, true);
+        file_put_contents($d . '/.htaccess', "Require all denied\n");
+    }
+    if (fs_is_test() && !is_file($d . '/erp.sqlite')) {
+        erp_test_seed($d);
+    }
+    return $dir = $d;
 }
 
 function erp_db(): PDO
@@ -199,6 +208,7 @@ function erp_slot_html(string $html): string
 // compressed copy is kept on the server so the same page is not compressed again for every visit.
 function erp_send_page(string $html): void
 {
+    $html = erp_test_mark($html);
     $tag = '"' . md5($html) . '"';
     header('Content-Type: text/html; charset=utf-8');
     header_remove('Pragma');
@@ -639,6 +649,8 @@ function erp_handle(string $path): void
         hsec_logo();
     } elseif ($sub === '/backup') {
         erp_backup_download();
+    } elseif ($sub === '/test-reset') {
+        erp_test_reset($post);
     } elseif ($sub === '/backups') {
         erp_backups_page($post);
     } elseif ($sub === '/analytics') {

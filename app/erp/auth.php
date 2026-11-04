@@ -183,6 +183,9 @@ function erp_password_errors(string $password, string $confirm): array
 // Plain-text e-mail through the host's mail(). Returns false if the server refused it.
 function erp_mail(string $to, string $subject, string $body): bool
 {
+    if (fs_is_test()) {
+        $subject = '[TEST SITE] ' . $subject;
+    }
     $host = preg_replace('/^www\./', '', $_SERVER['HTTP_HOST'] ?? 'flowsuit.net');
     $from = 'no-reply@' . $host;
     $headers = 'From: FlowSuit ERP <' . $from . ">\r\nReply-To: " . config('contact_email') . "\r\n"

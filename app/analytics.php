@@ -70,7 +70,7 @@ function stats_source(): string
 // Counts one page view. Never breaks the page: any database problem is ignored.
 function stats_hit(string $path): void
 {
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET' || PHP_SAPI === 'cli' || stats_is_bot()) {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET' || PHP_SAPI === 'cli' || stats_is_bot() || fs_is_test()) {
         return;
     }
     try {
@@ -98,7 +98,7 @@ function stats_event_handle(): void
     $in = json_decode((string) file_get_contents('php://input', false, null, 0, 2000), true);
     $name = is_array($in) ? (string) ($in['name'] ?? '') : '';
     $path = is_array($in) ? (string) ($in['path'] ?? '/') : '/';
-    if (!isset(STATS_EVENTS[$name]) || !preg_match('#^/[a-z0-9/_-]{0,200}$#', $path)) {
+    if (fs_is_test() || !isset(STATS_EVENTS[$name]) || !preg_match('#^/[a-z0-9/_-]{0,200}$#', $path)) {
         return;
     }
     try {

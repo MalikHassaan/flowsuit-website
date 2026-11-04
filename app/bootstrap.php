@@ -6,6 +6,15 @@ $config = require __DIR__ . '/config.php';
 if (!headers_sent()) {
     header_remove('X-Powered-By');
 }
+// The test copy of the site (test.flowsuit.net, hassan 2026-11-04): the same code, but its web folder holds a
+// .flowsuit-test marker, so the ERP keeps its records in ~/flowsuit-test-data and never touches the live data.
+function fs_is_test(): bool
+{
+    return defined('WEB_ROOT') && is_file(WEB_ROOT . '/.flowsuit-test');
+}
+if (fs_is_test() && !headers_sent()) {
+    header('X-Robots-Tag: noindex, nofollow');
+}
 require_once __DIR__ . '/analytics.php';
 
 function config(string $key)
