@@ -207,7 +207,7 @@
   // (their values are kept). Choosing another type shows the full form again. An AMC's contract value is worked out
   // from the monthly fee and the AMC dates until it is typed by hand.
   var PF_KEEP = {
-    "Maintenance contract (AMC)": ["code", "name", "customer", "entity", "type", "province", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "pm", "status"],
+    "Maintenance contract (AMC)": ["code", "name", "customer", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "contractValue", "pm", "status"],
     "Supply only": ["code", "name", "customer", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"]
   };
   var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"] };
@@ -240,7 +240,7 @@
   function budgetSync() {
     var s = document.getElementById("f_type"), cv = document.getElementById("f_contractValue"), bc = document.getElementById("f_budgetCost");
     if (!s || !cv || !bc || !PF_KEEP[s.value]) return;
-    if (bc.value && bc.getAttribute("data-fs-auto") !== bc.value) return;
+    if (bc.value && num(bc.getAttribute("data-fs-auto")) !== num(bc.value)) return;
     bc.value = cv.value; bc.setAttribute("data-fs-auto", bc.value);
     bc.dispatchEvent(new Event("input", { bubbles: true }));
   }
@@ -264,7 +264,7 @@
     var a = String((document.getElementById("f_amcStart") || {}).value || ""), b = String((document.getElementById("f_amcEnd") || {}).value || "");
     if (!fee || !/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b) || b < a) return;
     var months = Math.max(1, Math.round((new Date(b) - new Date(a)) / 86400000 / 30.44));
-    if (cv.value && cv.getAttribute("data-fs-auto") !== cv.value) return; // typed by hand: leave it
+    if (cv.value && num(cv.getAttribute("data-fs-auto")) !== num(cv.value)) return; // typed by hand: leave it
     var v = String(Math.round(fee * months)); cv.value = v; cv.setAttribute("data-fs-auto", v);
     cv.dispatchEvent(new Event("input", { bubbles: true }));
     budgetSync();
