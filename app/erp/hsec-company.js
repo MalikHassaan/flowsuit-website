@@ -100,7 +100,7 @@
       + '<label>Company name<input id="fsCoRen" maxlength="120" autocomplete="off" value="' + esc(nameOf(code) === code ? "" : nameOf(code)) + '"></label>'
       + '<span class="cc">Short code: <b>' + esc(code) + '</b> (stays the same, it is on every record)</span>'
       + '<span class="fs-coerr" role="alert"></span>'
-      + '<span class="fs-coact"><button type="button" class="btn pri" id="fsCoRenSave">Save</button><button type="button" class="btn" id="fsCoRenCancel">Cancel</button></span>';
+      + '<span class="fs-coact"><button type="button" class="btn pri" id="fsCoRenSave">Save</button><button type="button" class="btn" id="fsCoRenCancel">Cancel</button><button type="button" class="btn fs-codel" id="fsCoDel">Delete</button></span>';
     card.replaceWith(tile);
     var i = tile.querySelector("#fsCoRen"); i.focus(); i.select();
   }
@@ -117,12 +117,37 @@
     if (typeof closePicker === "function") closePicker();
     if (typeof openPicker === "function") openPicker();
   }
+  // Delete (hassan, 2026-11-04: "also give delete option in edit"): only a company with no records at all, so no
+  // voucher, invoice or report ever loses its company; one in use is refused with its record count (rename it instead)
+  function records(e) {
+    var d = Store.data, n = 0;
+    Object.keys(d).forEach(function (c) { if (c !== "settings" && Array.isArray(d[c])) d[c].forEach(function (r) { if (r && r.entity === e) n++; }); });
+    return n;
+  }
+  async function remove(tile) {
+    var err = tile.querySelector(".fs-coerr"), btn = tile.querySelector("#fsCoDel"), code = tile.dataset.code, fail = function (m) { err.textContent = m; };
+    var n = records(code), ents = ENTS().slice();
+    if (n) return fail(nameOf(code) + " has " + n + " record" + (n === 1 ? "" : "s") + " (vouchers, invoices, projects or other entries), so it cannot be deleted. Rename it instead.");
+    if (ents.length < 2) return fail("This is the only company, so it cannot be deleted.");
+    if (!window.confirm("Delete the company " + nameOf(code) + " (" + code + ")? It has no records. This cannot be undone.")) return;
+    var s = settings(), lg = Object.assign({}, s.legal || {}), patch = { id: "main", entities: ents.filter(function (e) { return e !== code; }), legal: lg };
+    delete lg[code];
+    ["invCo", "coLh"].forEach(function (k) { if (s[k] && typeof s[k] === "object" && code in s[k]) { patch[k] = Object.assign({}, s[k]); delete patch[k][code]; } });
+    btn.disabled = true; fail("");
+    try { await Store.save("settings", Object.assign({}, s, patch)); }
+    catch (x) { btn.disabled = false; return fail("Could not delete. Only an admin can delete a company."); }
+    try { if (localStorage.getItem("hsec-erp-ent") === code) localStorage.setItem("hsec-erp-ent", patch.entities[0]); } catch (x) { /* storage blocked */ }
+    if (typeof toast === "function") toast("Company " + code + " deleted");
+    if (typeof closePicker === "function") closePicker();
+    if (typeof openPicker === "function") openPicker();
+  }
   addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest(".fs-coedit, .fs-coren button");
     if (!t || !window.FS_ADMIN) return;
     e.stopImmediatePropagation(); e.preventDefault();
     if (t.classList.contains("fs-coedit")) return editForm(t.closest(".co-card"));
     if (t.id === "fsCoRenSave") return rename(t.closest(".fs-coren"));
+    if (t.id === "fsCoDel") return remove(t.closest(".fs-coren"));
     if (t.id === "fsCoRenCancel") { if (typeof closePicker === "function") closePicker(); if (typeof openPicker === "function") openPicker(); }
   }, true);
 
@@ -161,6 +186,7 @@
     + ".fs-coadd input{font:inherit;font-size:14px;padding:5px 7px;border:1px solid var(--line);color:var(--ink);background:var(--panel)}"
     + ".fs-coerr{color:#b42318;font-size:12px}.fs-coerr:empty{display:none}"
     + ".fs-coact{display:flex;gap:6px;margin-top:4px}"
+    + ".fs-coact .fs-codel{margin-left:auto;color:#b3261e;border-color:#e3b4b0}"
     + ".co-card[data-co]{position:relative}.fs-coedit{position:absolute;top:8px;right:8px;font-size:12px;padding:2px 9px;border:1px solid var(--line,#ccd);border-radius:6px;background:var(--panel,#fff);color:var(--accent,#1F6FB8);cursor:pointer}"
     + ".fs-coedit:hover{background:var(--accent,#1F6FB8);color:#fff}";
   (document.head || document.documentElement).appendChild(css);
