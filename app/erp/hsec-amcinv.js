@@ -71,7 +71,24 @@
       "<tr><td colspan=\"7\"><b>Amount in words:</b> " + h(safe(function () { return ivWords(gross + tax); }, "")) + "</td></tr>" +
       (ex ? "<tr><td colspan=\"7\">Exempt from sales tax" + (d.exemptRef || p.amcTaxNote ? ": " + h(d.exemptRef || p.amcTaxNote) : ".") + "</td></tr>" : "") + "</tbody></table>" +
       (bank.length ? "<div class=\"iv-bank\"><b>Please pay to:</b><br>" + bank.map(h).join("<br>") + "</div>" : "") +
-      "<div class=\"fs-ai-sig\">" + (so.length ? so.map(h).join("<br>") : "") + "</div></div>";
+      "<div class=\"fs-ai-sig\">" + (so.length ? so.map(h).join("<br>") : "") + "</div>" + notesHtml(c, r.entity) + "</div>";
+  }
+
+  // Lines under the invoice (hassan, 2026-11-04, from a telecom invoice: "cheque / PO made in the favour of ...",
+  // "please share the payment details ...", "this is a system generated invoice"). Default lines use the company's
+  // account title; "Notes on invoices" in the company's invoice details replaces them ("-" prints none).
+  function notesOf(c, e) {
+    var own = String(c.notes || "").trim();
+    if (own === "-") return { list: [], sys: "" };
+    if (own) return { list: lines(own), sys: "" };
+    var payee = c.title || ""; if (!payee) return { list: [], sys: "" };
+    return { list: ["Cheque / PO to be made in the favour of " + payee + ". " + payee + " will not be held responsible for any cheque on which the payee name is not mentioned.",
+      "Please share the payment details with your account manager if paid directly into the " + payee + " account through cheque, cash or online mode."],
+      sys: "(This is a system-generated invoice and does not require any stamp or signature.)" };
+  }
+  function notesHtml(c, e) {
+    var n = notesOf(c, e); if (!n.list.length && !n.sys) return "";
+    return "<div class=\"fs-ai-notes\">" + (n.list.length ? "<ul>" + n.list.map(function (x) { return "<li>" + h(x) + "</li>"; }).join("") + "</ul>" : "") + (n.sys ? "<p class=\"fs-ai-sys\">" + h(n.sys) + "</p>" : "") + "</div>";
   }
 
   // ---- project form fields
@@ -107,7 +124,7 @@
         var c = co(e);
         return "<div class=\"fs-ai-co\" data-aico=\"" + h(e) + "\"><h4>" + h(safe(function () { return coLabel(e); }, e)) + "</h4><div class=\"fs-ai-g\">" +
           KEYS.map(function (k) { return "<label>" + h(k[1]) + "<input data-aik=\"" + k[0] + "\" value=\"" + h(c[k[0]] || "") + "\"></label>"; }).join("") +
-          "</div><button type=\"button\" class=\"btn sm pri\" data-aisave=\"" + h(e) + "\">Save " + h(e) + "</button> <span class=\"muted\" data-aimsg=\"" + h(e) + "\"></span></div>";
+          "</div><label class=\"fs-ai-nt\">Notes on invoices (one per line; blank = the standard cheque / payment / system-generated lines; - = none)<textarea data-aik=\"notes\" rows=\"3\">" + h(c.notes || "") + "</textarea></label><button type=\"button\" class=\"btn sm pri\" data-aisave=\"" + h(e) + "\">Save " + h(e) + "</button> <span class=\"muted\" data-aimsg=\"" + h(e) + "\"></span></div>";
       }).join("") + "</details>";
   }
   window.FS_AMCINV.panel = panel;
@@ -138,7 +155,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".qsheet .fs-ai .fs-ai-head td{vertical-align:top}.fs-ai-to{margin:4px 2px;line-height:1.55}.qsheet .fs-ai table.fs-ai-meta{border-collapse:collapse}.qsheet .fs-ai table.fs-ai-meta td{border:0!important;padding:1px 6px 1px 0}" +
-    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}" +
+    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
     ".fs-ai-set{margin:12px 0}.fs-ai-set summary{cursor:pointer}.fs-ai-co{border-top:1px solid #e3e8ee;padding:8px 0}.fs-ai-co h4{margin:4px 0 6px}" +
     ".fs-ai-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.fs-ai-g label{display:flex;flex-direction:column;gap:3px;font-size:12px}@media (max-width:900px){.fs-ai-g{grid-template-columns:1fr 1fr}}";
   (document.head || document.documentElement).appendChild(css);
