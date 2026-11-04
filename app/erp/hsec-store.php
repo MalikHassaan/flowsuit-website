@@ -46,6 +46,8 @@ function hsec_visible(?array $allowed, ?array $data): bool
 // maintenance-contract projects from the server and may only add or change those. When they also lack every area
 // that lists customer invoices (Receivables, balances, Reports, Management), they get only the AMC invoices too.
 const HSEC_AMC_TYPE = 'Maintenance contract (AMC)';
+// Project types an AMC-only user may see and work on (hassan, 2026-11-04: maintenance and spare parts supply).
+const HSEC_AMC_TYPES = [HSEC_AMC_TYPE, 'Supply only'];
 function hsec_amc_scope(array $me): int
 {
     if (!empty($me['is_admin'])) {
@@ -64,7 +66,7 @@ function hsec_amc_ids(): array
         $ids = [];
         foreach (hsec_db()->query("SELECT id, data FROM hsec_docs WHERE coll = 'projects' AND data IS NOT NULL") as $r) {
             $d = json_decode((string) $r['data'], true);
-            if (($d['type'] ?? '') === HSEC_AMC_TYPE) {
+            if (in_array($d['type'] ?? '', HSEC_AMC_TYPES, true)) {
                 $ids[$r['id']] = true;
             }
         }
@@ -78,7 +80,7 @@ function hsec_amc_hidden(int $scope, string $coll, ?array $data): bool
         return false;
     }
     if ($coll === 'projects') {
-        return ($data['type'] ?? '') !== HSEC_AMC_TYPE;
+        return !in_array($data['type'] ?? '', HSEC_AMC_TYPES, true);
     }
     if ($coll === 'receivables' && $scope === 2) {
         return empty($data['amcKey']) && !isset(hsec_amc_ids()[(string) ($data['projectId'] ?? '')]);
@@ -306,8 +308,8 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
     }
     $amc = hsec_amc_scope($me);
     if (hsec_amc_hidden($amc, $coll, $old) || hsec_amc_hidden($amc, $coll, $new)) {
-        return $coll === 'projects' ? 'You can only add or change maintenance contracts (AMC). Set the type to "' . HSEC_AMC_TYPE . '".'
-            : 'You can only work on AMC invoices.';
+        return $coll === 'projects' ? 'You can only add or change maintenance contracts (AMC) and spare parts supply. Set the type to "' . implode('" or "', HSEC_AMC_TYPES) . '".'
+            : 'You can only work on invoices of AMC and spare parts supply projects.';
     }
     if ($coll === 'journals' && $old !== null && ($old['status'] ?? '') === 'Posted') {
         if ($new === null) {

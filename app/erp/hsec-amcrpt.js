@@ -179,7 +179,23 @@
       MODS.amcm = { sub: "Maintenance contracts: set them up, bill them each month and see who has paid", tabs: [["amc", "AMC billing"], ["amcrpt", "AMC reports"], ["projects", "AMC contracts"]] };
       safe(function () { var g = NAV.find(function (x) { return x[0] === "Projects"; }); if (g && !g[1].some(function (i) { return i[0] === "amcm"; })) g[1].push(["amcm", "AMC (maintenance contracts)"]); }, null);
       // a new contract from this area is a maintenance contract
-      safe(function () { var oF = openForm; openForm = function (c, id, pre) { if (c === "projects" && !id && V.mod === "amcm") pre = Object.assign({ type: "Maintenance contract (AMC)" }, pre || {}); return oF.call(this, c, id, pre); }; }, null); // eslint-disable-line no-global-assign
+      // An AMC-only person (AMC area, without Project financial management or Business cycle) works only on maintenance
+      // contracts and spare parts supply (the server enforces it too: hsec_amc_scope): other project types are not offered.
+      var AMC_T = ["Maintenance contract (AMC)", "Supply only"];
+      var amcOnly = function () { var m = window.FS_MODS; return !!(m && m.indexOf("amcm") >= 0 && m.indexOf("proj") < 0 && m.indexOf("pw") < 0); };
+      safe(function () {
+        var oF = openForm;
+        openForm = function (c, id, pre) { // eslint-disable-line no-global-assign
+          if (c === "projects" && !id && (V.mod === "amcm" || amcOnly())) pre = Object.assign({ type: AMC_T[0] }, pre || {});
+          var out = oF.call(this, c, id, pre);
+          if (c === "projects" && amcOnly()) safe(function () {
+            var s = document.getElementById("f_type"); if (!s) return;
+            Array.prototype.slice.call(s.options).forEach(function (o) { if (AMC_T.indexOf(o.value) < 0) o.remove(); });
+            if (AMC_T.indexOf(s.value) < 0) s.value = AMC_T[0];
+          }, null);
+          return out;
+        };
+      }, null);
       safe(function () { TITLE.amcm = "AMC (maintenance contracts)"; NS_ALIAS.amcm = "amc maintenance contract annual service billing recurring"; }, null);
     }
     safe(function () { render(); }, null);
