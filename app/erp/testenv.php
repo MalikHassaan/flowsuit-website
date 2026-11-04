@@ -100,8 +100,10 @@ function erp_test_banner(?array $user): string
     }
     $reset = '';
     if ($user && !empty($user['is_admin'])) {
-        $reset = '<form method="post" action="/erp/test-reset" onsubmit="return confirm(\'Delete everything done on the test site and copy the live ERP again?\')">'
-            . erp_csrf_field() . '<button type="submit">Start again from live</button></form>';
+        // A plain button that submits the form itself: the HSEC app blocks every form's submit event, so a normal
+        // submit button does nothing there.
+        $reset = '<form method="post" action="' . erp_slot_base() . '/test-reset" style="margin:0">' . erp_csrf_field()
+            . '<button type="button" onclick="if(confirm(\'Delete everything done on the test site and copy the live ERP again?\'))HTMLFormElement.prototype.submit.call(this.form)">Start again from live</button></form>';
     }
     $when = erp_test_when();
     return '<div class="fs-testbar" style="position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:2147483000;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;max-width:calc(100% - 24px);border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.25);'

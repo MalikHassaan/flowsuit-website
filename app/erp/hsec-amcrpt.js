@@ -245,6 +245,18 @@
     bc.dispatchEvent(new Event("input", { bubbles: true }));
   }
   document.addEventListener("input", function (e) { if (e.target && e.target.id === "f_contractValue") safe(budgetSync, null); });
+  // the "Fill in:" message must not ask for a field that is hidden on this form
+  (function errWatch() {
+    if (!document.body) return setTimeout(errWatch, 300);
+    new MutationObserver(function () {
+      var er = document.getElementById("ferr"), f = document.getElementById("frm"); if (!er || !f || !/Fill in:/.test(er.textContent)) return;
+      var hid = []; f.querySelectorAll(".f.fs-pf-hide").forEach(function (w) { var l = w.querySelector("label") || w.firstElementChild; if (l) hid.push((l.getAttribute("data-fs-orig") || l.textContent).replace(/\*/g, "").trim()); });
+      if (!hid.length) return;
+      var parts = er.textContent.replace(/^\s*Fill in:\s*/, "").replace(/\.\s*$/, "").split(/,\s*/).filter(function (p) { return hid.indexOf(p.replace(/\*/g, "").trim()) < 0; });
+      var t = parts.length ? "Fill in: " + parts.join(", ") + "." : "";
+      if (t !== er.textContent) er.textContent = t;
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  })();
   function amcValue() {
     var s = document.getElementById("f_type"), cv = document.getElementById("f_contractValue");
     if (!s || !cv || s.value !== "Maintenance contract (AMC)") return;
