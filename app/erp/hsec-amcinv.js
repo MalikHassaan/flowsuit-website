@@ -13,7 +13,7 @@
 //  * The company's NTN, STRN, bank account and signatory are kept per company in settings (admin edits them in
 //    AMC billing › Invoice details per company), never in this public code.
 (function () {
-  /* global S, Store, settings, ivBody, ivWords, fmt, fmt2, fdate, esc, toast, render, ENTS, coLabel, amcTax, pstRates */
+  /* global ivDoc, ivPdf, ivDocx, IV_LH, S, Store, settings, ivBody, ivWords, fmt, fmt2, fdate, esc, toast, render, ENTS, coLabel, amcTax, pstRates */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -46,10 +46,13 @@
 
   // ---- the printed layout (any invoice made by AMC billing, old ones included: blanks come from the project / company)
   function body(M) {
-    var r = M.r, d = M.d, p = proj(r) || {}, c = co(r.entity), T = M.T, ex = d.exempt || exempt(p) && !num(d.taxPct), pct = ex ? 0 : num(d.taxPct);
+    // r._own: the invoice's company when it is printed on another company's letterhead (r.entity is then that company;
+    // its bank accounts and payee lines print, everything else stays the invoice company's)
+    var r = M.r, d = M.d, p = proj(r) || {}, c = co(r._own || r.entity), cb = r._own ? co(r.entity) : c, T = M.T, ex = d.exempt || exempt(p) && !num(d.taxPct), pct = ex ? 0 : num(d.taxPct);
     var to = d.to || {}, name = to.name || p.customer || r.customer || "", addr = lines(to.address || p.custAddress), ntn = d.buyerTax || p.custNtn || "", strn = d.buyerStrn || p.custStrn || "";
     var po = d.poRef && d.poRef !== p.code ? d.poRef : (p.poNo || ""), sN = d.sellerNtn || c.ntn || "", sS = d.sellerStrn || c.strn || "";
-    var bank = lines(d.bank || [c.title ? "Account title: " + c.title : "", c.iban ? "IBAN: " + c.iban : "", c.bank ? "Bank: " + c.bank : ""].filter(Boolean).join("\n"));
+    var acct = function (x) { return [x.title ? "Account title: " + x.title : "", x.iban ? "IBAN: " + x.iban : "", x.bank ? "Bank: " + x.bank : ""].filter(Boolean).join(" | "); };
+    var bank = [r._own ? acct(cb) : (d.bank ? lines(d.bank).join(" | ") : acct(c))].concat(lines(cb.more)).filter(Boolean);
     var so = lines(d.signoff && !/^For and on behalf of/.test(d.signoff) ? d.signoff : [c.signName || "", c.signTitle || ""].filter(Boolean).join("\n"));
     var dd = function (x) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(x || "")); return m ? m[3] + "/" + m[2] + "/" + m[1] : h(x); };
     var tl = (d.layout === "amctax" && d.taxLabel || taxShort(p)) + (ex ? "" : " @" + (+pct.toFixed(2)) + "%");
@@ -70,7 +73,7 @@
     }).join("");
     var meta = [["Invoice Number", h(r.invoiceNo || "")], ["Invoice Date", dd(r.invoiceDate)]].concat(po ? [["PO Number", h(po)]] : []).concat([["Currency", h(d.currency || "PKR")]])
       .concat(sN ? [["NTN", h(sN)]] : []).concat(sS ? [["STRN", h(sS)]] : []);
-    return "<div class=\"iv fs-ai\"><h1>INVOICE</h1>" +
+    return "<div class=\"iv fs-ai\" data-rid=\"" + h(r.id || "") + "\" data-own=\"" + h(r._own || r.entity || "") + "\" data-lhco=\"" + h(r.entity || "") + "\"><h1>INVOICE</h1>" +
       "<table class=\"ivb fs-ai-head\"><colgroup><col style=\"width:52%\"><col></colgroup><tr><td><div class=\"fs-ai-to\">" + [h(name)].concat(addr.map(h)).join("<br>") +
       (ntn ? "<br>NTN: " + h(ntn) : "") + (strn ? "<br>STRN: " + h(strn) : "") + "</div></td><td><table class=\"fs-ai-meta\">" +
       meta.map(function (x) { return "<tr><td>" + x[0] + "</td><td>: " + x[1] + "</td></tr>"; }).join("") + "</table></td></tr></table>" +
@@ -79,8 +82,8 @@
       "<tr class=\"iv-tot\"><td colspan=\"4\" class=\"r\">TOTAL</td><td class=\"r\">" + m2(gross) + "</td><td class=\"r\">" + (ex ? "Exempt" : m2(tax)) + "</td><td class=\"r\">" + m2(gross + tax) + "</td></tr>" +
       "<tr><td colspan=\"7\"><b>Amount in words:</b> " + h(safe(function () { return ivWords(gross + tax); }, "")) + "</td></tr>" +
       (ex ? "<tr><td colspan=\"7\">Exempt from sales tax" + (d.exemptRef || p.amcTaxNote ? ": " + h(d.exemptRef || p.amcTaxNote) : ".") + "</td></tr>" : "") + "</tbody></table>" +
-      (bank.length ? "<p class=\"fs-ai-bank\"><b>Bank details: " + bank.map(h).join(" &nbsp;|&nbsp; ") + "</b></p>" : "") +
-      "<div class=\"fs-ai-sig\">" + (so.length ? so.map(h).join("<br>") : "") + "</div>" + notesHtml(c, r.entity) + "</div>";
+      (bank.length ? "<div class=\"fs-ai-bank\">" + bank.map(function (x, i) { return "<p><b>" + (i ? "" : "Bank details: ") + h(x).replace(/ \| /g, " &nbsp;|&nbsp; ") + "</b></p>"; }).join("") + "</div>" : "") +
+      "<div class=\"fs-ai-sig\">" + (so.length ? so.map(h).join("<br>") : "") + "</div>" + notesHtml(cb, r.entity) + "</div>";
   }
 
   // Lines under the invoice (hassan, 2026-11-04, from a telecom invoice: "cheque / PO made in the favour of ...",
@@ -164,6 +167,7 @@
 
   // ---- invoice details per company (admin; stored in settings.invCo)
   var KEYS = [["title", "Account title"], ["iban", "IBAN / account number"], ["bank", "Bank and branch"], ["ntn", "Our NTN"], ["strn", "Our STRN"], ["signName", "Signed by (name)"], ["signTitle", "Designation"]];
+  // more accounts (hassan, 2026-11-04: "on Jeewajee there are multiple account numbers"): one account per line
   function panel(ents) {
     if (!window.FS_ADMIN || !ents.length) return "";
     return "<details class=\"card fs-ai-set\"><summary><b>Invoice details per company</b> <span class=\"muted\">(bank account, NTN / STRN and signatory printed on AMC invoices)</span></summary>" +
@@ -171,10 +175,11 @@
         var c = co(e);
         return "<div class=\"fs-ai-co\" data-aico=\"" + h(e) + "\"><h4>" + h(safe(function () { return coLabel(e); }, e)) + "</h4><div class=\"fs-ai-g\">" +
           KEYS.map(function (k) { return "<label>" + h(k[1]) + "<input data-aik=\"" + k[0] + "\" value=\"" + h(c[k[0]] || "") + "\"></label>"; }).join("") +
-          "</div><label class=\"fs-ai-nt\">Notes on invoices (one per line; blank = the standard cheque / payment / system-generated lines; - = none)<textarea data-aik=\"notes\" rows=\"3\">" + h(c.notes || "") + "</textarea></label><button type=\"button\" class=\"btn sm pri\" data-aisave=\"" + h(e) + "\">Save " + h(e) + "</button> <span class=\"muted\" data-aimsg=\"" + h(e) + "\"></span></div>";
+          "</div><label class=\"fs-ai-nt\">More bank accounts (one account per line, e.g. Account title: … | IBAN: … | Bank: …)<textarea data-aik=\"more\" rows=\"3\">" + h(c.more || "") + "</textarea></label><label class=\"fs-ai-nt\">Notes on invoices (one per line; blank = the standard cheque / payment / system-generated lines; - = none)<textarea data-aik=\"notes\" rows=\"3\">" + h(c.notes || "") + "</textarea></label><button type=\"button\" class=\"btn sm pri\" data-aisave=\"" + h(e) + "\">Save " + h(e) + "</button> <span class=\"muted\" data-aimsg=\"" + h(e) + "\"></span></div>";
       }).join("") + "</details>";
   }
   window.FS_AMCINV.panel = panel;
+  window.FS_AMCINV.lhList = function (own) { var L = [own]; safe(function () { Object.keys(IV_LH).forEach(function (k) { if (L.indexOf(k) < 0) L.push(k); }); }, null); return L; };
   document.addEventListener("click", async function (e) {
     var b = e.target.closest && e.target.closest("[data-aisave]"); if (!b) return;
     e.preventDefault();
@@ -193,6 +198,16 @@
     if (typeof S === "undefined" || !S.projects || typeof ivBody !== "function" || typeof Store === "undefined" || typeof settings !== "function") return false;
     hooked = true;
     safe(fields, null);
+    // an AMC invoice can print on another company's letterhead (doc.lhCo; hassan, 2026-11-04: JSPL invoices on the
+    // JSPL or the Jeewajee letterhead, same template)
+    var swap = function (r) { var x = r && r.doc && r.doc.lhCo; return x && x !== r.entity && !r._own && (r.amcKey || r.doc.layout === "amctax") ? Object.assign({}, r, { entity: x, _own: r.entity }) : r; };
+    ["ivDoc", "ivPdf", "ivDocx"].forEach(function (fn) {
+      safe(function () {
+        var f = { ivDoc: typeof ivDoc === "function" ? ivDoc : null, ivPdf: typeof ivPdf === "function" ? ivPdf : null, ivDocx: typeof ivDocx === "function" ? ivDocx : null }[fn]; if (!f) return;
+        var w = function (r) { var a = [].slice.call(arguments); a[0] = swap(r); return f.apply(this, a); };
+        if (fn === "ivDoc") ivDoc = w; else if (fn === "ivPdf") ivPdf = w; else ivDocx = w; // eslint-disable-line no-global-assign
+      }, null);
+    });
     var old = ivBody;
     ivBody = function (M) { // eslint-disable-line no-global-assign
       if (M && M.r && M.d && (M.d.layout === "amctax" || M.r.amcKey)) { var x = safe(function () { return body(M); }, null); if (x) return x; }
@@ -202,7 +217,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".qsheet .fs-ai .fs-ai-head td{vertical-align:top}.fs-ai-to{margin:4px 2px;line-height:1.55}.qsheet .fs-ai table.fs-ai-meta{border-collapse:collapse}.qsheet .fs-ai table.fs-ai-meta td{border:0!important;padding:1px 6px 1px 0}" +
-    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-ed{cursor:text}.fs-ai-ed:hover{outline:1px dashed #1F6FB8;outline-offset:-3px}.fs-ai-ed:focus{outline:2px solid #1F6FB8;outline-offset:-3px;background:#f5f9ff}@media print{.fs-ai-ed:hover,.fs-ai-ed:focus{outline:0!important;background:none!important}}body.printing .fs-ai-ed{outline:0!important;background:none!important}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
+    ".qsheet .fs-ai .fs-ai-lines td{vertical-align:middle}.fs-ai-sp{font-size:10px;color:#333;margin-top:3px}.fs-ai-ed{cursor:text}.fs-ai-ed:hover{outline:1px dashed #1F6FB8;outline-offset:-3px}.fs-ai-ed:focus{outline:2px solid #1F6FB8;outline-offset:-3px;background:#f5f9ff}@media print{.fs-ai-ed:hover,.fs-ai-ed:focus{outline:0!important;background:none!important}}body.printing .fs-ai-ed{outline:0!important;background:none!important}.fs-ai-bank{margin:10px 0 0;font-size:12px}.fs-ai-bank p{margin:0 0 3px}.fs-cu-hide{display:none!important}.fs-cu-ck{display:flex;gap:6px;align-items:center;font-size:12.5px;margin:4px 0 2px}.fs-ai-sig{margin-top:70px;line-height:1.5;break-inside:avoid}.fs-ai-notes{margin-top:22px;font-size:10.5px;break-inside:avoid}.fs-ai-notes ul{margin:0 0 6px 16px;padding:0}.fs-ai-notes li{margin-bottom:3px}.fs-ai-sys{text-align:center;margin:6px 0 0}.fs-ai-nt{display:flex;flex-direction:column;gap:3px;font-size:12px;margin-bottom:8px}" +
     ".fs-ai-set{margin:12px 0}.fs-ai-set summary{cursor:pointer}.fs-ai-co{border-top:1px solid #e3e8ee;padding:8px 0}.fs-ai-co h4{margin:4px 0 6px}" +
     ".fs-ai-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}.fs-ai-g label{display:flex;flex-direction:column;gap:3px;font-size:12px}@media (max-width:900px){.fs-ai-g{grid-template-columns:1fr 1fr}}";
   (document.head || document.documentElement).appendChild(css);

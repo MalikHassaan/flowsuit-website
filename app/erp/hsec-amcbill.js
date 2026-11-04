@@ -14,7 +14,7 @@
 //    "Print ticked" (one print, each invoice on its own page). Printing uses the normal invoice template and the
 //    company's letterhead (the imported JSPL letterhead for JSPL).
 (function () {
-  /* global special, MODS, TAB_HOME, TITLE, Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
+  /* global coLabel, special, MODS, TAB_HOME, TITLE, Store, V, byEnt, amcDue, amcTax, AMC_STEP, ivNextNo, ivCo, ivDoc, ivBody, ivWords, ivAmt, outAR, monthB, iso, addDays, fdate, idc, makeAutoJv, approverName, todayStr, esc, fmt, toast, render, sheetOpen, amcView, ENTS */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -131,12 +131,36 @@
     return { id: f.id, amcKey: f.amcKey, projectId: f.projectId, entity: f.entity, customer: (d0.to || {}).name || f.customer, project: "", invoiceNo: nos.length > 2 ? nos[0] + " to " + nos[nos.length - 1] : nos.join(", "), invoiceDate: f.invoiceDate, dueDate: f.dueDate,
       doc: Object.assign({}, d0, { poRef: "", lines: lines, arrears: ar.amt ? ar : null }) };
   }
+  // "Letterhead" choice on an open AMC invoice: the company's own or another company's (e.g. JSPL on Jeewajee); saved on
+  // the invoice (doc.lhCo) so reprints and bulk prints use it
+  var LAST = null;
+  function lhBar() {
+    var sh = document.querySelector("#printLayer .sheet"); if (!sh || sh.querySelector(".fs-lhco")) return;
+    var docs = sh.querySelectorAll(".fs-ai[data-rid]"); if (!docs.length || !window.FS_AMCINV || !window.FS_AMCINV.lhList) return;
+    var own = docs[0].getAttribute("data-own"), cur = docs[0].getAttribute("data-lhco"), L = window.FS_AMCINV.lhList(own); if (L.length < 2) return;
+    var bar = sh.querySelector(".bar"), wrap = document.createElement("label"); wrap.className = "fs-lhco";
+    wrap.innerHTML = "Letterhead <select>" + L.map(function (e) { return "<option value=\"" + h(e) + "\"" + (e === cur ? " selected" : "") + ">" + h(safe(function () { return coLabel(e); }, e)) + (e === own ? " (own)" : "") + "</option>"; }).join("") + "</select>";
+    if (bar) bar.appendChild(wrap); else sh.insertBefore(wrap, sh.firstChild);
+    wrap.querySelector("select").addEventListener("change", async function (e) {
+      var to = e.target.value, ids = [].map.call(docs, function (d) { return d.getAttribute("data-rid"); }), find = function (id) { return safe(function () { return Store.data.receivables.find(function (r) { return r.id === id; }); }, null); };
+      var recs = []; ids.forEach(function (id) { var r = find(id); if (!r) return; (r.amcGroup ? group(r.amcGroup) : [r]).forEach(function (x) { recs.push(x); }); });
+      try { for (var i = 0; i < recs.length; i++) { var c = JSON.parse(JSON.stringify(recs[i])); c.doc = c.doc || {}; if (to === c.entity) delete c.doc.lhCo; else c.doc.lhCo = to; await Store.save("receivables", c); } }
+      catch (x) { safe(function () { toast("Could not save the letterhead choice: " + ((x && x.message) || "not allowed") + "."); }, null); }
+      var lh = LAST ? LAST.lh : true, R = ids.map(find).filter(Boolean).map(printable);
+      printSet(R, lh);
+    });
+  }
+  (function watchLh() {
+    if (!document.body) return setTimeout(watchLh, 300);
+    new MutationObserver(function () { safe(lhBar, null); }).observe(document.body, { childList: true, subtree: true });
+  })();
   function printSet(R, lh) {
-    var ents = {}; R.forEach(function (r) { ents[r.entity] = 1; });
-    if (Object.keys(ents).length > 1) { safe(function () { toast("Tick invoices of one company at a time: each company prints on its own letterhead."); }, null); return; }
+    var ents = {}; R.forEach(function (r) { ents[(r.doc && r.doc.lhCo) || r.entity] = 1; });
+    if (Object.keys(ents).length > 1) { safe(function () { toast("Tick invoices on one letterhead at a time: each letterhead prints its own header and footer."); }, null); return; }
     var html = R.map(function (r, i) { return (i ? "<div style=\"break-before:page;page-break-before:always\"></div>" : "") + ivDoc(r, lh); }).join("");
     sheetOpen(html);
     var s = document.querySelector("#printLayer .sheet"); if (s) s.classList.add("qsheet");
+    LAST = { R: R, lh: lh };
     safe(function () { toast(R.length + " invoice" + (R.length === 1 ? "" : "s") + " open " + (lh ? "on the letterhead" : "on plain paper") + ". Each prints on its own page."); }, null);
   }
 
@@ -326,7 +350,7 @@
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
     ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-g th.c{text-align:center;white-space:nowrap;font-size:12px}.fs-g td{text-align:center;font-size:12px;white-space:nowrap}.fs-g td:first-child{text-align:left;white-space:normal;min-width:200px}.fs-g td.num{text-align:right}.fs-g-x{color:#aab}" +
     ".fs-g-pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}.fs-g-pill.ok{background:#2e7d32;color:#fff}.fs-g-pill.bl{background:#1F6FB8;color:#fff}.fs-g-pill.due{background:#f2a516;color:#fff}.fs-g-due{color:#a15c00;font-weight:600}" +
-    ".fs-ai-mh td{background:#eef3f9;border-top:2px solid #cfd9e6}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
+    ".fs-ai-mh td{background:#eef3f9;border-top:2px solid #cfd9e6}.fs-lhco{display:inline-flex;gap:6px;align-items:center;margin-left:10px;font-size:13px}@media print{.fs-lhco{display:none!important}}.fs-ab-miss{border:1px solid #f0c36d;background:#fff8e6;border-radius:8px;padding:8px 12px;margin:8px 0}.fs-ab-miss ul{margin:4px 0 0 18px;padding:0}";
   (document.head || document.documentElement).appendChild(css);
   function start() { if (!hook()) setTimeout(start, 400); }
   start();
