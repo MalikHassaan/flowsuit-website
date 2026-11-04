@@ -123,16 +123,21 @@
       if (r !== "" && r != null) { tx.value = String(r); tx.setAttribute("data-fs-auto", tx.value); tx.dispatchEvent(new Event("input", { bubbles: true })); }
     }
   }
-  // monthly fee = units × rate per unit, unless the fee was typed by hand
+  // monthly fee = units × rate per unit whenever both are filled (locked then); typed by hand only without them
   function feeCalc() {
     var u = num((document.getElementById("f_amcUnits") || {}).value), r = num((document.getElementById("f_amcRate") || {}).value), fe = document.getElementById("f_amcFee");
-    if (!fe || !u || !r) return;
-    if (fe.value && num(fe.getAttribute("data-fs-auto")) !== num(fe.value)) return; // typed by hand: leave it
+    if (!fe) return;
+    fe.readOnly = !!(u && r); fe.classList.toggle("fs-cv-lock", !!(u && r)); // units × rate decides the fee (hassan, 2026-11-04)
+    if (!u || !r) return;
     var v = String(Math.round(u * r * 100) / 100); if (num(fe.value) === num(v)) return;
     fe.value = v; fe.setAttribute("data-fs-auto", v);
     fe.dispatchEvent(new Event("input", { bubbles: true })); fe.dispatchEvent(new Event("change", { bubbles: true }));
   }
   document.addEventListener("input", function (e) { if (e.target && /^f_amc(Units|Rate)$/.test(e.target.id)) safe(feeCalc, null); });
+  (function watchForm() { // lock / work out the fee as soon as the form opens
+    if (!document.body) return setTimeout(watchForm, 300);
+    new MutationObserver(function () { var fe = document.getElementById("f_amcFee"); if (fe && !fe.hasAttribute("data-fs-seen")) { fe.setAttribute("data-fs-seen", "1"); safe(feeCalc, null); } }).observe(document.body, { childList: true, subtree: true });
+  })();
   document.addEventListener("change", function (e) {
     var id = e.target && e.target.id;
     if (id === "f_amcUnits" || id === "f_amcRate") safe(feeCalc, null);

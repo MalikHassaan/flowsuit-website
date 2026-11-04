@@ -192,7 +192,7 @@
         openForm = function (c, id, pre) { // eslint-disable-line no-global-assign
           if (c === "projects" && !id && (V.mod === "amcm" || amcOnly())) pre = Object.assign({ type: AMC_T[0] }, pre || {});
           var out = oF.call(this, c, id, pre);
-          if (c === "projects") safe(shapeProj, null);
+          if (c === "projects") { safe(shapeProj, null); safe(amcValue, null); }
           if (c === "projects" && amcOnly()) safe(function () {
             var s = document.getElementById("f_type"); if (!s) return;
             Array.prototype.slice.call(s.options).forEach(function (o) { if (AMC_T.indexOf(o.value) < 0) o.remove(); });
@@ -261,30 +261,44 @@
       if (t !== er.textContent) er.textContent = t;
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
   })();
+  // hassan, 2026-11-04: "contract value should be calculated as number of lifts × per unit price × number of months
+  // the contract is made": always worked out (and locked) once units, rate and both AMC dates are filled; free
+  // maintenance months are left out. Without units and rate it falls back to fee × months.
+  function cvNote(cv, txt) {
+    var w = cv.closest(".f") || cv.parentNode, n = w.querySelector(".fs-cv-n");
+    if (!txt) { if (n) n.remove(); cv.readOnly = false; cv.classList.remove("fs-cv-lock"); return; }
+    if (!n) { n = document.createElement("small"); n.className = "fs-cv-n"; cv.insertAdjacentElement("afterend", n); }
+    n.textContent = txt; cv.readOnly = true; cv.classList.add("fs-cv-lock");
+  }
   function amcValue() {
     var s = document.getElementById("f_type"), cv = document.getElementById("f_contractValue");
-    if (!s || !cv || s.value !== "Maintenance contract (AMC)") return;
-    var fee = parseFloat(String((document.getElementById("f_amcFee") || {}).value || "").replace(/,/g, "")) || 0;
+    if (!s || !cv) return;
+    if (s.value !== "Maintenance contract (AMC)") return cvNote(cv, "");
+    var val = function (id) { return parseFloat(String((document.getElementById(id) || {}).value || "").replace(/,/g, "")) || 0; };
+    var fee = val("f_amcFee"), u = val("f_amcUnits"), r = val("f_amcRate");
     var a = String((document.getElementById("f_amcStart") || {}).value || ""), b = String((document.getElementById("f_amcEnd") || {}).value || "");
-    if (!fee || !/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b) || b < a) return;
+    if (!(u && r) && !fee || !/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b) || b < a) return cvNote(cv, "");
     var months = Math.max(1, Math.round((new Date(b) - new Date(a)) / 86400000 / 30.44));
     // free maintenance months inside the AMC period are not charged
     var fr = safe(function () { return window.FS_AMCFREE.parse((document.getElementById("f_amcFree") || {}).value).months; }, []) || [];
     months = Math.max(0, months - fr.filter(function (m) { return m >= a.slice(0, 7) && m <= b.slice(0, 7); }).length);
-    if (!months) return;
-    if (cv.value && num(cv.getAttribute("data-fs-auto")) !== num(cv.value)) return; // typed by hand: leave it
-    var v = String(Math.round(fee * months)); cv.value = v; cv.setAttribute("data-fs-auto", v);
+    var all = months + fr.filter(function (m) { return m >= a.slice(0, 7) && m <= b.slice(0, 7); }).length;
+    if (!months) return cvNote(cv, "");
+    var v = String(Math.round(u && r ? u * r * months : fee * months));
+    cvNote(cv, "= " + (u && r ? u + " lift" + (u === 1 ? "" : "s") + " × Rs " + money(r) : "Rs " + money(fee) + " a month") + " × " + months + " month" + (months === 1 ? "" : "s") + (all > months ? " (" + all + " months less " + (all - months) + " free)" : "") + ". Worked out automatically.");
+    if (num(cv.value) === num(v)) return;
+    cv.value = v; cv.setAttribute("data-fs-auto", v);
     cv.dispatchEvent(new Event("input", { bubbles: true }));
     budgetSync();
   }
   document.addEventListener("change", function (e) {
     if (!e.target || !e.target.id) return;
     if (e.target.id === "f_type") { safe(shapeProj, null); setTimeout(function () { safe(shapeProj, null); safe(amcValue, null); }, 0); }
-    if (/^f_amc(Fee|Start|End|Free)$/.test(e.target.id)) safe(amcValue, null);
+    if (/^f_amc(Fee|Start|End|Free|Units|Rate)$/.test(e.target.id)) safe(amcValue, null);
   });
 
   var css = document.createElement("style");
-  css.textContent = ".fs-pf-hide{display:none!important}.fs-amcr-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.fs-amcr-ctl{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.fs-amcr-ctl label{display:flex;flex-direction:column;font-size:12px;gap:3px}" +
+  css.textContent = ".fs-pf-hide{display:none!important}.fs-cv-n{display:block;font-size:12px;color:#2e6b3a;margin-top:3px}input.fs-cv-lock{background:#f3f6f9}.fs-amcr-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.fs-amcr-ctl{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.fs-amcr-ctl label{display:flex;flex-direction:column;font-size:12px;gap:3px}" +
     ".fs-amcr{overflow:auto}.fs-amcr-t{border-collapse:collapse;width:100%;font-size:12.5px}.fs-amcr-t th,.fs-amcr-t td{border:1px solid #d5dbe2;padding:4px 6px;text-align:left;white-space:nowrap}.fs-amcr-t th{background:#eef1f5}.fs-amcr-t .num{text-align:right}.fs-amcr-t .c{text-align:center}" +
     ".fs-amcr-t td.rc,.fs-amcr-t th.rc{background:#f2faf4}.fs-amcr-t tfoot td{font-weight:700;background:#f6f8fa}.fs-amcr-t td.bad{color:#b0412e;font-weight:600}.fs-amcr-t .warn{color:#9a5b00}" +
     ".fs-amcr-info{border:1px solid #c9d1da;padding:8px 12px;margin:0 0 10px}.fs-amcr-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.fs-amcr-g div{display:flex;flex-direction:column}.fs-amcr-g small{color:#556;font-weight:600}" +
