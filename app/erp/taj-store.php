@@ -291,7 +291,7 @@ function taj_year_hooks(string $html): string
 // Every page counts every order, so page totals match the Summary (hassan, 2026-11-09: "why amounts are changed",
 // Dormant / Active, Overdue Instalments, By Sector Status, "same goes with other reports"). The Power BI copies left
 // out orders with no sector group or no instalment data, orders only in the Paid Percentage file, and properties
-// other than Commercial / Residential / Villas; these now show as their own (Blank) / Other rows and columns.
+// other than Commercial / Residential / Villas; these now show as their own (Blank) rows, and other property types count under Commercial (hassan, 2026-11-09).
 // Top Outstanding still lists only orders that owe money. All anchors must be found as counted, or nothing changes.
 function taj_scope_hooks(string $html): string
 {
@@ -309,11 +309,9 @@ function taj_scope_hooks(string $html): string
         'orders.filter(function (o) { return o.fileStatus === fs; })' => 'orders.filter(function (o) { return (o.fileStatus || BLANK) === fs; })',
         'return l.filter(function (o) { return o.inN && CFG.reportProperties.indexOf(o.property) >= 0; });' => 'return l;',
         'function propertyTable(orders) {'
-            => "\$0\n    var propOf = function (o) { return CFG.reportProperties.indexOf(o.property) >= 0 ? o.property : \"Other\"; };\n"
-             . "    var PROPS = CFG.reportProperties.concat(orders.some(function (o) { return propOf(o) === \"Other\"; }) ? [\"Other\"] : []);",
+            => "\$0\n    var propOf = function (o) { return CFG.reportProperties.indexOf(o.property) >= 0 ? o.property : \"Commercial\"; };\n"
+             . "    var PROPS = CFG.reportProperties;",
         'return o.property === p; })' => 'return propOf(o) === p; })',
-        'TAJ.CFG.reportProperties.forEach(function (p, i) { var o = 3 + i * 4; tb += pl[o + 3];'
-            => 'TAJ.CFG.reportProperties.concat(r.property.cols.length > 3 + TAJ.CFG.reportProperties.length * 4 ? ["Other"] : []).forEach(function (p, i) { var o = 3 + i * 4; tb += pl[o + 3];',
     ];
     $twice = ['CFG.reportProperties.forEach(function (p) {' => 'PROPS.forEach(function (p) {'];
     foreach ($pairs as $find => $with) {
