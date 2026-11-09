@@ -150,7 +150,21 @@
     return "";
   }
 
+  // Year tables must fit the page width with no scroll bar: shrink the font until the table fits.
+  function fit() {
+    var ws = document.querySelectorAll(".fs-yrbig:not(.fs-rc) .tw");
+    for (var i = 0; i < ws.length; i++) {
+      var w = ws[i], t = w.querySelector("table"); if (!t || !w.clientWidth) continue;
+      var f = 12; t.style.fontSize = f + "pt";
+      while (t.scrollWidth > w.clientWidth + 1 && f > 6) { f -= 0.5; t.style.fontSize = f + "pt"; }
+      var tight = f < 10; t.classList.toggle("fs-yrtight", tight);
+      if (tight) { f = 12; t.style.fontSize = f + "pt"; while (t.scrollWidth > w.clientWidth + 1 && f > 6) { f -= 0.5; t.style.fontSize = f + "pt"; } }
+    }
+  }
+  var fitT; window.addEventListener("resize", function () { clearTimeout(fitT); fitT = setTimeout(fit, 150); });
+
   function chart(r, tab, h) {
+    setTimeout(fit, 0);
     var X = r.fsyr; if (!X) return;
     var s = tab === "salesyr" ? X.sales : tab === "collyr" ? X.coll : null; if (!s) return;
     h.bars(tab === "salesyr" ? "c-syr" : "c-cyr", { labels: s.years.map(String), keys: [], legend: false,
@@ -164,8 +178,10 @@
   }
 
   var css = document.createElement("style");
-  css.textContent = ".fs-yrbig table,.fs-yrbig table.dense{font-size:12pt!important}.fs-yrbig td,.fs-yrbig th{padding:7px 10px}.fs-yrbig .tw{overflow-x:auto}" +
-    ".fs-rc td:last-child{white-space:normal;text-align:left;min-width:280px;font-size:11pt}body.present .fs-yrbig table{font-size:inherit!important}";
+  css.textContent = ".fs-yrbig table,.fs-yrbig table.dense{font-size:12pt}.fs-yrbig td,.fs-yrbig th{padding:7px 10px}.fs-rc .tw{overflow-x:auto}" +
+    ".fs-yrbig:not(.fs-rc) .tw{overflow:hidden!important;max-height:none}.fs-yrbig:not(.fs-rc) table{width:100%}.fs-yrbig:not(.fs-rc) td.t{min-width:0}" +
+    ".fs-yrbig table.fs-yrtight td,.fs-yrbig table.fs-yrtight th{padding:5px 3px}" +
+    ".fs-rc td:last-child{white-space:normal;text-align:left;min-width:280px;font-size:11pt}body.present .fs-rc table{font-size:inherit!important}";
   document.head.appendChild(css);
 
   window.FS_YR = { build: build, kpis: kpis, html: html, chart: chart, pdf: pdf, recon: recon };
