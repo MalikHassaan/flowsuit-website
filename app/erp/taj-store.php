@@ -153,6 +153,7 @@ function taj_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/taj-order.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-hide.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/taj-applied.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/taj-year.js') . '</script>'
         . chat_inject($me, 'taj')
         // Sign-out and user management happen in the ERP itself.
         . '<style>#lock,[data-tab="users"],.mod:has([data-mod="admin"]){display:none!important}'
@@ -248,6 +249,45 @@ function taj_applied_hooks(string $html): string
     return str_replace('not one of the four expected exports', 'not one of the five expected exports', $html);
 }
 
+// Reconciliation, Sales by Sector and Year, Collections by Bank and Year (taj-year.js; hassan, 2026-11-09). Runs after
+// taj_applied_hooks and needs every anchor exactly once, or nothing changes.
+function taj_year_hooks(string $html): string
+{
+    $y = 'window.FS_YR';
+    $pairs = [
+        '      pace: model.bank ? collectionPace(model.bank, cut) : null'
+            => "$0,\n      fsyr: $y ? FS_YR.build(m, model.bank, cut, pr, CFG.reportProperties) : null",
+        '    ["pace", "Collection Pace", "Collection control",'
+            => "    [\"recon\", \"Reconciliation\", \"Overview\", \"Why page totals differ\", \"Each page's orders and balance against the Summary, the difference and the orders it leaves out.\", \"TAJ Residencia - Reconciliation of page totals as at\"],\n"
+             . "    [\"salesyr\", \"Sales by Sector and Year\", \"Sales\", \"Sales by sector and year\", \"Sale value by sector, booking year in columns.\", \"TAJ Residencia - Sales by sector and booking year as at\"],\n"
+             . "    [\"collyr\", \"Collections by Bank and Year\", \"Cash\", \"Collections by bank and year\", \"Bank collections by bank, year in columns.\", \"TAJ Residencia - Collections by bank and year till\"],\n$0",
+        '["sales", "Sales", "Sales", ["sales"]]' => '["sales", "Sales", "Sales", ["sales", "salesyr"]]',
+        '"pace", "targets", "exceptions"]' => '"pace", "collyr", "targets", "exceptions"]',
+        '"status", "property", "file"]],' => '"status", "property", "file", "recon"]],',
+        '"plan", "overdue", "sales",' => '"plan", "overdue", "sales", "salesyr", "collyr", "recon",',
+        '    pace: { charts: { "c-pace": [0, 0, 1, .55] }, tables: [[0, .6, 1, .4]] },'
+            => "    salesyr: { charts: { \"c-syr\": [0, 0, 1, .3] }, tables: [[0, .34, 1, .66]] },\n    collyr: { charts: { \"c-cyr\": [0, 0, 1, .3] }, tables: [[0, .34, 1, .66]] },\n    recon: { charts: {}, tables: [[0, 0, 1, 1]] },\n$0",
+        '      case "pace": {' => "      case \"salesyr\": case \"collyr\": case \"recon\": return $y ? FS_YR.kpis(r, tab, { money: money, nf: nf0, last: last }) : [];\n$0",
+        "      case \"pace\":\n        if (!r.pace)"
+            => "      case \"salesyr\": case \"collyr\": case \"recon\": html = $y ? FS_YR.html(r, tab, { kp: kp, card: card, table: table, canvas: canvas, money: money, nf: nf0, last: last, date: dateText }) : \"\"; break;\n$0",
+        '    if (tab === "pace" && r.pace) {' => "    if ((tab === \"salesyr\" || tab === \"collyr\") && $y) FS_YR.chart(r, tab, { bars: bars, css: css, money: money });\n$0",
+        '      case "pace": if (r.pace) T("By bank", r.pace.table); p.noDate = true; break;'
+            => "      case \"salesyr\": case \"collyr\": if ($y) FS_YR.pdf(r, tab, T); break;\n      case \"recon\": if ($y) { var rc = FS_YR.recon(r, last, money, nf0); if (rc) T(\"Balance and orders on each page against the Summary\", { cols: rc.cols, rows: rc.rows }); } break;\n$0",
+        '    collection: "c-cmonth", trend: "c-trend", sales: "c-sales",' => '    collection: "c-cmonth", trend: "c-trend", sales: "c-sales", salesyr: "c-syr", collyr: "c-cyr",',
+        '    if (tab === "pace") return "Pace for the last month of "'
+            => "    if (tab === \"salesyr\") return \"Orders booked in \" + n + \".\";\n    if (tab === \"collyr\") return \"Bank collections in \" + n + \".\";\n$0",
+    ];
+    foreach ($pairs as $find => $with) {
+        if (substr_count($html, $find) !== 1) {
+            return $html;
+        }
+    }
+    foreach ($pairs as $find => $with) {
+        $html = str_replace($find, str_replace('$0', $find, $with), $html);
+    }
+    return $html;
+}
+
 // Collections: the sector-by-month table and its chart count cash receipts only (hassan, 2026-10-28); credit notes and
 // rebates stay in their own Non-cash collection table. All anchors must be found once, or nothing changes.
 function taj_cash_hooks(string $html): string
@@ -268,7 +308,7 @@ function taj_cash_hooks(string $html): string
 // The dashboard was written for claude.ai sharing; inside the ERP, access comes from Users and access.
 function taj_wording(string $html): string
 {
-    $html = taj_cash_hooks(taj_applied_hooks(taj_hide_hooks($html)));
+    $html = taj_cash_hooks(taj_year_hooks(taj_applied_hooks(taj_hide_hooks($html))));
     return strtr($html, [
         'ask the report owner to raise your access in the Share menu.' => 'ask an ERP admin for View and upload access.',
         '>claude.ai account</th>' => '>ERP account</th>',
