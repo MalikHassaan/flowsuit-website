@@ -1,7 +1,9 @@
 <?php $title = 'Sign in | ' . erp_client_name() . ' ERP'; $authTitle = ['hsec' => 'HSEC ERP', 'taj' => 'Receivable & Recovery ERP'][erp_system()] ?? 'Sign in to your ERP'; $authLead = erp_system() === 'flowsuit' ? 'One sign-in for every FlowSuit system. Your account opens your company\'s ERP straight away.' : 'Sign in with the e-mail and password from your admin.'; ?>
 <div class="auth-card">
 <?php require __DIR__ . '/auth-brand.php'; ?>
-<?php if (!$error && !empty($_GET['idle'])): ?>
+<?php if (!$error && !empty($_GET['expired'])): ?>
+  <p class="erp-note">This page was open from before you were signed out, so it needed a fresh start. Type your password again to sign in.</p>
+<?php elseif (!$error && !empty($_GET['idle'])): ?>
   <p class="erp-note">You were signed out after 10 minutes without activity. Sign in again to continue.</p>
 <?php endif; ?>
 <?php if ($error): ?>
