@@ -288,6 +288,50 @@ function taj_year_hooks(string $html): string
     return $html;
 }
 
+// Every page counts every order, so page totals match the Summary (hassan, 2026-11-09: "why amounts are changed",
+// Dormant / Active, Overdue Instalments, By Sector Status, "same goes with other reports"). The Power BI copies left
+// out orders with no sector group or no instalment data, orders only in the Paid Percentage file, and properties
+// other than Commercial / Residential / Villas; these now show as their own (Blank) / Other rows and columns.
+// Top Outstanding still lists only orders that owe money. All anchors must be found as counted, or nothing changes.
+function taj_scope_hooks(string $html): string
+{
+    $pairs = [
+        'dorm.all = groupTable(g.filter(function (o) { return o.summaryGroup !== BLANK; }), "summaryGroup"' => 'dorm.all = groupTable(g, "summaryGroup"',
+        '["Active", "Dormant"].forEach(' => '["Active", "Dormant", BLANK].forEach(',
+        'return stack([["Active", r.dormant.Active, { dormant: "Active" }], ["Dormant", r.dormant.Dormant, { dormant: "Dormant" }]], "Customer status");'
+            => 'var parts = [["Active", r.dormant.Active, { dormant: "Active" }], ["Dormant", r.dormant.Dormant, { dormant: "Dormant" }]]; '
+             . 'if (r.dormant[BLANK] && r.dormant[BLANK].rows.some(function (x) { return x.kind === "row"; })) parts.push(["No instalment data", r.dormant[BLANK], { dormant: BLANK }]); '
+             . 'return stack(parts, "Customer status");',
+        'o.inN; }).length, sum(l, function (o) { return o.invoiced; })' => 'o; }).length, sum(l, function (o) { return o.invoiced; })',
+        'fileStatusTable(V(["fileStatus", "sector"]).filter(function (o) { return o.inN; }))' => 'fileStatusTable(V(["fileStatus", "sector"]))',
+        '["File", "Plot"].forEach(function (fs) {'
+            => '["File", "Plot"].concat(Array.from(new Set(orders.map(function (o) { return o.fileStatus || BLANK; }))).filter(function (s) { return s !== "File" && s !== "Plot"; })).forEach(function (fs) {',
+        'orders.filter(function (o) { return o.fileStatus === fs; })' => 'orders.filter(function (o) { return (o.fileStatus || BLANK) === fs; })',
+        'return l.filter(function (o) { return o.inN && CFG.reportProperties.indexOf(o.property) >= 0; });' => 'return l;',
+        'function propertyTable(orders) {'
+            => "\$0\n    var propOf = function (o) { return CFG.reportProperties.indexOf(o.property) >= 0 ? o.property : \"Other\"; };\n"
+             . "    var PROPS = CFG.reportProperties.concat(orders.some(function (o) { return propOf(o) === \"Other\"; }) ? [\"Other\"] : []);",
+        'return o.property === p; })' => 'return propOf(o) === p; })',
+        'TAJ.CFG.reportProperties.forEach(function (p, i) { var o = 3 + i * 4; tb += pl[o + 3];'
+            => 'TAJ.CFG.reportProperties.concat(r.property.cols.length > 3 + TAJ.CFG.reportProperties.length * 4 ? ["Other"] : []).forEach(function (p, i) { var o = 3 + i * 4; tb += pl[o + 3];',
+    ];
+    $twice = ['CFG.reportProperties.forEach(function (p) {' => 'PROPS.forEach(function (p) {'];
+    foreach ($pairs as $find => $with) {
+        if (substr_count($html, $find) !== 1) {
+            return $html;
+        }
+    }
+    foreach ($twice as $find => $with) {
+        if (substr_count($html, $find) !== 2) {
+            return $html;
+        }
+    }
+    foreach ($pairs as $find => $with) {
+        $html = str_replace($find, str_replace('$0', $find, $with), $html);
+    }
+    return str_replace(array_keys($twice), array_values($twice), $html);
+}
+
 // Collections: the sector-by-month table and its chart count cash receipts only (hassan, 2026-10-28); credit notes and
 // rebates stay in their own Non-cash collection table. All anchors must be found once, or nothing changes.
 function taj_cash_hooks(string $html): string
@@ -308,7 +352,7 @@ function taj_cash_hooks(string $html): string
 // The dashboard was written for claude.ai sharing; inside the ERP, access comes from Users and access.
 function taj_wording(string $html): string
 {
-    $html = taj_cash_hooks(taj_year_hooks(taj_applied_hooks(taj_hide_hooks($html))));
+    $html = taj_scope_hooks(taj_cash_hooks(taj_year_hooks(taj_applied_hooks(taj_hide_hooks($html)))));
     return strtr($html, [
         'ask the report owner to raise your access in the Share menu.' => 'ask an ERP admin for View and upload access.',
         '>claude.ai account</th>' => '>ERP account</th>',

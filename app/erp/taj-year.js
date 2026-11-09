@@ -74,7 +74,7 @@
     safe(function () { var t = last(r.overdue); add("Overdue Instalments", t[1], t[4]); });
     safe(function () { var t = last(r.fileStatus); add("File Status", t[2], t[6]); });
     safe(function () { var t = last(r.sectorStatus); add("By Sector Status", t[3], t[6]); });
-    safe(function () { var t = last(r.property), o = 0, b = 0; X.props.forEach(function (p, i) { o += t[3 + i * 4]; b += t[6 + i * 4]; }); add("By Property", o, b); });
+    safe(function () { var t = last(r.property), o = 0, b = 0; for (var i = 3; i + 3 < t.length; i += 4) { o += +t[i] || 0; b += +t[i + 3] || 0; } add("By Property", o, b); });
     safe(function () { add("Top Outstanding", r.top.count, r.top.total); });
     safe(function () { var t = last(r.agents); add("Agent Performance", t[1], t[4]); });
     safe(function () { var t = last(r.vintage); add("Booking Year", t[1], t[4]); });
