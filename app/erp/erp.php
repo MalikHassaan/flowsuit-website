@@ -306,13 +306,43 @@ function erp_csrf_field(): string
     return '<input type="hidden" name="csrf" value="' . e($_SESSION['csrf']) . '">';
 }
 
-function erp_check_csrf(): void
+function erp_check_csrf(string $sub = ''): void
 {
     $sent = (string) ($_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
-    if (!hash_equals($_SESSION['csrf'] ?? '', $sent)) {
-        http_response_code(400);
-        exit('The form expired. Go back, refresh the page and try again.');
+    if (hash_equals($_SESSION['csrf'] ?? '', $sent)) {
+        return;
     }
+    // A page left open past the 10-minute sign-out carries the old session's token (hassan, 2026-11-09: signing in again
+    // without refreshing showed "The form expired"). Pages people submit by hand go back to a fresh form instead.
+    $api = isset($_SERVER['HTTP_X_CSRF_TOKEN']) || str_contains($sub, '/api/') || stripos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false;
+    if (!$api) {
+        $qs = $_GET;
+        unset($qs['expired'], $qs['idle']);
+        $back = function (string $page) use ($qs): string {
+            return $page . '?' . http_build_query($qs + ['expired' => 1]);
+        };
+        if (in_array($sub, ['/', '/login', '/verify', '/forgot', '/reset'], true)) {
+            if (isset($_POST['email'])) {
+                $_SESSION['login_email'] = substr(trim((string) $_POST['email']), 0, 200);
+            }
+            erp_redirect($back($sub === '/' ? '/erp/login' : '/erp' . $sub));
+        }
+        if (!erp_user()) {
+            erp_redirect('/erp/login?idle=1');
+        }
+        erp_flash('That page was open too long, so nothing was saved. Please do it again.');
+        $ref = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+        $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+        $path = $host !== '' && parse_url($ref, PHP_URL_HOST) === $host ? (string) parse_url($ref, PHP_URL_PATH) : '';
+        $query = (string) parse_url($ref, PHP_URL_QUERY);
+        if ($path !== '' && str_starts_with($path, '/erp')) {
+            header('Location: ' . $path . ($query !== '' ? '?' . $query : ''), true, 303);
+            exit;
+        }
+        erp_redirect('/erp');
+    }
+    http_response_code(400);
+    exit('The form expired. Go back, refresh the page and try again.');
 }
 
 function erp_user(): ?array
@@ -595,7 +625,7 @@ function erp_handle(string $path): void
     erp_start_session(!in_array($sub, ['/m/receivables/api/sync', '/m/hsec/api/sync', '/chat/api/poll', '/chat/api/sig', '/attendance/api/state'], true));
     $post = $_SERVER['REQUEST_METHOD'] === 'POST';
     if ($post) {
-        erp_check_csrf();
+        erp_check_csrf($sub);
     }
 
     $hasUsers = (int) erp_db()->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0;
@@ -754,7 +784,8 @@ function erp_login(bool $post): void
         erp_redirect($u['must_change'] ? '/erp/account' : erp_start_page($u));
     }
     $error = null;
-    $email = '';
+    $email = (string) ($_SESSION['login_email'] ?? '');
+    unset($_SESSION['login_email']);
     if ($post) {
         $email = trim((string) ($_POST['email'] ?? ''));
         if (erp_too_many_attempts($email)) {
