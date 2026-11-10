@@ -5,11 +5,11 @@
 //  * The AMC project form has "Invoice e-mail" (hsec-amcinv.js); several addresses are separated by commas.
 //  * Every invoice in AMC billing's lists gets "✉ Email", and the list gets "✉ Email ticked". A window shows each
 //    invoice with its address (taken from the project, can be changed), the subject and the message; Send builds the
-//    invoice PDF on its letterhead (the same PDF as the PDF button) and the server mails it from the customer support
+//    invoice PDF on the letterhead picked in the window (hassan, 2026-11-10: "while sending email it should ask on which letterhead"; the same PDF as the PDF button) and the server mails it from the customer support
 //    address (hsec-mail.php). A lump-sum invoice goes as one e-mail.
 //  * A sent invoice records who it went to and when (doc.mailed), shown under its Email button.
 (function () {
-  /* global Store, S, toast, fmt, fdate, ivPdf, dlSave, ivCo, esc */
+  /* global Store, S, toast, fmt, fdate, ivPdf, dlSave, ivCo, esc, coLabel */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; })); };
   var C = window.FS_BRIDGE || {}, API = (C.api || "/erp/m/hsec/api") + "/amcmail";
@@ -41,16 +41,18 @@
   }
 
   // the invoice PDF as a Blob: the app's own PDF builder, with its download step caught instead of saving a file
-  async function pdfOf(r) {
+  async function pdfOf(r, lh) {
     var got = null, keep = dlSave;
     dlSave = async function (name, data) { got = { name: name, data: data }; return false; }; // eslint-disable-line no-global-assign
-    try { await ivPdf(r, true); } finally { dlSave = keep; } // eslint-disable-line no-global-assign
+    // lh: the company whose letterhead to print on, or "" for plain paper
+    var x = r; if (lh) { x = JSON.parse(JSON.stringify(r)); x.doc = x.doc || {}; if (lh === r.entity) delete x.doc.lhCo; else x.doc.lhCo = lh; }
+    try { await ivPdf(x, !!lh); } finally { dlSave = keep; } // eslint-disable-line no-global-assign
     if (!got || !(got.data instanceof Blob)) throw new Error("The invoice PDF could not be made (check the internet connection and try again).");
     return got;
   }
 
-  async function send(row) {
-    var r = row.r, f = await pdfOf(B().printable(r)), fd = new FormData();
+  async function send(row, lh) {
+    var r = row.r, f = await pdfOf(B().printable(r), lh), fd = new FormData();
     fd.append("csrf", C.csrf || ""); fd.append("rid", r.id); fd.append("to", row.to); fd.append("subject", row.subject); fd.append("body", row.body);
     fd.append("from_name", "Customer Support - " + coName(r.entity)); fd.append("file", f.data, f.name || ("Invoice " + r.invoiceNo + ".pdf"));
     var res = await fetch(API, { method: "POST", body: fd, credentials: "same-origin" });
@@ -72,9 +74,13 @@
     });
     if (!rows.length) return;
     var old = document.getElementById("fsAmPick"); if (old) old.remove();
+    var lhs = safe(function () { return B().lhOptions(rows.map(function (x) { return x.r; })); }, []), cur = (rows[0].r.doc || {}).lhCo || rows[0].r.entity;
+    if (lhs.indexOf(cur) < 0) lhs.unshift(cur);
     var one = rows.length === 1, w = document.createElement("div"); w.id = "fsAmPick"; w.className = "fs-pk";
     w.innerHTML = "<div class=\"fs-pk-b fs-am\" role=\"dialog\" aria-modal=\"true\"><h3>E-mail " + rows.length + " invoice" + (one ? "" : "s") + "</h3>" +
-      "<p class=\"muted\">Sent from the customer support address with the invoice PDF attached (on its letterhead). A copy goes to that mailbox.</p>" +
+      "<p class=\"muted\">Sent from the customer support address with the invoice PDF attached. A copy goes to that mailbox.</p>" +
+      "<div class=\"fs-am-lh\"><b>Send the invoice on</b>" + lhs.map(function (e) { return "<label class=\"fs-pk-o\"><input type=\"radio\" name=\"fsAmLh\" value=\"" + h(e) + "\"" + (e === cur ? " checked" : "") + "><span class=\"fs-pk-t\"></span><span><b>" + h(e) + "</b> letterhead <span class=\"muted\">" + h(safe(function () { return coLabel(e); }, "")) + "</span></span></label>"; }).join("") +
+      "<label class=\"fs-pk-o\"><input type=\"radio\" name=\"fsAmLh\" value=\"\"><span class=\"fs-pk-t\"></span><span>Plain paper <span class=\"muted\">(no letterhead)</span></span></label></div>" +
       rows.map(function (x, i) {
         return "<div class=\"fs-am-r\" data-i=\"" + i + "\"><div class=\"fs-am-h\"><b class=\"mono\">" + h(x.G.map(function (g) { return g.invoiceNo; }).join(", ")) + "</b> · " + h(x.p.name || x.r.customer || "") + " · Rs " + h(money(x.G.reduce(function (a, g) { return a + (+g.amount || 0); }, 0))) + "</div>" +
           "<label>To <input type=\"text\" class=\"fs-am-to\" value=\"" + h(x.to) + "\" placeholder=\"name@company.com\"></label>" +
@@ -88,7 +94,7 @@
     w.addEventListener("click", async function (e) {
       if (e.target === w || e.target.closest("[data-amno]")) { w.remove(); return; }
       var go = e.target.closest("[data-amgo]"); if (!go || go.disabled) return;
-      go.disabled = true; var ok = 0, bad = 0;
+      go.disabled = true; var ok = 0, bad = 0, lc = w.querySelector("input[name=fsAmLh]:checked"), lh = lc ? lc.value : cur;
       for (var i = 0; i < rows.length; i++) {
         var el = w.querySelector(".fs-am-r[data-i=\"" + i + "\"]"), st = el.querySelector(".fs-am-st");
         if (el.getAttribute("data-done")) continue;
@@ -96,7 +102,7 @@
         var bo = el.querySelector(".fs-am-bo"); if (bo) rows[i].body = bo.value;
         if (!rows[i].to) { st.className = "fs-am-st err"; st.textContent = "Type an e-mail address."; bad++; continue; }
         st.className = "fs-am-st muted"; st.textContent = "Making the PDF and sending…";
-        try { var d = await send(rows[i]); st.className = "fs-am-st fs-am-ok"; st.textContent = "✓ Sent to " + (d.to || [rows[i].to]).join(", ") + "."; el.setAttribute("data-done", "1"); ok++; }
+        try { var d = await send(rows[i], lh); st.className = "fs-am-st fs-am-ok"; st.textContent = "✓ Sent to " + (d.to || [rows[i].to]).join(", ") + "."; el.setAttribute("data-done", "1"); ok++; }
         catch (x) { st.className = "fs-am-st err"; st.textContent = (x && x.message) || "Not sent."; bad++; }
       }
       go.disabled = false; if (!bad) go.textContent = "Sent";
@@ -130,6 +136,6 @@
   var css = document.createElement("style");
   css.textContent = ".fs-am{max-width:640px;width:100%;max-height:88vh;overflow:auto}.fs-am-r{border-top:1px solid #e3e8ee;padding:10px 0;display:flex;flex-direction:column;gap:6px}" +
     ".fs-am-r label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}.fs-am-r input,.fs-am-r textarea{font:inherit;padding:6px 8px;border:1px solid #cfd8e3;border-radius:6px}" +
-    ".fs-am-ok{color:#2e7d32;font-weight:600}.fs-am-mk{display:block;font-size:11px;color:#2e7d32;margin-top:2px}";
+    ".fs-am-lh{display:flex;flex-direction:column;gap:2px;margin:6px 0 4px}.fs-am-lh>b{font-size:13px;margin-bottom:2px}.fs-am-ok{color:#2e7d32;font-weight:600}.fs-am-mk{display:block;font-size:11px;color:#2e7d32;margin-top:2px}";
   (document.head || document.documentElement).appendChild(css);
 })();
