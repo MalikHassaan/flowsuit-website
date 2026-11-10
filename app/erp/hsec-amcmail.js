@@ -36,7 +36,8 @@
     var cap = function (s) { return s.toLowerCase().replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }).replace(/\bTo\b/, "to"); };
     return "Dear Sir / Madam,\n\nPlease find attached our invoice" + (G.length > 1 ? "s " : " ") + nos + " dated " + day(r.invoiceDate) + " for the maintenance of elevators (AMC) for the " +
       (t.one ? "month" : "months") + " of " + cap(t.t) + ", amount Rs " + money(amt) + "." + (r.dueDate ? "\n\nKindly arrange the payment by " + day(r.dueDate) + "." : "") +
-      "\n\nFor any query, please reply to this e-mail.\n\nRegards,\nCustomer Support\n" + coName(r.entity);
+      "\n\nRegards,\nCustomer Support\n" + coName(r.entity) +
+      "\n\n---\nThis is a system-generated e-mail. Please do not reply to this e-mail.";
   }
 
   // the invoice PDF as a Blob: the app's own PDF builder, with its download step caught instead of saving a file
