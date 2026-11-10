@@ -198,6 +198,8 @@ function hsec_api(string $rest): void
         hsec_write($me);
     } elseif ($rest === '/hist' && $method === 'GET') {
         hsec_hist($me);
+    } elseif ($rest === '/amcmail' && $method === 'POST') {
+        hsec_amc_mail($me);
     } elseif (str_starts_with($rest, '/att')) {
         hsec_att_api($me, substr($rest, 4), $method);
     }
