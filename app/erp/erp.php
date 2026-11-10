@@ -10,6 +10,7 @@ require_once __DIR__ . '/hsec-approvals.php';
 require_once __DIR__ . '/hsec-att.php';
 require_once __DIR__ . '/home.php';
 require_once __DIR__ . '/hsec-qb.php';
+require_once __DIR__ . '/hsec-mail.php';
 require_once __DIR__ . '/backup.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/chat.php';

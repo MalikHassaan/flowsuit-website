@@ -134,6 +134,7 @@
   // ---- project form fields
   var NEW = [
     { k: "custAddress", l: "Customer address", t: "textarea", hint: "Printed on the invoice under the customer's name." },
+    { k: "custEmail", l: "Invoice e-mail", hint: "The person who receives the invoices. Several addresses: separate with a comma. Used by the Email button on AMC invoices." },
     { k: "custNtn", l: "Customer NTN", hint: "Optional. Printed on the invoice when filled in." },
     { k: "custStrn", l: "Customer STRN (if any)" },
     { k: "poNo", l: "PO / agreement number", hint: "Optional: the customer's purchase order or signed agreement number, printed as PO Number." },
@@ -143,9 +144,9 @@
   function fields() {
     var f = S.projects.fields; if (f.some(function (x) { return x.k === "custAddress"; })) return;
     var at = f.findIndex(function (x) { return x.k === "customer"; });
-    f.splice(at < 0 ? f.length : at + 1, 0, NEW[0], NEW[1], NEW[2], NEW[3]);
+    f.splice(at < 0 ? f.length : at + 1, 0, NEW[0], NEW[1], NEW[2], NEW[3], NEW[4]);
     var t = f.findIndex(function (x) { return x.k === "amcTaxPct"; });
-    f.splice(t < 0 ? f.length : t, 0, NEW[4], NEW[5]);
+    f.splice(t < 0 ? f.length : t, 0, NEW[5], NEW[6]);
   }
   // exempt: the AMC sales tax % box reads 0
   document.addEventListener("change", function (e) {
