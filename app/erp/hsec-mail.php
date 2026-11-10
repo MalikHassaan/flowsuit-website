@@ -113,11 +113,17 @@ function hsec_send_mail(string $from, string $fromName, array $to, string $subje
     }
     $host = erp_secret('hsec_smtp_host');
     if (!$host) {
-        // No mailbox settings yet: the web server's own mail(). The sender's domain must allow this server (SPF),
-        // or receivers may file it as spam.
+        // No mailbox settings yet (hassan, 2026-11-10: "just mask it over like you did for FlowSuit email"): the web
+        // server's own mail() sends from its own no-reply address, the same one the ERP's sign-in e-mails use, with
+        // the customer support name shown and replies going to the customer support address. Sending "From" the
+        // hsecpak.com address without its mailbox gets the mail dropped as forged.
+        $host2 = preg_replace('/^www\./', '', $_SERVER['HTTP_HOST'] ?? 'flowsuit.net');
+        $own = 'no-reply@' . (preg_match('/^[a-z0-9.-]+$/i', $host2) ? $host2 : 'flowsuit.net');
         $h = preg_replace('/^To: .*\r\n/m', '', preg_replace('/^Subject: .*\r\n/m', '', $head));
+        $h = preg_replace('/^From: (.*) <[^>]+>\r\n/m', 'From: $1 <' . $own . ">\r\nReply-To: " . $from . "\r\n", $h);
+        $h = preg_replace('/@' . preg_quote($domain, '/') . '>/', '@' . substr(strrchr($own, '@'), 1) . '>', $h);
         $h .= 'Bcc: ' . $from . "\r\n";
-        return @mail(implode(', ', $to), $enc($subject), $mime, $h, '-f' . $from) ? null : 'the web server refused it';
+        return @mail(implode(', ', $to), $enc($subject), $mime, $h, '-f' . $own) ? null : 'the web server refused it';
     }
     return hsec_smtp($host, (int) (erp_secret('hsec_smtp_port') ?: 465), (string) erp_secret('hsec_smtp_user') ?: $from,
         (string) erp_secret('hsec_smtp_pass'), $from, array_merge($to, [$from]), $head . "\r\n" . $mime);
