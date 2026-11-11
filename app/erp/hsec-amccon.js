@@ -80,7 +80,7 @@
         return "<tr><td class=\"num\">" + (i + 1) + "</td><td><b class=\"mono\">" + h(p.code || "") + "</b><br><small class=\"muted\">" + h(p.amcFreq || "Monthly") + " billing</small></td>" +
           "<td><b>" + h(p.name || "") + "</b>" + (p.pm ? "<br><small class=\"muted\">Engineer: " + h(p.pm) + "</small>" : "") + "</td>" +
           "<td>" + h(p.customer || "") + (p.province ? "<br><small class=\"muted\">" + h(p.province) + "</small>" : "") + "</td>" +
-          "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + (window.FS_AMCU && window.FS_AMCU.phased(p) ? "<br><small class=\"muted\">" + window.FS_AMCU.unitsAt(p, thisM()) + " billed now</small>" : "") + "</td><td class=\"num\">" + (num(p.amcRate) ? money(num(p.amcRate)) : "–") + "</td>" +
+          "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + (window.FS_AMCU && window.FS_AMCU.phased(p) ? "<br><small class=\"muted\">" + window.FS_AMCU.unitsAt(p, thisM()) + " billed now" + (num(p.amcUnits) > window.FS_AMCU.unitsAt(p, thisM()) ? "<br><b style=\"color:#9a5b00\">" + (num(p.amcUnits) - window.FS_AMCU.unitsAt(p, thisM())) + " still to invoice</b>" : "") + "</small>" : "") + "</td><td class=\"num\">" + (num(p.amcRate) ? money(num(p.amcRate)) : "–") + "</td>" +
           "<td class=\"num\">Rs " + money(feeNow(p)) + "<br><small class=\"muted\">+ " + r + "% tax = " + money(feeNow(p) * (1 + r / 100)) + "</small></td>" +
           "<td style=\"white-space:nowrap\">" + h(fd(p.amcStart) || "–") + " –<br>" + h(fd(p.amcEnd) || "–") + "</td>" +
           "<td class=\"" + (s.bad ? "bad" : s.warn ? "warnt" : "") + "\">" + h(s.left) + "</td><td>" + badge(s) + "</td>" +
