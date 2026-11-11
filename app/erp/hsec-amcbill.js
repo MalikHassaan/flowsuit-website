@@ -24,7 +24,7 @@
   var mLabel = function (m) { return MN[+m.slice(5, 7) - 1] + " " + m.slice(0, 4); };
   var addM = function (m, k) { var d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + k, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
   var cur = function () { return safe(function () { return todayStr().slice(0, 7); }, new Date().toISOString().slice(0, 7)); };
-  var ST = { from: "", to: "", cli: "", mode: "each", sel: {} };
+  var ST = { from: "", to: "", cli: "", mode: "each", sel: {}, u: {} };
 
   var client = function (p) { return String(p.customer || "").trim() || String(p.name || "").trim(); };
   function contracts() { return safe(function () { return byEnt(Store.data.projects).filter(function (p) { return p.type === AMC; }); }, []); }
@@ -80,6 +80,20 @@
     return { k: k, sub: Math.round(sub) };
   }
 
+  // units typed on AMC billing for this invoice (hassan, 2026-11-11: "while creating the invoices it didn't give option how
+  // many units are being for the invoice"): the contract as it bills with them. Creating the invoice saves them on the
+  // contract as a units step from that month, so the next months carry on with them until changed.
+  function eff(p, m) {
+    var v = ST.u[p.id + "|" + m]; if (v == null || !window.FS_AMCU || !window.FS_AMCU.withUnits) return p;
+    if (Math.round(v) === unitsAt(p, m)) return p;
+    return Object.assign({}, p, { amcPhase: window.FS_AMCU.withUnits(p, m, v) });
+  }
+  function unitBox(p, m) {
+    var U = window.FS_AMCU ? window.FS_AMCU.termAt(p, m).units : num(p.amcUnits); if (!U) return "";
+    var q = eff(p, m), u = unitsAt(q, m), left = U - u;
+    return "<span class=\"fs-ab-u\"><label>Units <input type=\"number\" min=\"1\" max=\"" + U + "\" step=\"1\" data-abu=\"" + h(p.id + "|" + m) + "\" value=\"" + u + "\"></label> of " + U +
+      (left > 0 ? " <b class=\"fs-ab-left\">" + left + " still to invoice</b>" : "") + (q !== p ? " <small class=\"muted\">(saved on the contract from " + h(mLabel(m)) + ")</small>" : "") + "</span>";
+  }
   function line(p, m, k, sub) {
     var T = window.FS_AMCU ? window.FS_AMCU.termAt(p, m) : { units: num(p.amcUnits), rate: num(p.amcRate), fee: num(p.amcFee) };
     var U = T.units, u = unitsAt(p, m), rt = T.rate, fee = T.fee, part = U && u < U;
@@ -96,7 +110,7 @@
     for (var gi = 0; gi < G.length; gi++) {
       var g = G[gi], s = monthB(g.m).s, date = iso(s), gid = g.items.length > 1 ? "AMCG-" + g.entity + "-" + g.m + "-" + Date.now().toString(36) + gi : "";
       for (var i = 0; i < g.items.length; i++) {
-        var p = g.items[i], c = charge(p, g.m), tx = Math.round(c.sub * g.tax / 100), ar = arrears([p.id], date);
+        var p0 = g.items[i], p = eff(p0, g.m), c = charge(p, g.m), tx = Math.round(c.sub * g.tax / 100), ar = arrears([p.id], date);
         var rec = { entity: p.entity, projectId: p.id, customer: p.name, project: p.code, invoiceNo: ivNextNo(p.entity), invoiceDate: date, dueDate: iso(addDays(s, 30)), amount: c.sub + tx, outputTax: tx,
           revAccount: idc("410201"), taxAcc: idc("220304"), status: "Open", amcKey: p.id + "|" + g.m,
           doc: Object.assign({ layout: "standard", title: tx ? "SALES TAX INVOICE" : "INVOICE", to: { name: g.client, address: "", attn: "" }, poRef: p.code || "", poDate: "", taxPct: g.tax, taxLabel: "Sales tax on services", notes: "", bank: "", signoff: "For and on behalf of\n" + ivCo(p.entity) },
@@ -105,6 +119,7 @@
         rec.id = await Store.save("receivables", rec);
         var j = await makeAutoJv("receivables", rec, "invoice", null, name); rec.jvId = j.id; await Store.save("receivables", rec);
         made.push(rec.invoiceNo);
+        if (p !== p0) { var pr = Store.data.projects.find(function (x) { return x.id === p0.id; }); if (pr) { var px = JSON.parse(JSON.stringify(pr)); px.amcPhase = p.amcPhase; await Store.save("projects", px); } delete ST.u[p0.id + "|" + g.m]; }
       }
     }
     return made;
@@ -218,8 +233,8 @@
     var M = months(), G = plan(), n = G.reduce(function (t, g) { return t + g.items.length; }, 0), miss = blocked(G);
     var opts = "<option value=\"\">All clients</option>" + Object.keys(clients).sort().map(function (c) { return "<option" + (ST.cli === c ? " selected" : "") + ">" + h(c) + "</option>"; }).join("");
     var prev = G.map(function (g) {
-      var sub = g.items.reduce(function (t, p) { return t + charge(p, g.m).sub; }, 0), tx = g.items.reduce(function (t, p) { return t + Math.round(charge(p, g.m).sub * g.tax / 100); }, 0);
-      return "<tr><td>" + h(mLabel(g.m)) + "</td><td>" + h(g.client) + "</td><td>" + g.items.map(function (p) { return h(p.name) + " <span class=\"muted\">" + h(p.code || "") + "</span>"; }).join("<br>") + "</td><td class=\"num\"><b>" + money(sub + tx) + "</b></td></tr>";
+      var sub = g.items.reduce(function (t, p) { return t + charge(eff(p, g.m), g.m).sub; }, 0), tx = g.items.reduce(function (t, p) { return t + Math.round(charge(eff(p, g.m), g.m).sub * g.tax / 100); }, 0);
+      return "<tr><td>" + h(mLabel(g.m)) + "</td><td>" + h(g.client) + "</td><td>" + g.items.map(function (p) { return "<div class=\"fs-ab-c\">" + h(p.name) + " <span class=\"muted\">" + h(p.code || "") + "</span>" + (g.items.length > 1 ? " · Rs " + money(charge(eff(p, g.m), g.m).sub) : "") + unitBox(p, g.m) + "</div>"; }).join("") + "</td><td class=\"num\"><b>" + money(sub + tx) + "</b><br><small class=\"muted\">Rs " + money(sub) + " + tax " + money(tx) + "</small></td></tr>";
     }).join("");
     var card = "<div class=\"card fs-ab\"><h3>Create AMC invoices</h3><div class=\"ctls fs-ab-ctl\">" +
       "<label>Client <select id=\"fsAbCli\">" + opts + "</select></label>" +
@@ -331,6 +346,11 @@
 
   document.addEventListener("change", function (e) {
     var id = e.target && e.target.id;
+    if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-abu")) {
+      var k = e.target.getAttribute("data-abu"), v = Math.round(num(e.target.value)), mx = num(e.target.getAttribute("max"));
+      if (v > 0) ST.u[k] = mx ? Math.min(v, mx) : v; else delete ST.u[k];
+      safe(render, null); return;
+    }
     if (id === "fsAbCli") { ST.cli = e.target.value; safe(render, null); }
     else if (id === "fsAbFrom" || id === "fsAbTo") {
       if (!e.target.value) return;
@@ -406,7 +426,8 @@
     }
     if (busy) return;
     var G = plan(); if (!G.length || blocked(G).length) return;
-    if (!confirm("Create " + G.length + " AMC invoice" + (G.length === 1 ? "" : "s") + "? Each posts Dr debtors / Cr AMC revenue and sales tax and waits for signature.")) return;
+    var UL = []; G.forEach(function (g) { g.items.forEach(function (p) { var U = window.FS_AMCU ? window.FS_AMCU.termAt(p, g.m).units : num(p.amcUnits); if (U) UL.push((p.name || p.code) + " " + mLabel(g.m) + ": " + unitsAt(eff(p, g.m), g.m) + " of " + U + " units" + (eff(p, g.m) !== p ? " (saved on the contract from this month)" : "")); }); });
+    if (!confirm("Create " + G.length + " AMC invoice" + (G.length === 1 ? "" : "s") + "?" + (UL.length ? "\n\nUnits billed:\n" + UL.slice(0, 12).join("\n") + (UL.length > 12 ? "\n…and " + (UL.length - 12) + " more" : "") : "") + "\n\nEach posts Dr debtors / Cr AMC revenue and sales tax and waits for signature.")) return;
     busy = true; b.disabled = true; b.textContent = "Creating…";
     try {
       var M = await create(G);
@@ -432,6 +453,7 @@
   }
   var css = document.createElement("style");
   css.textContent = ".fs-ab{margin:12px 0}.fs-ab-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.fs-ab-ctl label{display:flex;flex-direction:column;gap:3px;font-size:12.5px}" +
+    ".fs-ab-c+.fs-ab-c{margin-top:6px}.fs-ab-u{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:12.5px}.fs-ab-u label{display:inline-flex;align-items:center;gap:5px;font-weight:600}.fs-ab-u input{width:72px;padding:4px 6px;border:1px solid #cfd6de;border-radius:6px;font:inherit}.fs-ab-left{color:#9a5b00}" +
     ".fs-ab-t{width:100%;border-collapse:collapse}.fs-ab-t th,.fs-ab-t td{padding:7px 9px;border-bottom:1px solid #e6eaef;text-align:left;vertical-align:top}.fs-ab-t .num{text-align:right}.fs-ab-t tfoot td{background:#f6f8fa}.fs-g th.c{text-align:center;white-space:nowrap;font-size:12px}.fs-g td{text-align:center;font-size:12px;white-space:nowrap}.fs-g td:first-child{text-align:left;white-space:normal;min-width:200px}.fs-g td.num{text-align:right}.fs-g-x{color:#aab}" +
     ".fs-g-pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}.fs-g-pill.ok{background:#2e7d32;color:#fff}.fs-g-pill.bl{background:#1F6FB8;color:#fff}.fs-g-pill.due{background:#f2a516;color:#fff}.fs-g-due{color:#a15c00;font-weight:600}" +
     ".fs-ab-del{color:#b3261e;border-color:#e3b4b0}.fs-pg{position:relative;box-sizing:border-box;min-height:286mm;padding-bottom:1px}.fs-pg+.fs-pg{break-before:page;page-break-before:always;margin-top:12px;border-top:1px dashed #ccd}" +
