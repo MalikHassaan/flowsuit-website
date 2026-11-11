@@ -53,11 +53,20 @@
     if (U && u >= U) return fee;
     return rt ? u * rt : U ? fee * u / U : fee;
   }
+  // the amcPhase text after billing u units from month m onward (the units box on AMC billing): earlier months keep the
+  // units they had; later steps stay as they are
+  function withUnits(p, m, u) {
+    var U = termAt(p, m).units, L = steps(p).slice(), start = String((p && p.amcStart) || "").slice(0, 7);
+    if (!L.some(function (x) { return x.from < m; }) && start && start < m) L.unshift({ from: start, units: L.length ? L[0].units : U });
+    L = L.filter(function (x) { return x.from !== m; }); L.push({ from: m, units: Math.round(u) });
+    L.sort(function (a, b) { return a.from < b.from ? -1 : 1; });
+    return U && L.every(function (x) { return x.units >= U; }) ? "" : text(L);
+  }
   function label(p) {
     var L = steps(p), U = num(p && p.amcUnits); if (!L.length) return "";
     return L.map(function (x) { return (U && x.units >= U ? "all " + U : x.units + (U ? " of " + U : "")) + " units from " + nm(x.from); }).join(", ");
   }
-  window.FS_AMCU = { steps: steps, unitsAt: unitsAt, feeAt: feeAt, termAt: termAt, phased: phased, label: label, parse: parse };
+  window.FS_AMCU = { steps: steps, unitsAt: unitsAt, feeAt: feeAt, termAt: termAt, withUnits: withUnits, phased: phased, label: label, parse: parse };
 
   // ---- the form: From month + Units rows writing the hidden amcPhase text.
   // A new or unstepped AMC shows one row already filled in: the AMC start month and all of the project's units. It follows
