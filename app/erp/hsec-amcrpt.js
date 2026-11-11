@@ -211,7 +211,7 @@
   // (their values are kept). Choosing another type shows the full form again. An AMC's contract value is worked out
   // from the monthly fee and the AMC dates until it is typed by hand.
   var PF_KEEP = {
-    "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "amcFree", "contractValue", "pm", "status"],
+    "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcPhase", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "amcFree", "contractValue", "pm", "status"],
     "Supply only": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"]
   };
   var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"] };
@@ -284,6 +284,19 @@
     months = Math.max(0, months - fr.filter(function (m) { return m >= a.slice(0, 7) && m <= b.slice(0, 7); }).length);
     var all = months + fr.filter(function (m) { return m >= a.slice(0, 7) && m <= b.slice(0, 7); }).length;
     if (!months) return cvNote(cv, "");
+    // units billed in steps (hsec-amcunits.js): add up each billed month's charge
+    var ph = String((document.getElementById("f_amcPhase") || {}).value || "");
+    if (ph.trim() && window.FS_AMCU) {
+      var P = { amcPhase: ph, amcUnits: u, amcRate: r, amcFee: fee || u * r }, tot = 0, cnt = 0;
+      for (var mm = a.slice(0, 7), gi = 0; cnt < months && gi < 240; gi++) {
+        if (fr.indexOf(mm) < 0) { tot += window.FS_AMCU.feeAt(P, mm); cnt++; }
+        var dd = new Date(+mm.slice(0, 4), +mm.slice(5, 7), 1); mm = dd.getFullYear() + "-" + String(dd.getMonth() + 1).padStart(2, "0");
+      }
+      var pv = String(Math.round(tot));
+      cvNote(cv, "= " + months + " billed month" + (months === 1 ? "" : "s") + " with units billed in steps (" + window.FS_AMCU.label(P) + ")");
+      if (num(cv.value) !== num(pv)) { cv.value = pv; cv.setAttribute("data-fs-auto", pv); cv.dispatchEvent(new Event("input", { bubbles: true })); budgetSync(); }
+      return;
+    }
     var v = String(Math.round(u && r ? u * r * months : fee * months));
     cvNote(cv, "= " + (u && r ? u + " lift" + (u === 1 ? "" : "s") + " × Rs " + money(r) : "Rs " + money(fee) + " a month") + " × " + months + " month" + (months === 1 ? "" : "s") + (all > months ? " (" + all + " months less " + (all - months) + " free)" : "") + ". Worked out automatically.");
     if (num(cv.value) === num(v)) return;
@@ -294,7 +307,7 @@
   document.addEventListener("change", function (e) {
     if (!e.target || !e.target.id) return;
     if (e.target.id === "f_type") { safe(shapeProj, null); setTimeout(function () { safe(shapeProj, null); safe(amcValue, null); }, 0); }
-    if (/^f_amc(Fee|Start|End|Free|Units|Rate)$/.test(e.target.id)) safe(amcValue, null);
+    if (/^f_amc(Fee|Start|End|Free|Units|Rate|Phase)$/.test(e.target.id)) safe(amcValue, null);
   });
 
   var css = document.createElement("style");

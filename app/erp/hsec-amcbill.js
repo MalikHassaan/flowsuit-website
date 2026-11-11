@@ -71,26 +71,35 @@
     G.forEach(function (g) { g.items.forEach(function (p) { if (seen[p.id]) return; seen[p.id] = 1; var m = window.FS_AMCINV.missing(p); if (m.length) out.push({ p: p, m: m }); }); });
     return out;
   }
-  function charge(p) { var k = safe(function () { return AMC_STEP[p.amcFreq]; }, 1) || 1, sub = Math.round(num(p.amcFee) * k); return { k: k, sub: sub }; }
+  // units billed in steps (hsec-amcunits.js): each month of the invoice is charged for the units billed that month
+  var feeAt = function (p, m) { return window.FS_AMCU ? window.FS_AMCU.feeAt(p, m) : num(p.amcFee); };
+  var unitsAt = function (p, m) { return window.FS_AMCU ? window.FS_AMCU.unitsAt(p, m) : num(p.amcUnits); };
+  function charge(p, m) {
+    var k = safe(function () { return AMC_STEP[p.amcFreq]; }, 1) || 1, sub = 0;
+    for (var i = 0; i < k; i++) sub += m ? feeAt(p, addM(m, i)) : num(p.amcFee);
+    return { k: k, sub: Math.round(sub) };
+  }
 
-  function line(p, m, k) {
-    var u = num(p.amcUnits), rt = num(p.amcRate), fee = num(p.amcFee), per = k > 1 ? (p.amcFreq || "") + " charge, " + mLabel(m) + " to " + mLabel(addM(m, k - 1)) : "Monthly charge for " + mLabel(m);
-    var specs = [p.code ? "Contract: " + p.code : "", num(p.amcFloors) ? "Floors: " + p.amcFloors : "", u ? "Units (lifts): " + u : "", u && rt ? "Rate per unit per month: " + money(rt) : "", k > 1 ? "Months: " + k : ""].filter(Boolean).join("; ");
-    var byUnit = u && rt && Math.abs(u * rt - fee) < 0.5;
+  function line(p, m, k, sub) {
+    var U = num(p.amcUnits), u = unitsAt(p, m), rt = num(p.amcRate), fee = num(p.amcFee), part = U && u < U;
+    for (var ui = 1; ui < k; ui++) if (unitsAt(p, addM(m, ui)) !== u) u = 0; // units change inside the period: one amount per = k > 1 ? (p.amcFreq || "") + " charge, " + mLabel(m) + " to " + mLabel(addM(m, k - 1)) : "Monthly charge for " + mLabel(m);
+    var specs = [p.code ? "Contract: " + p.code : "", num(p.amcFloors) ? "Floors: " + p.amcFloors : "", u ? "Units (lifts): " + (part ? u + " of " + U + " billed" : u) : (U && sub ? "Units (lifts) billed: " + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].slice(0, k).map(function (i) { return unitsAt(p, addM(m, i)); }).join(" / ") + " of " + U : ""), u && rt ? "Rate per unit per month: " + money(rt) : "", k > 1 ? "Months: " + k : ""].filter(Boolean).join("; ");
+    if (sub == null) sub = Math.round(fee * k);
+    var byUnit = u && rt && Math.abs(u * rt * k - sub) < 0.5;
     var MS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], ms = function (x) { return MS[+x.slice(5, 7) - 1]; };
     var period = k > 1 ? ms(m) + " " + m.slice(0, 4) + " to " + ms(addM(m, k - 1)) + " " + addM(m, k - 1).slice(0, 4) : ms(m) + ", " + m.slice(0, 4);
-    return { name: (k > 1 ? (p.amcFreq || "") + " maintenance" : "Monthly maintenance") + " and trouble shooting of elevators – " + (p.name || ""), period: period, specs: specs, qty: byUnit ? u : 1, unit: byUnit ? rt * k : fee * k };
+    return { name: (k > 1 ? (p.amcFreq || "") + " maintenance" : "Monthly maintenance") + " and trouble shooting of elevators – " + (p.name || ""), period: period, specs: specs, qty: byUnit ? u : 1, unit: byUnit ? rt * k : sub };
   }
   async function create(G) {
     var name = safe(function () { return approverName(); }, "") || "Accounts", made = [];
     for (var gi = 0; gi < G.length; gi++) {
       var g = G[gi], s = monthB(g.m).s, date = iso(s), gid = g.items.length > 1 ? "AMCG-" + g.entity + "-" + g.m + "-" + Date.now().toString(36) + gi : "";
       for (var i = 0; i < g.items.length; i++) {
-        var p = g.items[i], c = charge(p), tx = Math.round(c.sub * g.tax / 100), ar = arrears([p.id], date);
+        var p = g.items[i], c = charge(p, g.m), tx = Math.round(c.sub * g.tax / 100), ar = arrears([p.id], date);
         var rec = { entity: p.entity, projectId: p.id, customer: p.name, project: p.code, invoiceNo: ivNextNo(p.entity), invoiceDate: date, dueDate: iso(addDays(s, 30)), amount: c.sub + tx, outputTax: tx,
           revAccount: idc("410201"), taxAcc: idc("220304"), status: "Open", amcKey: p.id + "|" + g.m,
           doc: Object.assign({ layout: "standard", title: tx ? "SALES TAX INVOICE" : "INVOICE", to: { name: g.client, address: "", attn: "" }, poRef: p.code || "", poDate: "", taxPct: g.tax, taxLabel: "Sales tax on services", notes: "", bank: "", signoff: "For and on behalf of\n" + ivCo(p.entity) },
-            window.FS_AMCINV ? window.FS_AMCINV.docFor(p, g.tax) : {}, { lines: [line(p, g.m, c.k)], arrears: ar.amt ? { amt: ar.amt, refs: ar.refs, asOf: todayStr() } : null }) };
+            window.FS_AMCINV ? window.FS_AMCINV.docFor(p, g.tax) : {}, { lines: [line(p, g.m, c.k, c.sub)], arrears: ar.amt ? { amt: ar.amt, refs: ar.refs, asOf: todayStr() } : null }) };
         if (gid) rec.amcGroup = gid;
         rec.id = await Store.save("receivables", rec);
         var j = await makeAutoJv("receivables", rec, "invoice", null, name); rec.jvId = j.id; await Store.save("receivables", rec);
@@ -208,7 +217,7 @@
     var M = months(), G = plan(), n = G.reduce(function (t, g) { return t + g.items.length; }, 0), miss = blocked(G);
     var opts = "<option value=\"\">All clients</option>" + Object.keys(clients).sort().map(function (c) { return "<option" + (ST.cli === c ? " selected" : "") + ">" + h(c) + "</option>"; }).join("");
     var prev = G.map(function (g) {
-      var sub = g.items.reduce(function (t, p) { return t + charge(p).sub; }, 0), tx = g.items.reduce(function (t, p) { return t + Math.round(charge(p).sub * g.tax / 100); }, 0);
+      var sub = g.items.reduce(function (t, p) { return t + charge(p, g.m).sub; }, 0), tx = g.items.reduce(function (t, p) { return t + Math.round(charge(p, g.m).sub * g.tax / 100); }, 0);
       return "<tr><td>" + h(mLabel(g.m)) + "</td><td>" + h(g.client) + "</td><td>" + g.items.map(function (p) { return h(p.name) + " <span class=\"muted\">" + h(p.code || "") + "</span>"; }).join("<br>") + "</td><td class=\"num\"><b>" + money(sub + tx) + "</b></td></tr>";
     }).join("");
     var card = "<div class=\"card fs-ab\"><h3>Create AMC invoices</h3><div class=\"ctls fs-ab-ctl\">" +
