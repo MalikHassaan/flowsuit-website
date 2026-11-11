@@ -11,7 +11,8 @@
 //    when there is no rate). AMC billing (hsec-amcbill.js) invoices that; quarterly and other multi-month invoices add
 //    up each month. The rest of the units are billed from their step's month onward, not back-dated.
 //  * The contract value worked out on the form follows the steps.
-// window.FS_AMCU = { steps(p), unitsAt(p, m), feeAt(p, m), phased(p), label(p) }
+// window.FS_AMCU = { steps(p), unitsAt(p, m), feeAt(p, m), termAt(p, m), phased(p), label(p) }
+// termAt(p, m): the fee, rate and units in force in month m once a contract has been renewed at a revised rate.
 (function () {
   /* global S, toast, Store, amcDue, V, todayStr, byEnt */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
@@ -34,14 +35,21 @@
   var cache = {};
   function steps(p) { var t = String((p && p.amcPhase) || ""); if (!t.trim()) return []; if (!cache[t]) cache[t] = parse(t); return cache[t]; }
   var phased = function (p) { return steps(p).length > 0; };
+  // contract renewals (hsec-amcrenew.js): months before a renewal's start keep the rate, fee and units in force then
+  var MO = function (d) { return String(d || "").slice(0, 7); };
+  function termAt(p, m) {
+    var R = (p && Array.isArray(p.amcRenewals) ? p.amcRenewals : []).slice().sort(function (a, b) { return MO(a.from) < MO(b.from) ? -1 : 1; });
+    for (var i = 0; i < R.length; i++) if (m && m < MO(R[i].from)) return { fee: num(R[i].prevFee), rate: num(R[i].prevRate), units: num(R[i].prevUnits) || num(p.amcUnits), renewal: null, next: R[i] };
+    return { fee: num(p && p.amcFee), rate: num(p && p.amcRate), units: num(p && p.amcUnits), renewal: R.length ? R[R.length - 1] : null, next: null };
+  }
   function unitsAt(p, m) {
-    var U = num(p && p.amcUnits), L = steps(p); if (!L.length) return U;
+    var U = termAt(p, m).units, L = steps(p); if (!L.length) return U;
     var u = L[0].units; L.forEach(function (x) { if (x.from <= m) u = x.units; });
     return U > 0 ? Math.min(u, U) : u;
   }
   function feeAt(p, m) {
-    var fee = num(p && p.amcFee); if (!phased(p)) return fee;
-    var U = num(p.amcUnits), u = unitsAt(p, m), rt = num(p.amcRate);
+    var t = termAt(p, m), fee = t.fee; if (!phased(p)) return fee;
+    var U = t.units, u = unitsAt(p, m), rt = t.rate;
     if (U && u >= U) return fee;
     return rt ? u * rt : U ? fee * u / U : fee;
   }
@@ -49,7 +57,7 @@
     var L = steps(p), U = num(p && p.amcUnits); if (!L.length) return "";
     return L.map(function (x) { return (U && x.units >= U ? "all " + U : x.units + (U ? " of " + U : "")) + " units from " + nm(x.from); }).join(", ");
   }
-  window.FS_AMCU = { steps: steps, unitsAt: unitsAt, feeAt: feeAt, phased: phased, label: label, parse: parse };
+  window.FS_AMCU = { steps: steps, unitsAt: unitsAt, feeAt: feeAt, termAt: termAt, phased: phased, label: label, parse: parse };
 
   // ---- the form: From month + Units rows writing the hidden amcPhase text.
   // A new or unstepped AMC shows one row already filled in: the AMC start month and all of the project's units. It follows
@@ -144,14 +152,15 @@
     new MutationObserver(function () { if (document.getElementById("f_amcPhase") && !document.getElementById("fsUpBox")) safe(build, null); }).observe(document.body, { childList: true, subtree: true });
   })();
 
-  // the app's older one-month AMC billing (Receivables › AMC billing) bills the whole fee: stop it for stepped contracts
+  // the app's older one-month AMC billing (Receivables › AMC billing) bills the whole current fee: stop it for stepped
+  // contracts and for months before a renewal's revised rate starts
   document.addEventListener("click", function (e) {
     var t = e.target.closest && e.target.closest("#amcGo"); if (!t) return;
     var m = safe(function () { return V.amcM; }, "") || safe(function () { return todayStr().slice(0, 7); }, "");
-    var hit = safe(function () { return byEnt(Store.data.projects).filter(function (p) { return phased(p) && amcDue(p, m); }); }, []);
+    var hit = safe(function () { return byEnt(Store.data.projects).filter(function (p) { return (phased(p) || termAt(p, m).next) && amcDue(p, m); }); }, []);
     if (!hit.length) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    safe(function () { toast(hit.map(function (p) { return p.name; }).join(", ") + (hit.length === 1 ? " bills" : " bill") + " units in steps: make these invoices in AMC (maintenance contracts) › AMC billing."); }, null);
+    safe(function () { toast(hit.map(function (p) { return p.name; }).join(", ") + (hit.length === 1 ? " bills" : " bill") + " units in steps or a renewed rate: make these invoices in AMC (maintenance contracts) › AMC billing."); }, null);
   }, true);
 
   var hooked = false;

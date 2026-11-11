@@ -12,7 +12,7 @@
 // AMC invoices are the ones AMC billing made (amcKey) or any invoice on an AMC project. "Received" counts receipts
 // whose voucher is posted, like the rest of Receivables; receipts still waiting for approval are shown as pending.
 (function () {
-  /* global openForm, NAV, TITLE, NS_ALIAS, Store, MODS, TAB_HOME, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, jvOf, AMC_STEP, cnFor */
+  /* global F, openForm, NAV, TITLE, NS_ALIAS, Store, MODS, TAB_HOME, special, byEnt, V, esc, fmt, fdate, todayStr, render, sheetOpen, jvOf, AMC_STEP, cnFor */
   var safe = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
   var h = function (s) { return safe(function () { return esc(s); }, String(s == null ? "" : s)); };
   var num = function (v) { return parseFloat(String(v == null ? "" : v).replace(/,/g, "")) || 0; };
@@ -286,14 +286,17 @@
     if (!months) return cvNote(cv, "");
     // units billed in steps (hsec-amcunits.js): add up each billed month's charge
     var ph = String((document.getElementById("f_amcPhase") || {}).value || "");
-    if (ph.trim() && window.FS_AMCU) {
-      var P = { amcPhase: ph, amcUnits: u, amcRate: r, amcFee: fee || u * r }, tot = 0, cnt = 0;
+    // renewed at a revised rate (hsec-amcrenew.js): months before each renewal keep the old rate
+    var ren = safe(function () { return Array.isArray(F.rec.amcRenewals) ? F.rec.amcRenewals : []; }, []) || [];
+    if ((ph.trim() || ren.length) && window.FS_AMCU) {
+      var P = { amcPhase: ph, amcUnits: u, amcRate: r, amcFee: fee || u * r, amcRenewals: ren }, tot = 0, cnt = 0;
       for (var mm = a.slice(0, 7), gi = 0; cnt < months && gi < 240; gi++) {
         if (fr.indexOf(mm) < 0) { tot += window.FS_AMCU.feeAt(P, mm); cnt++; }
         var dd = new Date(+mm.slice(0, 4), +mm.slice(5, 7), 1); mm = dd.getFullYear() + "-" + String(dd.getMonth() + 1).padStart(2, "0");
       }
       var pv = String(Math.round(tot));
-      cvNote(cv, "= " + months + " billed month" + (months === 1 ? "" : "s") + " with units billed in steps (" + window.FS_AMCU.label(P) + ")");
+      cvNote(cv, "= " + months + " billed month" + (months === 1 ? "" : "s") + (ph.trim() ? " with units billed in steps (" + window.FS_AMCU.label(P) + ")" : "") +
+        (ren.length ? (ph.trim() ? "; " : " at ") + "the rate in force each month (renewed " + ren.length + (ren.length === 1 ? " time" : " times") + ")" : "") + ".");
       if (num(cv.value) !== num(pv)) { cv.value = pv; cv.setAttribute("data-fs-auto", pv); cv.dispatchEvent(new Event("input", { bubbles: true })); budgetSync(); }
       return;
     }

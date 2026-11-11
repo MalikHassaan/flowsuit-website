@@ -55,6 +55,7 @@
   // units billed in steps (hsec-amcunits.js): this month's charge
   var thisM = function () { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
   var feeNow = function (p) { return window.FS_AMCU ? window.FS_AMCU.feeAt(p, thisM()) : num(p.amcFee); };
+  var rateNow = function (p) { return window.FS_AMCU && window.FS_AMCU.termAt ? window.FS_AMCU.termAt(p, thisM()).rate : num(p.amcRate); };
   function view() {
     var all = contracts().map(function (p) { return { p: p, s: state(p) }; });
     var live = all.filter(function (x) { return x.s.k === "Active" || x.s.k === "Renewal due"; });
@@ -80,18 +81,18 @@
         return "<tr><td class=\"num\">" + (i + 1) + "</td><td><b class=\"mono\">" + h(p.code || "") + "</b><br><small class=\"muted\">" + h(p.amcFreq || "Monthly") + " billing</small></td>" +
           "<td><b>" + h(p.name || "") + "</b>" + (p.pm ? "<br><small class=\"muted\">Engineer: " + h(p.pm) + "</small>" : "") + "</td>" +
           "<td>" + h(p.customer || "") + (p.province ? "<br><small class=\"muted\">" + h(p.province) + "</small>" : "") + "</td>" +
-          "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + (window.FS_AMCU && window.FS_AMCU.phased(p) ? "<br><small class=\"muted\">" + window.FS_AMCU.unitsAt(p, thisM()) + " billed now" + (num(p.amcUnits) > window.FS_AMCU.unitsAt(p, thisM()) ? "<br><b style=\"color:#9a5b00\">" + (num(p.amcUnits) - window.FS_AMCU.unitsAt(p, thisM())) + " still to invoice</b>" : "") + "</small>" : "") + "</td><td class=\"num\">" + (num(p.amcRate) ? money(num(p.amcRate)) : "–") + "</td>" +
+          "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + (window.FS_AMCU && window.FS_AMCU.phased(p) ? "<br><small class=\"muted\">" + window.FS_AMCU.unitsAt(p, thisM()) + " billed now" + (num(p.amcUnits) > window.FS_AMCU.unitsAt(p, thisM()) ? "<br><b style=\"color:#9a5b00\">" + (num(p.amcUnits) - window.FS_AMCU.unitsAt(p, thisM())) + " still to invoice</b>" : "") + "</small>" : "") + "</td><td class=\"num\">" + (rateNow(p) ? money(rateNow(p)) : "–") + "</td>" +
           "<td class=\"num\">Rs " + money(feeNow(p)) + "<br><small class=\"muted\">+ " + r + "% tax = " + money(feeNow(p) * (1 + r / 100)) + "</small></td>" +
-          "<td style=\"white-space:nowrap\">" + h(fd(p.amcStart) || "–") + " –<br>" + h(fd(p.amcEnd) || "–") + "</td>" +
+          "<td style=\"white-space:nowrap\">" + h(fd(p.amcStart) || "–") + " –<br>" + h(fd(p.amcEnd) || "–") + safe(function () { return window.FS_AMCR.note(p); }, "") + "</td>" +
           "<td class=\"" + (s.bad ? "bad" : s.warn ? "warnt" : "") + "\">" + h(s.left) + "</td><td>" + badge(s) + "</td>" +
-          "<td class=\"fs-ac-act\"><button class=\"btn sm\" data-acview=\"" + h(p.id) + "\" title=\"Contract details\">👁 View</button> <button class=\"btn sm\" data-acedit=\"" + h(p.id) + "\" title=\"Edit\">✎ Edit</button></td></tr>";
+          "<td class=\"fs-ac-act\"><button class=\"btn sm\" data-acview=\"" + h(p.id) + "\" title=\"Contract details\">👁 View</button> <button class=\"btn sm\" data-acedit=\"" + h(p.id) + "\" title=\"Edit\">✎ Edit</button>" + (window.FS_AMCR ? " <button class=\"btn sm" + (s.k === "Renewal due" || s.k === "Expired" ? " pri" : "") + "\" data-rnopen=\"" + h(p.id) + "\" title=\"Renew this contract, with a revised rate\">↻ Renew</button>" : "") + "</td></tr>";
       }).join("") || "<tr><td colspan=\"12\" class=\"empty\">" + (all.length ? "No contract matches." : "No AMC contracts yet. Click “+ New AMC contract”.") + "</td></tr>") +
-      "</tbody>" + (rows.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + rows.reduce(function (t, x) { return t + num(x.p.amcUnits); }, 0) + "</b></td><td></td><td class=\"num\"><b>Rs " + money(rows.reduce(function (t, x) { return t + num(x.p.amcFee); }, 0)) + "</b></td><td colspan=\"4\"></td></tr></tfoot>" : "") + "</table></div></div>";
+      "</tbody>" + (rows.length > 1 ? "<tfoot><tr><td colspan=\"5\"><b>Total</b></td><td class=\"num\"><b>" + rows.reduce(function (t, x) { return t + num(x.p.amcUnits); }, 0) + "</b></td><td></td><td class=\"num\"><b>Rs " + money(rows.reduce(function (t, x) { return t + feeNow(x.p); }, 0)) + "</b></td><td colspan=\"4\"></td></tr></tfoot>" : "") + "</table></div></div>";
   }
 
   function detail(id) {
     var p = safe(function () { return Store.data.projects.find(function (x) { return x.id === id; }); }, null); if (!p) return;
-    var s = state(p), r = rate(p), fee = num(p.amcFee), k = safe(function () { return AMC_STEP[p.amcFreq]; }, 1) || 1;
+    var s = state(p), r = rate(p), fee = feeNow(p), k = safe(function () { return AMC_STEP[p.amcFreq]; }, 1) || 1;
     var I = invs(p).slice().sort(function (a, b) { return String(a.invoiceDate || "").localeCompare(String(b.invoiceDate || "")); });
     var inv = I.reduce(function (t, x) { return t + num(x.amount); }, 0), rec = I.reduce(function (t, x) { return t + got(x); }, 0);
     var a = D(p.amcStart), e = D(p.amcEnd), months = a && e ? Math.max(1, Math.round(dayDiff(a, e) / 30.44)) : 0;
@@ -100,7 +101,7 @@
       "<div class=\"fs-ac-dg\"><table class=\"fs-ac-kv\"><tbody>" +
       row("Customer", h(p.customer || "–")) + row("Site / project", h(p.name || "–")) + row("Company", h(p.entity || "")) +
       row("Service engineer", h(p.pm || "–")) + row("Site province", h(p.province || "–")) +
-      row("Floors", h(p.amcFloors || "–")) + row("Units (lifts)", h(p.amcUnits || "–")) + row("Rate per unit per month", num(p.amcRate) ? "Rs " + money(num(p.amcRate)) : "–") +
+      row("Floors", h(p.amcFloors || "–")) + row("Units (lifts)", h(p.amcUnits || "–")) + row("Rate per unit per month", rateNow(p) ? "Rs " + money(rateNow(p)) : "–") +
       row("Period", h((fd(p.amcStart) || "–") + " to " + (fd(p.amcEnd) || "–")) + (months ? " (" + months + " months)" : "")) +
       row("Free maintenance months", h(safe(function () { var L = window.FS_AMCFREE.months(p); return L.length ? L.length + ": " + window.FS_AMCFREE.label(L) : ""; }, "") || "None")) +
       "</tbody></table><table class=\"fs-ac-kv\"><tbody>" +
@@ -108,10 +109,11 @@
       row("Monthly charge with tax", "<b>Rs " + money(fee * (1 + r / 100)) + "</b>") +
       row("Billing", h(p.amcFreq || "Monthly") + (k > 1 ? " · Rs " + money(fee * k * (1 + r / 100)) + " per bill with tax" : "")) +
       row("Contract value (excl. tax)", "Rs " + money(num(p.contractValue) || fee * months)) +
+      (safe(function () { var t = window.FS_AMCU.termAt(p, thisM()); return t.next; }, null) ? row("From " + safe(function () { var t = window.FS_AMCU.termAt(p, thisM()).next; return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+String(t.from).slice(5, 7) - 1] + " " + String(t.from).slice(0, 4); }, ""), "<b>Rs " + money(num(p.amcFee)) + "</b> a month (renewed)") : "") +
       row("Invoiced / received / balance", "Rs " + money(inv) + " / Rs " + money(rec) + " / <b>Rs " + money(inv - rec) + "</b>") +
       "</tbody></table></div><h4 style=\"margin:12px 0 4px\">Invoices</h4><table class=\"fs-ac-t\"><thead><tr><th>Invoice</th><th>Date</th><th>For</th><th class=\"num\">Amount</th><th class=\"num\">Received</th><th class=\"num\">Balance</th></tr></thead><tbody>" +
       (I.map(function (x) { var g = got(x); return "<tr><td class=\"mono\">" + h(x.invoiceNo || "") + "</td><td>" + h(fd(x.invoiceDate)) + "</td><td>" + h(String(x.amcKey || "").split("|")[1] || x.description || "") + "</td><td class=\"num\">" + money(num(x.amount)) + "</td><td class=\"num\">" + money(g) + "</td><td class=\"num\">" + money(num(x.amount) - g) + "</td></tr>"; }).join("") ||
-        "<tr><td colspan=\"6\" class=\"empty\">No invoices yet. Bill it from AMC billing.</td></tr>") + "</tbody></table>";
+        "<tr><td colspan=\"6\" class=\"empty\">No invoices yet. Bill it from AMC billing.</td></tr>") + "</tbody></table>" + safe(function () { return window.FS_AMCR.history(p); }, "");
     safe(function () { sheetOpen(html); }, null);
   }
 

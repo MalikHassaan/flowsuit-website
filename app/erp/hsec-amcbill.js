@@ -81,7 +81,8 @@
   }
 
   function line(p, m, k, sub) {
-    var U = num(p.amcUnits), u = unitsAt(p, m), rt = num(p.amcRate), fee = num(p.amcFee), part = U && u < U;
+    var T = window.FS_AMCU ? window.FS_AMCU.termAt(p, m) : { units: num(p.amcUnits), rate: num(p.amcRate), fee: num(p.amcFee) };
+    var U = T.units, u = unitsAt(p, m), rt = T.rate, fee = T.fee, part = U && u < U;
     for (var ui = 1; ui < k; ui++) if (unitsAt(p, addM(m, ui)) !== u) u = 0; // units change inside the period: one amount per = k > 1 ? (p.amcFreq || "") + " charge, " + mLabel(m) + " to " + mLabel(addM(m, k - 1)) : "Monthly charge for " + mLabel(m);
     var specs = [p.code ? "Contract: " + p.code : "", num(p.amcFloors) ? "Floors: " + p.amcFloors : "", u ? "Units (lifts): " + (part ? u + " of " + U + " billed" : u) : (U && sub ? "Units (lifts) billed: " + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].slice(0, k).map(function (i) { return unitsAt(p, addM(m, i)); }).join(" / ") + " of " + U : ""), u && rt ? "Rate per unit per month: " + money(rt) : "", k > 1 ? "Months: " + k : ""].filter(Boolean).join("; ");
     if (sub == null) sub = Math.round(fee * k);
