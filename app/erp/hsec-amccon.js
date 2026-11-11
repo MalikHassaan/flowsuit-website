@@ -52,10 +52,13 @@
   function contracts() { return safe(function () { return byEnt(Store.data.projects).filter(function (p) { return p.type === AMC; }); }, []); }
   var badge = function (s) { return "<span class=\"fs-ac-pill " + (s.tone || "") + "\">" + h(s.k) + "</span>"; };
 
+  // units billed in steps (hsec-amcunits.js): this month's charge
+  var thisM = function () { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
+  var feeNow = function (p) { return window.FS_AMCU ? window.FS_AMCU.feeAt(p, thisM()) : num(p.amcFee); };
   function view() {
     var all = contracts().map(function (p) { return { p: p, s: state(p) }; });
     var live = all.filter(function (x) { return x.s.k === "Active" || x.s.k === "Renewal due"; });
-    var mrr = live.reduce(function (t, x) { return t + num(x.p.amcFee); }, 0), mrrT = live.reduce(function (t, x) { return t + num(x.p.amcFee) * (1 + rate(x.p) / 100); }, 0);
+    var mrr = live.reduce(function (t, x) { return t + feeNow(x.p); }, 0), mrrT = live.reduce(function (t, x) { return t + feeNow(x.p) * (1 + rate(x.p) / 100); }, 0);
     var due = all.filter(function (x) { return x.s.k === "Renewal due"; }), exp = all.filter(function (x) { return x.s.k === "Expired"; });
     var q = ST.q.toLowerCase(), rows = all.filter(function (x) {
       if (ST.f === "active" && x.s.k !== "Active") return false;
@@ -77,8 +80,8 @@
         return "<tr><td class=\"num\">" + (i + 1) + "</td><td><b class=\"mono\">" + h(p.code || "") + "</b><br><small class=\"muted\">" + h(p.amcFreq || "Monthly") + " billing</small></td>" +
           "<td><b>" + h(p.name || "") + "</b>" + (p.pm ? "<br><small class=\"muted\">Engineer: " + h(p.pm) + "</small>" : "") + "</td>" +
           "<td>" + h(p.customer || "") + (p.province ? "<br><small class=\"muted\">" + h(p.province) + "</small>" : "") + "</td>" +
-          "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + "</td><td class=\"num\">" + (num(p.amcRate) ? money(num(p.amcRate)) : "–") + "</td>" +
-          "<td class=\"num\">Rs " + money(num(p.amcFee)) + "<br><small class=\"muted\">+ " + r + "% tax = " + money(num(p.amcFee) * (1 + r / 100)) + "</small></td>" +
+          "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + (window.FS_AMCU && window.FS_AMCU.phased(p) ? "<br><small class=\"muted\">" + window.FS_AMCU.unitsAt(p, thisM()) + " billed now</small>" : "") + "</td><td class=\"num\">" + (num(p.amcRate) ? money(num(p.amcRate)) : "–") + "</td>" +
+          "<td class=\"num\">Rs " + money(feeNow(p)) + "<br><small class=\"muted\">+ " + r + "% tax = " + money(feeNow(p) * (1 + r / 100)) + "</small></td>" +
           "<td style=\"white-space:nowrap\">" + h(fd(p.amcStart) || "–") + " –<br>" + h(fd(p.amcEnd) || "–") + "</td>" +
           "<td class=\"" + (s.bad ? "bad" : s.warn ? "warnt" : "") + "\">" + h(s.left) + "</td><td>" + badge(s) + "</td>" +
           "<td class=\"fs-ac-act\"><button class=\"btn sm\" data-acview=\"" + h(p.id) + "\" title=\"Contract details\">👁 View</button> <button class=\"btn sm\" data-acedit=\"" + h(p.id) + "\" title=\"Edit\">✎ Edit</button></td></tr>";
