@@ -59,6 +59,20 @@ function hsec_companies(): array
     return $out;
 }
 
+// Each company's regional offices, as set with "+ Add an office" in the app: ['JSPL' => ['Karachi', ...]].
+function hsec_offices(): array
+{
+    $s = hsec_doc('settings', 'main') ?? [];
+    $out = [];
+    foreach ((array) ($s['regions'] ?? []) as $ent => $names) {
+        $names = array_values(array_filter((array) $names, fn ($x) => is_string($x) && $x !== ''));
+        if ($names) {
+            $out[(string) $ent] = $names;
+        }
+    }
+    return $out;
+}
+
 // Posting accounts of the HSEC chart: id => ['code', 'name', 'type'].
 function hsec_posting_accounts(): array
 {

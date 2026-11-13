@@ -71,6 +71,17 @@
     </div>
     <p class="muted small">With two or more companies ticked, their "All my companies" view adds those companies together.</p>
   </fieldset>
+<?php $offices = hsec_offices(); if ($offices): $pickedReg = $_POST['hsec_regions'] ?? array_filter(explode(',', (string) ($target['hsec_regions'] ?? ''))); ?>
+  <fieldset class="hsec-cos" data-hsec-cos>
+    <legend>HSEC ERP: which offices (regions)</legend>
+    <p class="muted small">Leave all unticked for every office. Tick an office to limit this person to it: in that company they see and enter only that office's vouchers, bills, invoices and projects, and its figures. Companies with nothing ticked are not limited. Admins always see every office.</p>
+    <div class="co-picks">
+<?php foreach ($offices as $ent => $names): foreach ($names as $o): $v = $ent . '|' . $o; ?>
+      <label class="check"><input type="checkbox" name="hsec_regions[]" value="<?= e($v) ?>" <?= in_array($v, $pickedReg, true) ? 'checked' : '' ?>> <?= e($ent . ' · ' . $o) ?></label>
+<?php endforeach; endforeach; ?>
+    </div>
+  </fieldset>
+<?php endif; ?>
 <?php $nav = hsec_nav_full(); $pickedMods = array_filter(explode(',', (string) ($target['hsec_mods'] ?? ''))); $modScope = $_POST['hsec_mod_scope'] ?? ($pickedMods ? 'some' : 'all'); $tickedMods = $_POST['hsec_mods'] ?? $pickedMods; ?>
   <fieldset class="hsec-cos hsec-mods" data-hsec-cos>
     <legend>HSEC ERP: menu areas (left panel)</legend>
