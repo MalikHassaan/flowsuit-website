@@ -13,9 +13,13 @@
   var same = function (a, b) { return str(a).toLowerCase() === str(b).toLowerCase(); };
 
   // one column per milestone, as % of the contract (the "PROJECT PAYMENT SCHEDULE" layout): [header test, milestone name, business-cycle step]
-  var MSCOLS = [[/^advance$/, "Advance", 1], [/bank guarantee|^bg$/, "Against bank guarantee", 2], [/^confirmation$/, "On confirmation", 1],
-    [/^lc opening$/, "After LC opening", 5], [/shipping docs|\bbl\b/, "Against shipping documents / BL", 6], [/arrival at port/, "On arrival at port", 7],
-    [/delivery at site/, "On delivery at site", 9], [/^installation$/, "After installation", 10], [/t\s*&\s*c|handover$/, "After T&C / handover", 10],
+  // milestone % columns: [header test, milestone name (null = the header itself), ready when (FS_MS link)]
+  // hassan, 2026-11-13: Advance, On BG, After LC opening, Pre-shipment, Shipping docs / BL, Arrival at port, Delivery at
+  // site, Installation, Testing & commissioning, Handover, Third-party inspection, 3 months after T&C
+  var MSCOLS = [[/months? (after|from|post)/, null, "after"], [/^advance/, "Advance", 1], [/^on bg$|bank guarantee|^bg$/, "On BG", 2], [/^confirmation$/, "On confirmation", 1],
+    [/lc opening/, "After LC opening", 5], [/pre.?shipment/, "Pre-shipment", "hand"], [/shipping docs|\bbl\b/, "Shipping docs / BL", 6], [/arrival at port/, "Arrival at port", 7],
+    [/delivery at site/, "Delivery at site", 9], [/^installation$/, "Installation", "hand"], [/^testing|commissioning$/, "Testing & commissioning", "hand"],
+    [/^(after )?t\s*&\s*c \/ handover$/, "After T&C / handover", 10], [/^handover$/, "Handover", 13], [/third.?party|inspection/, "Third-party inspection", "hand"],
     [/post.?handover|retention/, "Retention after handover", 13]];
   // LC funding columns kept on the project: [header test, field, kind]
   var EXTRA = [[/receivables assigned/, "rcvAssigned", "text"], [/cash margin/, "lcMarginPct", "pct"], [/apg advance/, "apgAdjusted", "money"],
@@ -24,12 +28,14 @@
     for (var i = 0; i < Math.min(rows.length, 15); i++) {
       var t = (rows[i] || []).map(function (c) { return str(c).toLowerCase(); }), find = function (re) { for (var k = 0; k < t.length; k++) if (t[k].length < 60 && re.test(t[k])) return k; return -1; };
       if (t.filter(Boolean).length < 2) continue; // a title line above the table
-      var c = { name: find(/^project( name)?$/), cv: find(/^contract value/), lc: find(/\blc\b|budget/), terms: find(/payment terms|^terms/), status: find(/^status/), customer: find(/customer|client/) };
+      var c = { name: find(/^project( name)?$/), cv: find(/^contract value/), lc: find(/^(?!.*opening)(.*\blc\b|.*budget)/), terms: find(/payment terms|^terms/), status: find(/^status/), customer: find(/customer|client/) };
       if (c.name < 0) c.name = find(/^project/);
       if (c.cv < 0) c.cv = find(/contract/);
       if (c.lc === c.name || c.lc === c.cv) c.lc = -1;
       if (c.name >= 0 && c.cv >= 0) {
-        c.ms = MSCOLS.map(function (m) { return { k: find(m[0]), m: m[1], ev: m[2] }; }).filter(function (m) { return m.k >= 0; });
+        var used = {};
+        c.ms = MSCOLS.map(function (m) { var k = find(m[0]); if (k < 0 || used[k]) return { k: -1 }; used[k] = 1; return { k: k, m: m[1] || str((rows[i] || [])[k]).trim(), ev: m[2] }; }).filter(function (m) { return m.k >= 0; })
+          .sort(function (a, b) { return a.k - b.k; });
         c.extra = EXTRA.map(function (x) { return { k: find(x[0]), f: x[1], t: x[2] }; }).filter(function (x) { return x.k >= 0; });
         return { row: i, c: c };
       }
@@ -72,7 +78,7 @@
 
   function panel() {
     var p = '<div class="panel" id="fsPi" style="margin-bottom:12px"><h3 style="margin-top:0">Import projects from Excel</h3>' +
-      '<p class="muted" style="margin-top:0">One row per project with Project, Contract Value and Expected LC, then either one % column per milestone (Advance, Bank Guarantee, LC Opening, Shipping Docs / BL, Arrival at Port, Delivery at Site, Installation, T&amp;C / Handover, Retention) or a Payment Terms text. Projects already here are updated, not added twice.</p>';
+      '<p class="muted" style="margin-top:0">One row per project with Project, Contract Value and Expected LC, then either one % column per milestone (Advance, On BG, After LC opening, Pre-shipment, Shipping docs / BL, Arrival at port, Delivery at site, Installation, Testing &amp; commissioning, Handover, Third-party inspection, 3 months after T&amp;C) or a Payment Terms text. Projects already here are updated, not added twice.</p>';
     if (V.ent === "All") return p + '<p class="muted">Pick one company at the top right first; the projects are created in that company.</p></div>';
     p += '<div class="actions"><label class="btn" for="fsPiFile" style="cursor:pointer">Choose Excel file</label><input type="file" id="fsPiFile" accept=".xlsx,.xls" style="position:absolute;left:-9999px">' +
       '<button class="btn line" type="button" id="fsPiTpl">Download template</button>' +
@@ -123,17 +129,20 @@
   async function template() {
     try {
       var X = await tbLib(), wb = X.utils.book_new();
-      var ws = X.utils.aoa_to_sheet([["Sr.No.", "Project", "Customer", "Contract Value (PKR)", "Expected LC (PKR)", "Payment Terms", "Status"],
-        [1, "Example Tower (delete this row)", "Example Developers", 25000000, 10000000, "25% advance; 25% after LC opening; 25% on delivery at site; 25% after handover", "In hand"],
-        [2, "Example Hospital (delete this row)", "", 40000000, 18000000, "", "Pipeline (90%)"]]);
-      ws["!cols"] = [{ wch: 7 }, { wch: 34 }, { wch: 24 }, { wch: 20 }, { wch: 18 }, { wch: 80 }, { wch: 16 }];
+      var MS = ["Advance", "On BG", "After LC opening", "Pre-shipment", "Shipping docs / BL", "Arrival at port", "Delivery at site", "Installation", "Testing & commissioning", "Handover", "Third-party inspection", "3 months after T&C"];
+      var ws = X.utils.aoa_to_sheet([["Sr.No.", "Project", "Customer", "Contract Value (PKR)", "Expected LC (PKR)"].concat(MS, ["Payment Terms", "Status"]),
+        [1, "Example Tower (delete this row)", "Example Developers", 32000000, 12000000, 25, "", 25, "", 25, "", "", "", 25, "", "", "", "", "In hand"],
+        [2, "Example Hospital (delete this row)", "", 40000000, 18000000, 10, 10, 30, "", 20, "", 10, "", 10, "", "", 10, "", "Pipeline (90%)"],
+        [3, "Example Plaza (delete this row)", "", 15000000, 6000000, "", "", "", "", "", "", "", "", "", "", "", "", "30% advance; 60% on delivery at site; 10% 3 months after T&C", "In hand"]]);
+      ws["!cols"] = [{ wch: 7 }, { wch: 34 }, { wch: 24 }, { wch: 20 }, { wch: 18 }].concat(MS.map(function () { return { wch: 12 }; }), [{ wch: 60 }, { wch: 16 }]);
       X.utils.book_append_sheet(wb, ws, "Projects");
       X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([["Column", "What to enter"],
         ["Project", "Required. The project name; a project already in the company with this name is updated, not added twice."],
         ["Customer", "Optional. The client's name."],
         ["Contract Value (PKR)", "Required. Total contract value, numbers only."],
         ["Expected LC (PKR)", "Optional. Imported cost; it becomes the starting budget, so add local costs to the budget after import."],
-        ["Payment Terms", "Optional. Each part as 'NN% text', separated by ; or a new line, e.g. 10% on BG; 25% after LC. Each part becomes a milestone linked to its business-cycle step."],
+        ["Advance … 3 months after T&C", "Optional. The % of the contract invoiced at each milestone; leave the ones a project does not use empty. They should add up to 100. Each becomes a billing milestone: Advance, On BG, After LC opening, Shipping docs / BL, Arrival at port, Delivery at site and Handover are ready to invoice when that business-cycle step is done; Pre-shipment, Installation, Testing & commissioning and Third-party inspection when you enter the date reached on the project; 3 months after T&C three months after T&C."],
+        ["Payment Terms", "Optional, instead of the % columns. Each part as 'NN% text', separated by ; or a new line, e.g. 10% on BG; 25% after LC. Each part becomes a milestone."],
         ["Status", "'In hand' makes an Active project. 'Pipeline (90%)' makes a Tendering project with a 90% win chance."],
         ["Totals", "Rows starting with Total or Subtotal are skipped."]]), "How to fill");
       X.writeFile(wb, "HSEC projects template.xlsx");
