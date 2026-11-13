@@ -36,6 +36,7 @@
   }
   var projOf = function (r) { return String(r.amcKey || "").split("|")[0] || r.projectId; };
   var billedKey = function (p, m) { return safe(function () { return Store.data.receivables.find(function (r) { return r.amcKey === p.id + "|" + m && r.status !== "Void"; }); }, null); };
+  var billedAll = function (p, m) { return safe(function () { return Store.data.receivables.filter(function (r) { return r.amcKey === p.id + "|" + m && r.status !== "Void"; }); }, []); };
   // unpaid balance of earlier invoices of these contracts
   // hassan, 2026-11-04 ("ignore the arrears"): switched off; invoices carry only their own charge
   var ARREARS = false;
@@ -57,7 +58,7 @@
     var L = contracts().filter(function (p) { return !ST.cli || client(p) === ST.cli; }), G = [], by = {};
     months().forEach(function (m) {
       L.forEach(function (p) {
-        if (!safe(function () { return amcDue(p, m); }, false) || billedKey(p, m)) return;
+        if (!safe(function () { return amcDue(p, m); }, false) || !open(p, m)) return;
         var tx = window.FS_AMCINV ? window.FS_AMCINV.taxOf(p) : safe(function () { return amcTax(p); }, 0), k = ST.mode === "lump" ? [client(p), p.entity, m, tx].join("|") : p.id + "|" + m;
         if (!by[k]) { by[k] = { key: k, client: client(p), entity: p.entity, m: m, tax: tx, items: [] }; G.push(by[k]); }
         by[k].items.push(p);
@@ -80,25 +81,42 @@
     return { k: k, sub: Math.round(sub) };
   }
 
-  // units typed on AMC billing for this invoice (hassan, 2026-11-11: "while creating the invoices it didn't give option how
-  // many units are being for the invoice"): the contract as it bills with them. Creating the invoice saves them on the
-  // contract as a units step from that month, so the next months carry on with them until changed.
+  // units on each invoice (hassan, 2026-11-11: "while creating the invoices it didn't give option how many units are being
+  // for the invoice"; 2026-11-13: "total units were 11 but I created the invoice of 7 units, the rest 4 need to be
+  // invoiced, but when I select Jan it didn't show the rest to be invoiced"). A month stays due until all its units are
+  // invoiced: the next invoice for that month offers the units left. The units box changes only this invoice.
+  function unitsOn(r, p, m) {
+    if (num(r.amcUnitsBilled) > 0) return num(r.amcUnitsBilled);
+    var L = ((r.doc || {}).lines || []), x = /Units \(lifts\): (\d+) of (\d+) billed/.exec(L.map(function (l) { return l.specs || ""; }).join(" "));
+    return x ? +x[1] : unitsAt(p, m);
+  }
+  function units(p, m) {
+    var due = unitsAt(p, m), B = billedAll(p, m), done = B.reduce(function (t, r) { return t + unitsOn(r, p, m); }, 0);
+    return { due: due, done: done, left: Math.max(0, due - done), B: B };
+  }
+  // still something to invoice for this contract-month
+  var open = function (p, m) { if (!billedKey(p, m)) return true; var x = units(p, m); return x.due > 0 && x.left > 0; };
+  function want(p, m) { // units this invoice bills
+    var x = units(p, m), def = x.B.length ? x.left : x.due, v = ST.u[p.id + "|" + m];
+    return v == null ? def : Math.max(1, Math.min(Math.round(v), def || Math.round(v)));
+  }
   function eff(p, m) {
-    var v = ST.u[p.id + "|" + m]; if (v == null || !window.FS_AMCU || !window.FS_AMCU.withUnits) return p;
-    if (Math.round(v) === unitsAt(p, m)) return p;
-    return Object.assign({}, p, { amcPhase: window.FS_AMCU.withUnits(p, m, v) });
+    var x = units(p, m), u = want(p, m);
+    if (!x.due || (u >= x.due && !x.B.length)) return p;
+    return Object.assign({}, p, { amcPhase: u + " from " + m });
   }
   function unitBox(p, m) {
-    var U = window.FS_AMCU ? window.FS_AMCU.termAt(p, m).units : num(p.amcUnits); if (!U) return "";
-    var q = eff(p, m), u = unitsAt(q, m), left = U - u;
-    return "<span class=\"fs-ab-u\"><label>Units <input type=\"number\" min=\"1\" max=\"" + U + "\" step=\"1\" data-abu=\"" + h(p.id + "|" + m) + "\" value=\"" + u + "\"></label> of " + U +
-      (left > 0 ? " <b class=\"fs-ab-left\">" + left + " still to invoice</b>" : "") + (q !== p ? " <small class=\"muted\">(saved on the contract from " + h(mLabel(m)) + ")</small>" : "") + "</span>";
+    var x = units(p, m), U = window.FS_AMCU ? window.FS_AMCU.termAt(p, m).units : num(p.amcUnits); if (!x.due) return "";
+    var u = want(p, m), max = x.B.length ? x.left : x.due, rest = max - u;
+    return "<span class=\"fs-ab-u\"><label>Units <input type=\"number\" min=\"1\" max=\"" + max + "\" step=\"1\" data-abu=\"" + h(p.id + "|" + m) + "\" value=\"" + u + "\"></label> of " + (x.B.length ? max + " left" : U) +
+      (x.B.length ? " <small class=\"muted\">(" + x.done + " of " + x.due + " already invoiced on " + h(x.B.map(function (r) { return r.invoiceNo; }).join(", ")) + ")</small>" : "") +
+      (rest > 0 ? " <b class=\"fs-ab-left\">" + rest + " still to invoice for " + h(mLabel(m)) + "</b>" : "") + "</span>";
   }
-  function line(p, m, k, sub) {
+  function line(p, m, k, sub, prior) {
     var T = window.FS_AMCU ? window.FS_AMCU.termAt(p, m) : { units: num(p.amcUnits), rate: num(p.amcRate), fee: num(p.amcFee) };
     var U = T.units, u = unitsAt(p, m), rt = T.rate, fee = T.fee, part = U && u < U;
     for (var ui = 1; ui < k; ui++) if (unitsAt(p, addM(m, ui)) !== u) u = 0; // units change inside the period: one amount per = k > 1 ? (p.amcFreq || "") + " charge, " + mLabel(m) + " to " + mLabel(addM(m, k - 1)) : "Monthly charge for " + mLabel(m);
-    var specs = [p.code ? "Contract: " + p.code : "", num(p.amcFloors) ? "Floors: " + p.amcFloors : "", u ? "Units (lifts): " + (part ? u + " of " + U + " billed" : u) : (U && sub ? "Units (lifts) billed: " + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].slice(0, k).map(function (i) { return unitsAt(p, addM(m, i)); }).join(" / ") + " of " + U : ""), u && rt ? "Rate per unit per month: " + money(rt) : "", k > 1 ? "Months: " + k : ""].filter(Boolean).join("; ");
+    var specs = [p.code ? "Contract: " + p.code : "", num(p.amcFloors) ? "Floors: " + p.amcFloors : "", u ? "Units (lifts): " + (part ? u + " of " + U + " billed" + (prior ? " (" + prior + ")" : "") : u) : (U && sub ? "Units (lifts) billed: " + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].slice(0, k).map(function (i) { return unitsAt(p, addM(m, i)); }).join(" / ") + " of " + U : ""), u && rt ? "Rate per unit per month: " + money(rt) : "", k > 1 ? "Months: " + k : ""].filter(Boolean).join("; ");
     if (sub == null) sub = Math.round(fee * k);
     var byUnit = u && rt && Math.abs(u * rt * k - sub) < 0.5;
     var MS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], ms = function (x) { return MS[+x.slice(5, 7) - 1]; };
@@ -110,16 +128,17 @@
     for (var gi = 0; gi < G.length; gi++) {
       var g = G[gi], s = monthB(g.m).s, date = iso(s), gid = g.items.length > 1 ? "AMCG-" + g.entity + "-" + g.m + "-" + Date.now().toString(36) + gi : "";
       for (var i = 0; i < g.items.length; i++) {
-        var p0 = g.items[i], p = eff(p0, g.m), c = charge(p, g.m), tx = Math.round(c.sub * g.tax / 100), ar = arrears([p.id], date);
+        var p0 = g.items[i], ux = units(p0, g.m), p = eff(p0, g.m), c = charge(p, g.m), tx = Math.round(c.sub * g.tax / 100), ar = arrears([p.id], date);
         var rec = { entity: p.entity, projectId: p.id, customer: p.name, project: p.code, invoiceNo: ivNextNo(p.entity), invoiceDate: date, dueDate: iso(addDays(s, 30)), amount: c.sub + tx, outputTax: tx,
           revAccount: idc("410201"), taxAcc: idc("220304"), status: "Open", amcKey: p.id + "|" + g.m,
           doc: Object.assign({ layout: "standard", title: tx ? "SALES TAX INVOICE" : "INVOICE", to: { name: g.client, address: "", attn: "" }, poRef: p.code || "", poDate: "", taxPct: g.tax, taxLabel: "Sales tax on services", notes: "", bank: "", signoff: "For and on behalf of\n" + ivCo(p.entity) },
-            window.FS_AMCINV ? window.FS_AMCINV.docFor(p, g.tax) : {}, { lines: [line(p, g.m, c.k, c.sub)], arrears: ar.amt ? { amt: ar.amt, refs: ar.refs, asOf: todayStr() } : null }) };
+            window.FS_AMCINV ? window.FS_AMCINV.docFor(p, g.tax) : {}, { lines: [line(p, g.m, c.k, c.sub, ux.B.length ? ux.done + " billed earlier on " + ux.B.map(function (r) { return r.invoiceNo; }).join(", ") : "")], arrears: ar.amt ? { amt: ar.amt, refs: ar.refs, asOf: todayStr() } : null }) };
         if (gid) rec.amcGroup = gid;
+        if (ux.due) rec.amcUnitsBilled = unitsAt(p, g.m);
         rec.id = await Store.save("receivables", rec);
         var j = await makeAutoJv("receivables", rec, "invoice", null, name); rec.jvId = j.id; await Store.save("receivables", rec);
         made.push(rec.invoiceNo);
-        if (p !== p0) { var pr = Store.data.projects.find(function (x) { return x.id === p0.id; }); if (pr) { var px = JSON.parse(JSON.stringify(pr)); px.amcPhase = p.amcPhase; await Store.save("projects", px); } delete ST.u[p0.id + "|" + g.m]; }
+        delete ST.u[p0.id + "|" + g.m];
       }
     }
     return made;
@@ -274,7 +293,14 @@
       var s = String(p.amcStart || "").slice(0, 7), e = String(p.amcEnd || "").slice(0, 7), nB = 0, nD = 0;
       var cells = M.map(function (m) {
         var b = billedKey(p, m);
-        if (b) { nB++; var paid = safe(function () { return outAR(b); }, 1) <= 0; return "<td class=\"fs-g-b\" title=\"" + h(b.invoiceNo) + (paid ? " paid" : " unpaid") + "\"><span class=\"mono\">" + h(String(b.invoiceNo || "").replace(/^.*?(\d+)$/, "$1")) + "</span><br><span class=\"fs-g-pill " + (paid ? "ok" : "bl") + "\">" + (paid ? "Paid" : "Billed") + "</span></td>"; }
+        if (b) {
+          nB++; var ux = units(p, m), more = ux.due > 0 && ux.left > 0;
+          if (more) nD++;
+          return "<td class=\"fs-g-b\">" + ux.B.map(function (r) {
+            var paid = safe(function () { return outAR(r); }, 1) <= 0;
+            return "<div title=\"" + h(r.invoiceNo) + (paid ? " paid" : " unpaid") + (ux.B.length > 1 || more ? ": " + unitsOn(r, p, m) + " units" : "") + "\"><span class=\"mono\">" + h(String(r.invoiceNo || "").replace(/^.*?(\d+)$/, "$1")) + "</span><br><span class=\"fs-g-pill " + (paid ? "ok" : "bl") + "\">" + (paid ? "Paid" : "Billed") + (ux.B.length > 1 || more ? " " + unitsOn(r, p, m) : "") + "</span></div>";
+          }).join("") + (more ? "<span class=\"fs-g-pill due\" title=\"" + ux.left + " of " + ux.due + " units not invoiced yet\">Due " + ux.left + "</span>" : "") + "</td>";
+        }
         if (safe(function () { return window.FS_AMCFREE.is(p, m); }, false) && (!s || m >= s) && (!e || m <= e)) return "<td class=\"fs-g-d\" title=\"Free maintenance month\"><span class=\"fs-g-pill free\">Free</span></td>";
         if (safe(function () { return amcDue(p, m); }, false)) { nD++; return "<td class=\"fs-g-d\"><span class=\"fs-g-pill due\">Due</span></td>"; }
         if ((s && m < s) || (e && m > e)) return "<td class=\"fs-g-x\"></td>";
@@ -284,7 +310,7 @@
         "<td class=\"num\"><b>" + nB + "</b> billed" + (nD ? "<br><span class=\"fs-g-due\">" + nD + " due</span>" : "") + "</td></tr>";
     }).join("");
     return "<div class=\"card fs-ab\"><h3>Billing by month: " + h(mLabel(M[0])) + " to " + h(mLabel(M[M.length - 1])) + (ST.cli ? " · " + h(ST.cli) : "") + "</h3>" +
-      "<p class=\"muted\" style=\"margin-top:0\">Each box is one month: the invoice number when billed (Paid once received), Due when not billed yet. Change \"To month\" above to look further back.</p>" +
+      "<p class=\"muted\" style=\"margin-top:0\">Each box is one month: the invoice number when billed (Paid once received), Due when not billed yet; Billed 7 with Due 4 means 4 units of that month are still to be invoiced. Change \"To month\" above to look further back.</p>" +
       "<div class=\"tw\"><table class=\"fs-ab-t fs-g\"><thead><tr><th>Contract</th>" + M.map(function (m) { return "<th class=\"c\">" + h(short(m)) + "</th>"; }).join("") + "<th class=\"num\">Total</th></tr></thead><tbody>" +
       (rows || "<tr><td colspan=\"" + (M.length + 2) + "\" class=\"muted\">No AMC contracts.</td></tr>") + "</tbody></table></div></div>";
   }
@@ -426,7 +452,7 @@
     }
     if (busy) return;
     var G = plan(); if (!G.length || blocked(G).length) return;
-    var UL = []; G.forEach(function (g) { g.items.forEach(function (p) { var U = window.FS_AMCU ? window.FS_AMCU.termAt(p, g.m).units : num(p.amcUnits); if (U) UL.push((p.name || p.code) + " " + mLabel(g.m) + ": " + unitsAt(eff(p, g.m), g.m) + " of " + U + " units" + (eff(p, g.m) !== p ? " (saved on the contract from this month)" : "")); }); });
+    var UL = []; G.forEach(function (g) { g.items.forEach(function (p) { var U = window.FS_AMCU ? window.FS_AMCU.termAt(p, g.m).units : num(p.amcUnits); if (U) { var x = units(p, g.m), u = unitsAt(eff(p, g.m), g.m), r = (x.B.length ? x.left : x.due) - u; UL.push((p.name || p.code) + " " + mLabel(g.m) + ": " + u + " of " + U + " units" + (x.B.length ? " (" + x.done + " invoiced earlier)" : "") + (r > 0 ? ", " + r + " left to invoice later" : "")); } }); });
     if (!confirm("Create " + G.length + " AMC invoice" + (G.length === 1 ? "" : "s") + "?" + (UL.length ? "\n\nUnits billed:\n" + UL.slice(0, 12).join("\n") + (UL.length > 12 ? "\n…and " + (UL.length - 12) + " more" : "") : "") + "\n\nEach posts Dr debtors / Cr AMC revenue and sales tax and waits for signature.")) return;
     busy = true; b.disabled = true; b.textContent = "Creating…";
     try {
