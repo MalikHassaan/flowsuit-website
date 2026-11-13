@@ -24,6 +24,10 @@ function hsec_access_schema(PDO $db): void
     if (!in_array('hsec_title', $cols, true)) {
         $db->exec("ALTER TABLE users ADD COLUMN hsec_title TEXT NOT NULL DEFAULT ''");
     }
+    // The offices a person is limited to, "JSPL|Karachi,JSPL|Lahore" (empty: every office), see hsec_region_scope().
+    if (!in_array('hsec_regions', $cols, true)) {
+        $db->exec("ALTER TABLE users ADD COLUMN hsec_regions TEXT NOT NULL DEFAULT ''");
+    }
 }
 
 // The app's left panel: [[group, [[key, label], ...]], ...], read from the uploaded file.
@@ -432,6 +436,7 @@ function hsec_access_inject(array $me): string
     $cfg = ['jv' => (string) ($me['hsec_jv'] ?? ''), 'admin' => (bool) $me['is_admin'], 'on' => hsec_approvals_on(), 'sigs' => hsec_sigs(),
         'me' => 'u' . (int) $me['id'], 'people' => hsec_signers()];
     return '<script>' . ($mods !== null ? 'window.FS_MODS=' . json_encode($mods, $flags) . ';' : '')
+        . 'window.FS_REGIONS=' . json_encode(hsec_region_scope($me), $flags) . ';'
         . 'window.FS_JV=' . json_encode($cfg['jv']) . ';window.FS_ADMIN=' . ($cfg['admin'] ? 'true' : 'false') . ';window.FS_SIGN=' . json_encode($cfg, $flags) . ';'
         // Tabs signed in to different accounts share this browser's storage, so each tab writes its own name back
         // whenever it is used, for the app's "your name" boxes.
@@ -447,6 +452,7 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-projimport.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-advbg.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-qbproj.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-regions.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-basis.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-ifrs15.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-signoff.js') . '</script>'

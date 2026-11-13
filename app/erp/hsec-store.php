@@ -73,9 +73,51 @@ function hsec_amc_ids(): array
     }
     return $ids;
 }
-// True when this AMC-only person must not get (or change) this record.
+// Regional offices (hassan, 2026-11-13: "JSPL has regional offices in Islamabad, Karachi, Lahore, Faisalabad,
+// Multan"; chose "Region tag + access"): a company's offices are listed in settings.regions {company: [names]} and
+// vouchers, invoices, bills, projects and the like carry a region. A non-admin limited to some offices of a company
+// (users.hsec_regions "JSPL|Karachi,JSPL|Lahore"; empty = every office) gets only those offices' records of that
+// company, untagged ones included out, and may only add or change records of those offices. Other companies'
+// records follow the company access as before.
+const HSEC_REGION_COLLS = ['journals', 'payables', 'receivables', 'crnotes', 'requisitions', 'pos', 'projects', 'lcs', 'advances',
+    'vadvances', 'custadv', 'invdocs', 'quotes', 'paydemands', 'adminExp', 'bgs'];
+function hsec_region_scope(?array $me): ?array
+{
+    if (!$me || !empty($me['is_admin'])) {
+        return null;
+    }
+    $out = [];
+    foreach (array_filter(explode(',', (string) ($me['hsec_regions'] ?? ''))) as $x) {
+        $p = explode('|', $x, 2);
+        if (count($p) === 2 && $p[0] !== '' && $p[1] !== '') {
+            $out[$p[0]][] = $p[1];
+        }
+    }
+    return $out ?: null;
+}
+function hsec_region_hidden(?array $scope, string $coll, ?array $data): bool
+{
+    if (!$scope || !is_array($data) || !in_array($coll, HSEC_REGION_COLLS, true)) {
+        return false;
+    }
+    $ent = is_string($data['entity'] ?? null) ? $data['entity'] : '';
+    return $ent !== '' && isset($scope[$ent]) && !in_array((string) ($data['region'] ?? ''), $scope[$ent], true);
+}
+// The signed-in person's office limits (every caller of hsec_amc_hidden works for the signed-in person).
+function hsec_my_regions(): ?array
+{
+    static $scope = false;
+    if ($scope === false) {
+        $scope = function_exists('erp_user') ? hsec_region_scope(erp_user()) : null;
+    }
+    return $scope;
+}
+// True when this AMC-only person (or a person limited to some offices) must not get (or change) this record.
 function hsec_amc_hidden(int $scope, string $coll, ?array $data): bool
 {
+    if (hsec_region_hidden(hsec_my_regions(), $coll, $data)) {
+        return true;
+    }
     if (!$scope || $data === null) {
         return false;
     }
@@ -230,6 +272,15 @@ function hsec_sync(int $since): void
         if ($row['coll'] === 'settings' && $row['id'] === 'main' && is_array($data)) {
             $data = hsec_settings_override($data);
         }
+        $myReg = hsec_my_regions();
+        if ($myReg && $row['coll'] === 'settings' && $row['id'] === 'main' && is_array($data['regions'] ?? null)) {
+            // their own offices only, for the region pickers
+            foreach ($myReg as $ent => $names) {
+                if (isset($data['regions'][$ent]) && is_array($data['regions'][$ent])) {
+                    $data['regions'][$ent] = array_values(array_intersect($data['regions'][$ent], $names));
+                }
+            }
+        }
         if ($allowed !== null && $row['coll'] === 'settings' && $row['id'] === 'main' && is_array($data['entities'] ?? null)) {
             // The company picker only offers their companies; "All" is then the total of those.
             $data['entities'] = array_values(array_intersect($data['entities'], $allowed));
@@ -307,6 +358,11 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
     $allowed = hsec_allowed($me);
     if (!hsec_visible($allowed, $old) || !hsec_visible($allowed, $new)) {
         return 'Your access is limited to ' . implode(', ', $allowed ?? []) . '. This record belongs to another company.';
+    }
+    $reg = hsec_region_scope($me);
+    if (hsec_region_hidden($reg, $coll, $old) || hsec_region_hidden($reg, $coll, $new)) {
+        $ent = (string) (($new ?? $old)['entity'] ?? '');
+        return 'Your access is limited to the ' . implode(', ', $reg[$ent] ?? []) . ' office' . (count($reg[$ent] ?? []) === 1 ? '' : 's') . ' of ' . $ent . '. Choose your region on the record.';
     }
     $amc = hsec_amc_scope($me);
     if (hsec_amc_hidden($amc, $coll, $old) || hsec_amc_hidden($amc, $coll, $new)) {

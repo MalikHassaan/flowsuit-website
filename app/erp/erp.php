@@ -926,7 +926,7 @@ function erp_user_form(?int $id, bool $post): void
 {
     $me = erp_require_admin();
     $db = erp_db();
-    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1, 'home' => '', 'hsec_ents' => '', 'hsec_mods' => '', 'hsec_jv' => '', 'hsec_title' => ''];
+    $target = ['id' => null, 'name' => '', 'email' => '', 'is_admin' => 0, 'active' => 1, 'access' => [], 'must_change' => 1, 'home' => '', 'hsec_ents' => '', 'hsec_mods' => '', 'hsec_jv' => '', 'hsec_title' => '', 'hsec_regions' => ''];
     if ($id !== null) {
         $st = $db->prepare('SELECT * FROM users WHERE id = ?');
         $st->execute([$id]);
@@ -963,6 +963,13 @@ function erp_user_form(?int $id, bool $post): void
         $mods = ($_POST['hsec_mod_scope'] ?? 'all') === 'some'
             ? array_values(array_intersect(hsec_nav_keys(), (array) ($_POST['hsec_mods'] ?? []))) : [];
         $jv = isset(HSEC_JV_ROLES[$_POST['hsec_jv'] ?? '']) ? $_POST['hsec_jv'] : '';
+        $offices = [];
+        foreach (hsec_offices() as $oEnt => $oNames) {
+            foreach ($oNames as $o) {
+                $offices[] = $oEnt . '|' . $o;
+            }
+        }
+        $regions = array_values(array_intersect($offices, (array) ($_POST['hsec_regions'] ?? [])));
         // Designation printed beside the name on HSEC vouchers (hassan, 2026-10-29).
         $title = mb_substr(trim((string) ($_POST['hsec_title'] ?? '')), 0, 80);
         $sigUp = $_FILES['hsec_sig'] ?? null;
@@ -1025,7 +1032,7 @@ function erp_user_form(?int $id, bool $post): void
                     $db->prepare('DELETE FROM auth_tokens WHERE user_id = ?')->execute([$id]);
                 }
             }
-            $db->prepare('UPDATE users SET hsec_mods = ?, hsec_jv = ?, hsec_title = ? WHERE id = ?')->execute([implode(',', $mods), $jv, $title, $id]);
+            $db->prepare('UPDATE users SET hsec_mods = ?, hsec_jv = ?, hsec_title = ?, hsec_regions = ? WHERE id = ?')->execute([implode(',', $mods), $jv, $title, implode(',', $regions), $id]);
             $db->prepare('DELETE FROM access WHERE user_id = ?')->execute([$id]);
             $ins = $db->prepare('INSERT INTO access (user_id, module, level) VALUES (?, ?, ?)');
             foreach ($access as $key => $level) {
@@ -1052,7 +1059,7 @@ function erp_user_form(?int $id, bool $post): void
             }
             erp_redirect('/erp/users');
         }
-        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange, 'home' => $home, 'hsec_ents' => implode(',', $ents), 'hsec_mods' => implode(',', $mods), 'hsec_jv' => $jv, 'hsec_title' => $title];
+        $target = ['id' => $id, 'name' => $name, 'email' => $email, 'is_admin' => $isAdmin, 'active' => $active, 'access' => $access, 'must_change' => $mustChange, 'home' => $home, 'hsec_ents' => implode(',', $ents), 'hsec_mods' => implode(',', $mods), 'hsec_jv' => $jv, 'hsec_title' => $title, 'hsec_regions' => implode(',', $regions)];
     }
     erp_render('user-form', ['me' => $me, 'target' => $target, 'isSelf' => $isSelf, 'errors' => $errors,
         'events' => $target['id'] ? erp_user_events((int) $target['id']) : []]);

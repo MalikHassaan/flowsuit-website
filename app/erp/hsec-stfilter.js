@@ -17,14 +17,17 @@
     while (el && !tb) { tb = el.matches("table") ? el : el.querySelector("table"); if (!tb || !tb.querySelector("tbody tr[data-edit]")) tb = null; el = el.nextElementSibling; }
     if (!tb) return null;
     var ths = [].slice.call(tb.querySelectorAll("thead th")), col = ths.findIndex(function (th) { return /^status$/i.test(txt(th)); });
-    if (col < 0) return null;
     var c = tb.querySelector("tbody tr[data-edit]").getAttribute("data-edit");
-    return { bar: bar, tb: tb, col: col, c: c, rows: [].slice.call(tb.querySelectorAll("tbody tr[data-edit]")) };
+    // rows of other offices, when one office is picked at the top (hsec-regions.js), are left out of everything here
+    var out = window.FS_RG && window.FS_RG.out(c), rows = [].slice.call(tb.querySelectorAll("tbody tr[data-edit]")), n = 0;
+    if (out) rows = rows.filter(function (tr) { var o = out(tr.getAttribute("data-id")); if (o) { n++; if (!tr.hidden) tr.hidden = true; } return !o; });
+    if (col < 0 && !n) return null;
+    return { bar: bar, tb: tb, col: col, c: c, rows: rows, out: n };
   }
-  var stOf = function (T, tr) { return txt(tr.children[T.col]) || "(none)"; };
+  var stOf = function (T, tr) { return T.col < 0 ? "" : txt(tr.children[T.col]) || "(none)"; };
 
   function apply(T) {
-    var want = pick[T.c] || "", shown = 0;
+    var want = T.col < 0 ? "" : pick[T.c] || "", shown = 0, part = !!want || T.out > 0;
     T.rows.forEach(function (tr) { var hide = !!want && stOf(T, tr) !== want; if (tr.hidden !== hide) tr.hidden = hide; if (!hide) shown++; });
     var cnt = [].slice.call(T.bar.querySelectorAll(".muted")).find(function (s) { return /^\d[\d,]* records?( of \d[\d,]*)?$/.test(txt(s)); });
     if (cnt) { var t = want ? shown + " record" + (shown === 1 ? "" : "s") + " of " + T.rows.length : T.rows.length + " record" + (T.rows.length === 1 ? "" : "s"); if (txt(cnt) !== t) cnt.textContent = t; }
@@ -32,13 +35,14 @@
     if (ft) [].slice.call(ft.children).forEach(function (td, i) {
       if (!td.classList.contains("num")) return;
       if (!td.hasAttribute("data-stf0")) td.setAttribute("data-stf0", td.textContent);
-      var v = want ? fmt(T.rows.reduce(function (s, tr) { return tr.hidden ? s : s + num(txt(tr.children[i])); }, 0)) : td.getAttribute("data-stf0");
+      var v = part ? fmt(T.rows.reduce(function (s, tr) { return tr.hidden ? s : s + num(txt(tr.children[i])); }, 0)) : td.getAttribute("data-stf0");
       if (td.textContent !== v) td.textContent = v;
     });
   }
 
   function run() {
     var T = table(); if (!T) return;
+    if (T.col < 0) { apply(T); return; }
     var counts = {}; T.rows.forEach(function (tr) { var s = stOf(T, tr); counts[s] = (counts[s] || 0) + 1; });
     var names = Object.keys(counts).sort();
     if (pick[T.c] && !counts[pick[T.c]]) names.push(pick[T.c]);
