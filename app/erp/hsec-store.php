@@ -80,7 +80,7 @@ function hsec_amc_ids(): array
 // company, untagged ones included out, and may only add or change records of those offices. Other companies'
 // records follow the company access as before.
 const HSEC_REGION_COLLS = ['journals', 'payables', 'receivables', 'crnotes', 'requisitions', 'pos', 'projects', 'lcs', 'advances',
-    'vadvances', 'custadv', 'invdocs', 'quotes', 'paydemands', 'adminExp', 'bgs'];
+    'vadvances', 'custadv', 'invdocs', 'quotes', 'paydemands', 'adminExp', 'bgs', 'recexp', 'recmon'];
 function hsec_region_scope(?array $me): ?array
 {
     if (!$me || !empty($me['is_admin'])) {
