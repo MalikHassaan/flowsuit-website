@@ -11,7 +11,7 @@
 (function () {
   /* global Store, S, V, F, LEDGER, ledger, drawForm, readForm, render, scheduleRender, settings, esc, toast, coLabel */
   var COLLS = ["journals", "payables", "receivables", "crnotes", "requisitions", "pos", "projects", "lcs", "advances", "vadvances",
-    "custadv", "invdocs", "quotes", "paydemands", "adminExp", "bgs"];
+    "custadv", "invdocs", "quotes", "paydemands", "adminExp", "bgs", "recexp", "recmon"];
   var KEY = "fs-rg", NONE = "-";
   var mine = window.FS_REGIONS || null;
   var pick = (function () { try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch (e) { return {}; } })();
@@ -53,6 +53,7 @@
     }
     if (proj && proj.region) return proj.region;
     var po = find("pos", rec.po); if (po && po.region) return po.region;
+    var tpl = c === "recmon" ? find("recexp", rec.tplId) : null; if (tpl && tpl.region) return tpl.region; // a month of a monthly expense
     if (c === "paydemands" && rec.branch && list(rec.entity).indexOf(rec.branch) >= 0) return rec.branch;
     return "";
   }
