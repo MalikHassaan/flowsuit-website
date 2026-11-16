@@ -57,7 +57,7 @@
   function mainTable(sh) {
     var best = null, n = 0;
     [].slice.call(sh.querySelectorAll("table")).forEach(function (t) {
-      if (t.closest(".fs-rt-x") || t.classList.contains("sig") || !t.tHead) return;
+      if (t.closest(".fs-rt-x, .fs-rt-sum") || t.classList.contains("sig") || !t.tHead) return;
       var r = t.querySelectorAll("tbody tr").length; if (r > n) { n = r; best = t; }
     });
     return best;

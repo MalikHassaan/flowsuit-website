@@ -111,7 +111,14 @@
   function listReport(ks) {
     var R0 = listRows(ks); if (!R0.length) { toast("No demands with those statuses dated " + rangeTxt() + "."); return; }
     var t = { a: 0, p: 0, b: 0 }; R0.forEach(function (x) { t.a += x.a; t.p += x.paid; t.b += x.bal; });
-    var html = "<div class=\"co\">" + esc(CO()) + "</div><h2>PAYMENT DEMANDS STATEMENT</h2><p>Demands dated " + esc(rangeTxt()) + " · " + esc(stTxt(ks)) + "</p>" +
+    // more than one company: how many demands and how much for each, above the list (hassan, 2026-11-16: "once we
+    // extract the combined report it should say how many are of HSEC and how many of JSPL and the total amount")
+    var byCo = {}; R0.forEach(function (x) { var e = x.r.entity || "–", c = byCo[e] = byCo[e] || { n: 0, a: 0, p: 0, b: 0 }; c.n++; c.a += x.a; c.p += x.paid; c.b += x.bal; });
+    var cos = Object.keys(byCo).sort(), coName = function (e) { var l = typeof legal === "function" ? legal(e) : ""; return l && l !== e ? e + " – " + l : e; }; // eslint-disable-line no-undef
+    var sumT = cos.length < 2 ? "" : "<h3 style=\"margin:10px 0 6px\">Summary by company</h3><table class=\"fs-rt-sum\" style=\"width:auto;min-width:60%;margin-bottom:14px\"><thead><tr><th>Company</th><th class=\"num\">No. of demands</th><th class=\"num\">Amount</th><th class=\"num\">Paid</th><th class=\"num\">To be paid</th></tr></thead><tbody>" +
+      cos.map(function (e) { var c = byCo[e]; return "<tr><td>" + esc(coName(e)) + "</td><td class=\"num\">" + c.n + "</td><td class=\"num\">" + fmt(c.a) + "</td><td class=\"num\">" + (c.p ? fmt(c.p) : "–") + "</td><td class=\"num\">" + (c.b ? fmt(c.b) : "–") + "</td></tr>"; }).join("") +
+      "</tbody><tfoot><tr><td>Total</td><td class=\"num\">" + R0.length + "</td><td class=\"num\">" + fmt(t.a) + "</td><td class=\"num\">" + (t.p ? fmt(t.p) : "–") + "</td><td class=\"num\">" + (t.b ? fmt(t.b) : "–") + "</td></tr></tfoot></table>";
+    var html = "<div class=\"co\">" + esc(CO()) + "</div><h2>PAYMENT DEMANDS STATEMENT</h2><p>Demands dated " + esc(rangeTxt()) + " · " + esc(stTxt(ks)) + "</p>" + sumT + (sumT ? "<h3 style=\"margin:10px 0 6px\">Demands</h3>" : "") +
       "<table><thead><tr><th>Sr.</th><th>Demand</th><th>Date</th><th>Company</th><th>Branch</th><th>Pay to</th><th>For</th><th class=\"num\">Amount</th><th class=\"num\">Paid</th><th class=\"num\">To be paid</th><th>Demand JV</th><th>Bank payment</th><th>Status</th></tr></thead><tbody>" +
       R0.map(function (x, i) { var r = x.r;
         return "<tr><td>" + (i + 1) + "</td><td style=\"white-space:nowrap\">" + esc(r.demandNo || "") + "</td><td style=\"white-space:nowrap\">" + esc(fdate(r.date)) + "</td><td>" + esc(r.entity || "") + "</td><td>" + esc(r.region || r.branch || "") + "</td><td>" + esc(r.payee || "") +
