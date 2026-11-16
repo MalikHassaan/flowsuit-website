@@ -492,6 +492,7 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-amcmail.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-rptlh.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-recsug.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-deptopt.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-gantt.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-homecp.js') . '</script>';
 }
