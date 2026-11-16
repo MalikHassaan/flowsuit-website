@@ -165,7 +165,7 @@
 
     document.addEventListener("change", function (e) {
       var t = e.target;
-      if (t && t.id === "f_entity" && F) { F.rec.entity = t.value; F.rec.region = dflt(t.value); placeField(); }
+      if (t && t.id === "f_entity" && F && COLLS.indexOf(F.c) >= 0) { F.rec.entity = t.value; F.rec.region = dflt(t.value); placeField(); }
       if (t && t.id === "fsRgSel") {
         if (t.value === "+") { var n = document.getElementById("fsRgNew"); t.value = cur() || ""; if (n) { n.hidden = false; document.getElementById("fsRgName").focus(); } return; }
         if (t.value) pick[V.ent] = t.value; else delete pick[V.ent];
