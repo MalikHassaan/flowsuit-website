@@ -15,6 +15,12 @@
 //  * Export now gives the demands list itself on the report template, to print or save as PDF, or as Excel (CSV);
 //    the JV / BPV voucher lines moved to Reports › Demand vouchers (hassan, 2026-11-16: "when we click export I want
 //    the report in this template and just this detail, and the JV and BPV posting should be shown in the reports module").
+//  * The GM decides which demands are paid (hassan, 2026-11-16: "once the demand is created the GM has the option which
+//    demands should be paid and approved ... once it's approved by the GM, date and comments should be shown to the
+//    maker"). A demand whose JV is posted waits for the GM; the GM (Group GM Finance approval role, or an ERP admin)
+//    ticks demands in the list, or opens one, writes a comment and clicks Approve or Not approved. Pay appears only on
+//    approved demands, and the server refuses a bank payment for any other (hsec_pd_paycheck). The decision, the GM's
+//    name, the date and the comment show in the list and on the demand for the person who made it.
 (function () {
   /* global S, MODS, TAB_HOME, POSTERS, DOCNAME, LABEL, COLLS, Store, F, V, LEDGER, openForm, submitForm, readForm,
      fieldHtml, accOptsGrouped, refName, DEPTS, ssEnhance, nextNo, fmt, n, esc, fdate, pill, mono, liveJv, srcJvs,
@@ -39,10 +45,23 @@
     var jv = r.id && live(r.id, "accrue"), bp = r.id && live(r.id, "pay");
     if (bp && bp.status === "Posted") return { k: "paid", l: "Paid", c: "good", jv: jv, bp: bp };
     if (bp) return { k: "payappr", l: "Payment in approval", c: "acc", jv: jv, bp: bp };
-    if (jv && jv.status === "Posted") return { k: "topay", l: "To be paid", c: "warn", jv: jv };
+    if (jv && jv.status === "Posted") {
+      var g = r.gm && r.gm.status;
+      if (g === "Approved") return { k: "topay", l: "To be paid", c: "warn", jv: jv };
+      if (g === "Not approved") return { k: "gmno", l: "Not approved by GM", c: "bad", jv: jv };
+      return { k: "gm", l: "Waiting for GM approval", c: "warn", jv: jv };
+    }
     if (jv) return { k: "appr", l: "Demand in approval", c: "warn", jv: jv };
     var back = r.id && vouchersOf(r.id).some(function (j) { return j.status === "Rejected"; });
     return back ? { k: "back", l: "Returned", c: "bad" } : { k: "none", l: "Not posted", c: "" };
+  }
+  var isGm = function () { return !!(window.FS_ADMIN || window.FS_JV === "gmf"); };
+  // the GM's decision, its date and comment, for the list and the demand
+  function gmTxt(r, long) {
+    var g = r.gm; if (!g || !g.status) return "";
+    var ok = g.status === "Approved";
+    return "<div class=\"fs-pdgm " + (ok ? "ok" : "no") + "\">" + (ok ? "Approved" : "Not approved") + " by " + esc(g.name || "GM") + (g.at ? " on " + esc(fdate(String(g.at).slice(0, 10))) : "") +
+      (g.note ? (long ? "<br>" : ": ") + "<q>" + esc(g.note) + "</q>" : "") + "</div>";
   }
   // ---- date range (hassan, 2026-11-02: "there should be date filtration from and to date") ----
   var R = (function () { try { return JSON.parse(sessionStorage.getItem("fs-pd-range")) || { from: "", to: "" }; } catch (e) { return { from: "", to: "" }; } })();
@@ -58,7 +77,8 @@
   }
 
   // ---- Export CSV asks which vouchers (hassan, 2026-11-02: "when we click export it should ask JV, BPV or both") ----
-  var EXST = [["paid", "Paid", ["paid"]], ["topay", "To be paid (JV posted, not paid)", ["topay"]], ["payappr", "Payment in approval", ["payappr"]],
+  var EXST = [["paid", "Paid", ["paid"]], ["topay", "To be paid (approved by GM, not paid)", ["topay"]], ["payappr", "Payment in approval", ["payappr"]],
+    ["gm", "Waiting for GM approval", ["gm"]], ["gmno", "Not approved by GM", ["gmno"]],
     ["appr", "Demand in approval", ["appr"]], ["draft", "Draft / not posted", ["none"]], ["back", "Returned", ["back"]]];
   // the status ticks, with how many demands of the chosen dates each has
   function stBoxes() {
@@ -168,8 +188,8 @@
       cols: [["demandNo", "Demand", function (r) { return mono(r.demandNo); }], ["date", "Date", function (r) { return fdate(r.date); }],
         ["entity", "Company"], ["branch", "Branch"], ["payee", "Pay to", function (r) { return esc(r.payee || "") + (r.requestedBy ? "<br><span class=\"muted\">by " + esc(r.requestedBy) + "</span>" : ""); }],
         ["description", "For"], ["amount", "Amount", null, "num"],
-        ["jv", "Demand JV", function (r) { return tag(state(r).jv); }], ["bp", "Bank payment", function (r) { var s = state(r); return s.k === "topay" ? "<button type=\"button\" class=\"btn sm pri\" data-pdpay=\"" + esc(r.id) + "\">Pay</button>" : tag(s.bp); }],
-        ["st", "Status", function (r) { var s = state(r); return pill(s.l, s.c); }],
+        ["jv", "Demand JV", function (r) { return tag(state(r).jv); }], ["bp", "Bank payment", function (r) { var s = state(r); return s.k === "topay" ? "<button type=\"button\" class=\"btn sm pri\" data-pdpay=\"" + esc(r.id) + "\">Pay</button>" : s.k === "gm" && isGm() ? "<label class=\"fs-pdtick\"><input type=\"checkbox\" data-pdgm=\"" + esc(r.id) + "\"> Approve?</label>" : tag(s.bp); }],
+        ["st", "Status", function (r) { var s = state(r); return pill(s.l, s.c) + gmTxt(r); }],
         ["pr", "", function (r) { return state(r).jv ? "<button type=\"button\" class=\"btn sm\" data-pdprint=\"" + esc(r.id) + "\">Print</button>" : ""; }]],
       sort: function (a, b) { return String(b.date).localeCompare(String(a.date)) || String(b.demandNo).localeCompare(String(a.demandNo)); } };
 
@@ -320,6 +340,10 @@
       var key = function (x) { return JSON.stringify([x.entity, x.payAcc, x.date, (x.items || []).map(function (l) { return [l.account, n(l.amount), l.project || "", l.dept || ""]; })]); };
       if (key(was) !== key(r)) return err("The demand JV " + (jv.ref || "") + " is already posted, so the lines, amounts, accounts, company and date cannot change. Use Reverse and correct to change them.");
     }
+    if (r.bank && jv && jv.status === "Posted" && !live(r.id, "pay")) {
+      var g0 = was && was.gm && was.gm.status;
+      if (g0 !== "Approved") return err(g0 === "Not approved" ? "The GM did not approve this demand, so it cannot be paid. Clear Pay from bank to save other changes." : "The GM has not approved this demand yet. It can be paid once the GM approves it. Clear Pay from bank to save other changes.");
+    }
     r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
     if (r.bank && !r.payDate) r.payDate = todayStr();
     return true;
@@ -355,10 +379,39 @@
     var card = function (t, x, c) { return "<div class=\"fs-pdcard " + (c || "") + "\"><span>" + t + "</span><b>" + x.n + "</b><em>Rs " + fmt(x.a) + "</em></div>"; };
     var bk = Object.keys(by).sort();
     return "<div class=\"fs-pdsum\">" + rangeBar() + "<div class=\"fs-pdcards\">" + card("All demands", tot) + card("Paid", f("paid"), "good") + card("Pending", pend, "warn") +
-      (f("appr").n ? card("Demand in approval", f("appr")) : "") + card("To be paid", f("topay")) + card("Payment in approval", f("payappr")) + (f("back").n ? card("Returned", f("back"), "bad") : "") + "</div>" +
+      (f("appr").n ? card("Demand in approval", f("appr")) : "") + (f("gm").n ? card("Waiting for GM", f("gm"), "warn") : "") + (f("gmno").n ? card("Not approved by GM", f("gmno"), "bad") : "") + card("To be paid", f("topay")) + card("Payment in approval", f("payappr")) + (f("back").n ? card("Returned", f("back"), "bad") : "") + "</div>" +
       (bk.length ? "<div class=\"tw\"><table><thead><tr><th>Branch · company</th><th class=\"num\">Demands</th><th class=\"num\">Amount</th><th class=\"num\">Paid</th><th class=\"num\">Paid amount</th><th class=\"num\">Pending</th><th class=\"num\">Pending amount</th></tr></thead><tbody>" +
         bk.map(function (k) { var x = by[k]; return "<tr><td>" + esc(k) + "</td><td class=\"num\">" + x.n + "</td><td class=\"num\">" + fmt(x.a) + "</td><td class=\"num\">" + x.dn + "</td><td class=\"num\">" + fmt(x.da) + "</td><td class=\"num\">" + x.pn + "</td><td class=\"num\">" + fmt(x.pa) + "</td></tr>"; }).join("") +
-        "</tbody></table></div>" : "") + "<p class=\"muted\" style=\"margin:6px 0 0\">Type Paid, Pending approval or a branch name in Search to filter the list below.</p></div>";
+        "</tbody></table></div>" : "") + gmBar(f("gm")) + "<p class=\"muted\" style=\"margin:6px 0 0\">Type Paid, Pending approval or a branch name in Search to filter the list below.</p></div>";
+  }
+
+  // the GM's bar above the list: tick the demands to pay, comment, approve or not
+  function gmBar(x) {
+    if (!isGm() || !x.n) return "";
+    return "<div class=\"fs-pdgmbar\"><b>" + x.n + " demand" + (x.n === 1 ? "" : "s") + " (Rs " + fmt(x.a) + ") waiting for your approval.</b> Tick the ones to pay in the Bank payment column, or tick all, then approve." +
+      "<div class=\"fs-pdgmrow\"><label><input type=\"checkbox\" id=\"pdGmAll\"> Tick all waiting</label>" +
+      "<input id=\"pdGmNote\" maxlength=\"500\" placeholder=\"Comment for the person who made the demand (optional)\" autocomplete=\"off\">" +
+      "<button type=\"button\" class=\"btn pri\" data-pdgmgo=\"Approved\">Approve ticked</button><button type=\"button\" class=\"btn\" data-pdgmgo=\"Not approved\">Not approved</button></div></div>";
+  }
+  async function gmDecide(ids, st, note) {
+    var done = 0, fail = "";
+    for (var i = 0; i < ids.length; i++) {
+      var r = byId(DEM, ids[i]); if (!r) continue;
+      var k = state(r).k; if (k !== "gm" && k !== "gmno" && k !== "topay") continue;
+      try { await Store.save(DEM, Object.assign({}, r, { gm: { status: st, note: note, name: (typeof approverName === "function" && approverName()) || "GM", at: new Date().toISOString() } })); done++; } catch (x) { fail = (x && x.message) || String(x); }
+    }
+    toast(done ? done + " demand" + (done === 1 ? "" : "s") + (st === "Approved" ? " approved for payment." : " marked not approved.") + (fail ? " Some failed: " + fail : "") : "Nothing saved" + (fail ? ": " + fail : "."));
+    scheduleRender();
+    return done;
+  }
+  // on the demand itself: the decision for everyone, the buttons for the GM
+  function gmPanel() {
+    var r = F && F.rec, s = r && r.id && state(byId(DEM, r.id) || r); if (!s || !s.jv || s.bp) return "";
+    var live0 = byId(DEM, r.id) || r, can = isGm() && (s.k === "gm" || s.k === "gmno" || s.k === "topay");
+    if (!can && !live0.gm) return "<div class=\"fs-pdgmbox\"><b>GM approval</b><div class=\"muted\">Waiting for the GM to approve this demand. It can be paid once approved.</div></div>";
+    return "<div class=\"fs-pdgmbox\"><b>GM approval</b>" + (gmTxt(live0, true) || "<div class=\"muted\">Waiting for your approval.</div>") +
+      (can ? "<div class=\"fs-pdgmrow\"><input id=\"pdGmNote1\" maxlength=\"500\" placeholder=\"Comment for the person who made the demand (optional)\" value=\"" + esc((live0.gm && live0.gm.note) || "") + "\" autocomplete=\"off\">" +
+        "<button type=\"button\" class=\"btn pri\" data-pdgm1=\"Approved\">Approve for payment</button><button type=\"button\" class=\"btn\" data-pdgm1=\"Not approved\">Not approved</button></div>" : "") + "</div>";
   }
 
   function hook() {
@@ -471,6 +524,25 @@
         exportMenu(ex); return;
       }
       if (!(e.target.closest && e.target.closest("#fsPdExp"))) { var om = document.getElementById("fsPdExp"); if (om) om.remove(); }
+      var gall = e.target.closest && e.target.closest("#pdGmAll");
+      if (gall) { document.querySelectorAll("[data-pdgm]").forEach(function (c) { c.checked = gall.checked; }); return; }
+      var gtick = e.target.closest && e.target.closest(".fs-pdtick");
+      if (gtick) { e.stopImmediatePropagation(); return; } // ticking a demand does not open it
+      var gg = e.target.closest && e.target.closest("[data-pdgmgo], [data-pdgm1]");
+      if (gg) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var one = gg.hasAttribute("data-pdgm1"), st = gg.getAttribute(one ? "data-pdgm1" : "data-pdgmgo");
+        var ids = one ? [F.rec.id] : [].slice.call(document.querySelectorAll("[data-pdgm]:checked")).map(function (c) { return c.getAttribute("data-pdgm"); });
+        if (!ids.length) { toast("Tick the demands first, in the Bank payment column."); return; }
+        var nt = document.getElementById(one ? "pdGmNote1" : "pdGmNote"), note = nt ? nt.value.trim() : "";
+        if (st === "Not approved" && !note) { toast("Write a comment saying why, so the person who made it knows."); if (nt) nt.focus(); return; }
+        gg.disabled = true;
+        gmDecide(ids, st, note).then(function () {
+          gg.disabled = false;
+          if (one) { var bx = document.querySelector(".fs-pdgmbox"); if (bx) bx.outerHTML = gmPanel(); }
+        });
+        return;
+      }
       var pay = e.target.closest && e.target.closest("[data-pdpay]");
       if (pay) {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -516,6 +588,10 @@
       if (typeof F === "undefined" || !F || F.c !== DEM) return;
       var fm = document.getElementById("frm"); if (!fm) return;
       if (!fm.classList.contains("wide")) fm.classList.add("wide");
+      if (F.rec.id && !fm.querySelector(".fs-pdgmbox")) {
+        var gp = gmPanel(), at = fm.querySelector("#f_bank"); at = at && at.closest(".f");
+        if (gp) { if (at) at.insertAdjacentHTML("beforebegin", gp); else { var a0 = fm.querySelector(".actions"); if (a0) a0.insertAdjacentHTML("beforebegin", gp); } }
+      }
       var act = fm.querySelector(".actions");
       if (act && F.rec.id && !act.querySelector("#fsPdPrint") && state(F.rec).jv) {
         var b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.id = "fsPdPrint"; b.textContent = "Print JV + BPV + documents";
@@ -536,6 +612,11 @@
       ".fs-pdexp{position:absolute;z-index:60;width:300px;display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:var(--panel,#fff);box-shadow:0 12px 30px rgba(15,23,42,.18)}" +
       ".fs-pdexp .btn{text-align:left}.fs-pdexp span{font-size:12px}.fs-pdexst{border:1px solid var(--line,#e3e6eb);border-radius:8px;padding:6px 10px;margin:0;display:flex;flex-direction:column;gap:4px}" +
       ".fs-pdexst legend{font-weight:700;font-size:13px;padding:0 4px}.fs-pdexst label{font-size:13px;display:flex;align-items:center;gap:6px}" +
+      ".fs-pdgm{font-size:12px;margin-top:4px;line-height:1.35}.fs-pdgm.ok{color:#15803d}.fs-pdgm.no{color:#b91c1c}.fs-pdgm q{color:#334155;font-style:italic}" +
+      ".fs-pdgmbar{margin:10px 0 0;padding:10px 12px;border:1px solid #f59e0b;border-radius:10px;background:#fffbeb;font-size:13px}" +
+      ".fs-pdgmrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}.fs-pdgmrow input:not([type=checkbox]){flex:1 1 260px;min-width:0}" +
+      ".fs-pdtick{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}" +
+      ".fs-pdgmbox{grid-column:1/-1;margin:6px 0;padding:10px 12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:#f8fafc}" +
       ".fs-pdpayhl{outline:3px solid #16a34a;outline-offset:4px;border-radius:6px;transition:outline-color 1s}";
     document.head.appendChild(css);
     scheduleRender();
