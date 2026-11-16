@@ -12,11 +12,14 @@
 //  * The list opens with a summary: demands paid and pending, in number and amount, by branch.
 //  * From / To dates filter the summary, the list and the export; Export CSV asks for demand JVs, BPVs or both
 //    and gives their voucher lines (hassan, 2026-11-02).
+//  * Export now gives the demands list itself on the report template, to print or save as PDF, or as Excel (CSV);
+//    the JV / BPV voucher lines moved to Reports › Demand vouchers (hassan, 2026-11-16: "when we click export I want
+//    the report in this template and just this detail, and the JV and BPV posting should be shown in the reports module").
 (function () {
   /* global S, MODS, TAB_HOME, POSTERS, DOCNAME, LABEL, COLLS, Store, F, V, LEDGER, openForm, submitForm, readForm,
      fieldHtml, accOptsGrouped, refName, DEPTS, ssEnhance, nextNo, fmt, n, esc, fdate, pill, mono, liveJv, srcJvs,
      scheduleRender, todayStr, accByCode, approverName, isLocked, lockTxt, jvTot, nextVoucherNo, jvSheet, sheetOpen,
-     listView, byEnt, toast, drawForm */
+     listView, byEnt, toast, drawForm, special, legal */
   var DEM = "paydemands", BRANCHES = ["Head office", "Rawalpindi", "Islamabad", "Lahore", "Faisalabad", "Multan", "Karachi", "Peshawar"];
   var D = function (c) { return Store.data[c] || []; };
   var byId = function (c, id) { return D(c).find(function (r) { return r.id === id; }) || null; };
@@ -51,27 +54,70 @@
     return "<div class=\"fs-pdrange\"><label>From <input type=\"date\" id=\"pdFrom\" value=\"" + esc(R.from) + "\"></label>" +
       "<label>To <input type=\"date\" id=\"pdTo\" value=\"" + esc(R.to) + "\"></label>" +
       (ranged() ? "<button type=\"button\" class=\"btn sm\" id=\"pdClr\">Show all dates</button>" : "") +
-      "<span class=\"muted\">Demands dated " + esc(rangeTxt()) + ". The figures, the list and Export CSV follow these dates.</span></div>";
+      "<span class=\"muted\">Demands dated " + esc(rangeTxt()) + ". The figures, the list, Export and Reports › Demand vouchers follow these dates.</span></div>";
   }
 
   // ---- Export CSV asks which vouchers (hassan, 2026-11-02: "when we click export it should ask JV, BPV or both") ----
   var EXST = [["paid", "Paid", ["paid"]], ["topay", "To be paid (JV posted, not paid)", ["topay"]], ["payappr", "Payment in approval", ["payappr"]],
     ["appr", "Demand in approval", ["appr"]], ["draft", "Draft / not posted", ["none"]], ["back", "Returned", ["back"]]];
+  // the status ticks, with how many demands of the chosen dates each has
+  function stBoxes() {
+    var cnt = {}; (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM)).filter(inRange).forEach(function (r) { var k = state(r).k; cnt[k] = (cnt[k] || 0) + 1; });
+    return "<fieldset class=\"fs-pdexst\"><legend>Status</legend>" + EXST.map(function (x) {
+      var c = x[2].reduce(function (t, k) { return t + (cnt[k] || 0); }, 0);
+      return "<label><input type=\"checkbox\" data-pdst=\"" + x[0] + "\" checked> " + esc(x[1]) + " <span class=\"muted\">(" + c + ")</span></label>";
+    }).join("") + "</fieldset>";
+  }
   function exportMenu(btn) {
     var old = document.getElementById("fsPdExp"); if (old) { old.remove(); return; }
     var m = document.createElement("div"); m.id = "fsPdExp"; m.className = "fs-pdexp"; m.setAttribute("role", "menu");
-    var cnt = {}; (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM)).filter(inRange).forEach(function (r) { var k = state(r).k; cnt[k] = (cnt[k] || 0) + 1; });
-    m.innerHTML = "<b>What do you want to export?</b><span class=\"muted\">Demands dated " + esc(rangeTxt()) + "</span>" +
-      "<fieldset class=\"fs-pdexst\"><legend>Status</legend>" + EXST.map(function (x) {
-        var c = x[2].reduce(function (t, k) { return t + (cnt[k] || 0); }, 0);
-        return "<label><input type=\"checkbox\" data-pdst=\"" + x[0] + "\" checked> " + esc(x[1]) + " <span class=\"muted\">(" + c + ")</span></label>";
-      }).join("") + "</fieldset><b style=\"font-size:13px\">Vouchers</b>" +
-      "<button type=\"button\" class=\"btn\" data-pdexp=\"jv\">Demand JVs only</button>" +
-      "<button type=\"button\" class=\"btn\" data-pdexp=\"bp\">Bank payment vouchers (BPV) only</button>" +
-      "<button type=\"button\" class=\"btn pri\" data-pdexp=\"both\">Both JV and BPV</button>";
+    m.innerHTML = "<b>What do you want to export?</b><span class=\"muted\">Demands dated " + esc(rangeTxt()) + "</span>" + stBoxes() +
+      "<button type=\"button\" class=\"btn pri\" data-pdexp=\"rpt\">Report: print or save as PDF</button>" +
+      "<button type=\"button\" class=\"btn\" data-pdexp=\"list\">Excel (CSV) of this list</button>" +
+      "<span class=\"muted\">The JV and BPV voucher lines are under Reports › Demand vouchers.</span>";
     var r = btn.getBoundingClientRect();
     m.style.top = (r.bottom + window.scrollY + 6) + "px"; m.style.left = Math.max(8, r.right + window.scrollX - 300) + "px";
     document.body.appendChild(m);
+  }
+  // ---- the demands list itself: on the report template, or as CSV ----
+  var CO = function () { var e = V && V.ent; return !e || e === "All" ? "HSEC Group – all companies" : (typeof legal === "function" ? legal(e) : e); }; // eslint-disable-line no-undef
+  function listRows(ks) {
+    return (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM).slice()).filter(inRange).filter(function (r) { return !ks || ks.indexOf(state(r).k) >= 0; })
+      .sort(function (a, b) { return String(a.date || "").localeCompare(String(b.date || "")) || String(a.demandNo || "").localeCompare(String(b.demandNo || "")); })
+      .map(function (r) { var s = state(r), a = n(r.amount), paid = s.k === "paid" ? a : 0;
+        return { r: r, s: s, a: a, paid: paid, bal: a - paid }; });
+  }
+  var stTxt = function (ks) { var L = EXST.filter(function (x) { return x[2].some(function (k) { return ks.indexOf(k) >= 0; }); }).map(function (x) { return x[1].replace(/ \(.*\)$/, ""); }); return L.length === EXST.length ? "all statuses" : L.join(", "); };
+  function listReport(ks) {
+    var R0 = listRows(ks); if (!R0.length) { toast("No demands with those statuses dated " + rangeTxt() + "."); return; }
+    var t = { a: 0, p: 0, b: 0 }; R0.forEach(function (x) { t.a += x.a; t.p += x.paid; t.b += x.bal; });
+    var html = "<div class=\"co\">" + esc(CO()) + "</div><h2>PAYMENT DEMANDS STATEMENT</h2><p>Demands dated " + esc(rangeTxt()) + " · " + esc(stTxt(ks)) + "</p>" +
+      "<table><thead><tr><th>Sr.</th><th>Demand</th><th>Date</th><th>Company</th><th>Branch</th><th>Pay to</th><th>For</th><th class=\"num\">Amount</th><th class=\"num\">Paid</th><th class=\"num\">To be paid</th><th>Demand JV</th><th>Bank payment</th><th>Status</th></tr></thead><tbody>" +
+      R0.map(function (x, i) { var r = x.r;
+        return "<tr><td>" + (i + 1) + "</td><td style=\"white-space:nowrap\">" + esc(r.demandNo || "") + "</td><td style=\"white-space:nowrap\">" + esc(fdate(r.date)) + "</td><td>" + esc(r.entity || "") + "</td><td>" + esc(r.region || r.branch || "") + "</td><td>" + esc(r.payee || "") +
+          "</td><td>" + esc(r.description || "") + "</td><td class=\"num\">" + fmt(x.a) + "</td><td class=\"num\">" + (x.paid ? fmt(x.paid) : "–") + "</td><td class=\"num\">" + (x.bal ? fmt(x.bal) : "–") +
+          "</td><td style=\"white-space:nowrap\">" + esc(x.s.jv ? x.s.jv.ref || "" : "–") + "</td><td style=\"white-space:nowrap\">" + esc(x.s.bp ? x.s.bp.ref || "" : "–") + "</td><td>" + esc(x.s.l) + "</td></tr>"; }).join("") +
+      "</tbody><tfoot><tr><td></td><td colspan=\"6\">Grand Total</td><td class=\"num\">" + fmt(t.a) + "</td><td class=\"num\">" + fmt(t.p) + "</td><td class=\"num\">" + fmt(t.b) + "</td><td colspan=\"3\"></td></tr></tfoot></table>";
+    sheetOpen(html);
+  }
+  async function listCsv(ks) {
+    var R0 = listRows(ks); if (!R0.length) { toast("No demands with those statuses dated " + rangeTxt() + "."); return; }
+    var q = function (v) { var t = String(v == null ? "" : v); return /[",\n]/.test(t) ? "\"" + t.replace(/"/g, "\"\"") + "\"" : t; };
+    var out = [["Demand no.", "Date", "Company", "Branch", "Pay to", "For", "Amount", "Paid", "To be paid", "Demand JV", "Bank payment", "Status"]], t = [0, 0, 0];
+    R0.forEach(function (x) { var r = x.r; t[0] += x.a; t[1] += x.paid; t[2] += x.bal;
+      out.push([r.demandNo, r.date, r.entity, r.region || r.branch, r.payee, r.description, x.a, x.paid, x.bal, x.s.jv ? x.s.jv.ref : "", x.s.bp ? x.s.bp.ref : "", x.s.l]); });
+    out.push(["Total", R0.length + " demands", "", "", "", "", t[0], t[1], t[2], "", "", ""]);
+    var csv = "\ufeff" + out.map(function (row) { return row.map(q).join(","); }).join("\r\n"), name = "Payment_demands_" + (R.from || "start") + "_to_" + (R.to || todayStr()) + ".csv";
+    var a2 = document.createElement("a"); a2.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a2.download = name;
+    document.body.appendChild(a2); a2.click(); setTimeout(function () { URL.revokeObjectURL(a2.href); a2.remove(); }, 1000);
+  }
+  // ---- Reports › Demand vouchers: the JV and BPV voucher lines ----
+  function vouchersView() {
+    return "<div class=\"panel fs-pdvrep\" style=\"padding:14px 16px;max-width:760px\"><p style=\"margin:0 0 10px\">The voucher lines of payment demands (account, debit, credit) as Excel (CSV), for the company chosen at the top.</p>" +
+      rangeBar() + stBoxes() + "<div style=\"display:flex;flex-wrap:wrap;gap:8px;margin-top:10px\">" +
+      "<button type=\"button\" class=\"btn\" data-pdexp=\"jv\">Demand JVs only</button>" +
+      "<button type=\"button\" class=\"btn\" data-pdexp=\"bp\">Bank payment vouchers (BPV) only</button>" +
+      "<button type=\"button\" class=\"btn pri\" data-pdexp=\"both\">Both JV and BPV</button></div></div>";
   }
   async function exportVouchers(kind, ks) {
     var q = function (v) { var t = String(v == null ? "" : v); return /[",\n]/.test(t) ? "\"" + t.replace(/"/g, "\"\"") + "\"" : t; };
@@ -154,6 +200,7 @@
     var m = MODS.e_ap;
     if (m && !m.tabs.some(function (t) { return t[0] === DEM; })) m.tabs.unshift([DEM, "Payment demands"]);
     if (typeof TAB_HOME !== "undefined") TAB_HOME[DEM] = "e_ap";
+    if (MODS.rpt && !MODS.rpt.tabs.some(function (t) { return t[0] === "pdvouch"; })) MODS.rpt.tabs.push(["pdvouch", "Demand vouchers (JV / BPV)"]);
   }
 
   function subscribe() {
@@ -320,6 +367,7 @@
       typeof jvSheet !== "function") return false;
     defs();
     subscribe();
+    special = (function (old) { return function (tab) { return tab === "pdvouch" ? vouchersView() : old.apply(this, arguments); }; })(special); // eslint-disable-line no-global-assign
 
     openForm = (function (old) { // eslint-disable-line no-global-assign
       return function (c, id, pre) {
@@ -413,10 +461,12 @@
         e.preventDefault(); e.stopImmediatePropagation();
         if (ex.id === "pdClr") { R = { from: "", to: "" }; keepR(); scheduleRender(); return; }
         if (ex.hasAttribute("data-pdexp")) {
-          var mm = document.getElementById("fsPdExp"), ks = [];
+          var mm = ex.closest(".fs-pdvrep") || document.getElementById("fsPdExp"), ks = [], kd = ex.getAttribute("data-pdexp");
           if (mm) mm.querySelectorAll("[data-pdst]:checked").forEach(function (c) { EXST.forEach(function (x) { if (x[0] === c.getAttribute("data-pdst")) ks = ks.concat(x[2]); }); });
           if (!ks.length) { toast("Tick at least one status."); return; }
-          if (mm) mm.remove(); exportVouchers(ex.getAttribute("data-pdexp"), ks); return;
+          if (mm && mm.id === "fsPdExp") mm.remove();
+          if (kd === "rpt") listReport(ks); else if (kd === "list") listCsv(ks); else exportVouchers(kd, ks);
+          return;
         }
         exportMenu(ex); return;
       }

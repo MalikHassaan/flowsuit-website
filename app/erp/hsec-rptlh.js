@@ -25,7 +25,7 @@
   var dmy = function (d) { return ("0" + d.getDate()).slice(-2) + "-" + MON[d.getMonth()] + "-" + d.getFullYear(); };
 
   var FS_RE = /^(statement of (financial position|profit|comprehensive income|changes in equity|cash flows)|balance sheet|notes to the|profit (or|and) loss( account| statement)?$|income statement$)/i;
-  var DOC_RE = /voucher|credit note|debit note|invoice\b|^bill\b|payslip|pay slip|salary slip|drawing request|count sheet|requisition|purchase order|goods receipt|issue note|transfer note|return to vendor|quotation|approval sheet|gate pass|delivery challan|production cost sheet|payment demand|letter\b|certificate/i;
+  var DOC_RE = /voucher|credit note|debit note|invoice\b|^bill\b|payslip|pay slip|salary slip|drawing request|count sheet|requisition|purchase order|goods receipt|issue note|transfer note|return to vendor|quotation|approval sheet|gate pass|delivery challan|production cost sheet|payment demand(?!s)|letter\b|certificate/i;
 
   function kind(sh) {
     if (sh.classList.contains("qsheet") || sh.querySelector(".iv-lh, .pvch, .fs-colh, .qsheet, .fs-pg")) return "doc";
