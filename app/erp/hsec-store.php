@@ -382,6 +382,57 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
     return null;
 }
 
+// Payment demands are paid only after the GM approves them (hassan, 2026-11-16: "once the demand is created the GM has
+// the option which demands should be paid and approved ... once it's approved by the GM, date and comments should be
+// shown to the maker"). The decision is demand.gm = {status: Approved | Not approved, note, name, uid, at}. Only a
+// person with the Group GM Finance approval role, or an ERP admin, can set or change it; the name and time come from
+// the sign-in. Anyone else saving the demand keeps the decision the server already has.
+function hsec_is_gm(array $me): bool
+{
+    return (bool) $me['is_admin'] || (string) ($me['hsec_jv'] ?? '') === 'gmf';
+}
+
+function hsec_pd_gm(array $me, ?array $old, array &$new): void
+{
+    $was = is_array($old['gm'] ?? null) ? $old['gm'] : null;
+    $keep = function () use (&$new, $was) {
+        if ($was === null) {
+            unset($new['gm']);
+        } else {
+            $new['gm'] = $was;
+        }
+    };
+    $want = $new['gm'] ?? null;
+    $st = is_array($want) ? (string) ($want['status'] ?? '') : '';
+    if (!hsec_is_gm($me) || !in_array($st, ['Approved', 'Not approved'], true)) {
+        $keep();
+        return;
+    }
+    $note = mb_substr(trim((string) ($want['note'] ?? '')), 0, 500);
+    if ($was !== null && ($was['status'] ?? '') === $st && (string) ($was['note'] ?? '') === $note) {
+        $keep();
+        return;
+    }
+    $new['gm'] = ['status' => $st, 'note' => $note, 'name' => $me['name'], 'uid' => 'u' . $me['id'], 'at' => gmdate('Y-m-d\TH:i:s.000\Z')];
+}
+
+// A bank payment voucher for a demand is made only once the GM has approved that demand.
+function hsec_pd_paycheck(PDO $db, string $id): ?string
+{
+    $raw = $id === '' ? null : hsec_old($db, 'paydemands', $id);
+    $d = $raw === null ? null : json_decode($raw, true);
+    if (!is_array($d)) {
+        return null;
+    }
+    $st = (string) ($d['gm']['status'] ?? '');
+    if ($st === 'Approved') {
+        return null;
+    }
+    $no = (string) ($d['demandNo'] ?? 'This demand');
+    return $st === 'Not approved' ? $no . ' was not approved by the GM, so it cannot be paid.'
+        : $no . ' is waiting for the GM\'s approval. It can be paid once the GM approves it.';
+}
+
 // Writes one record and its history row; the caller holds the transaction.
 function hsec_put(PDO $db, array $me, string $coll, string $id, ?string $json, ?string $oldJson, int $v): void
 {
@@ -436,6 +487,18 @@ function hsec_write(array $me): void
         $new = $json === null ? null : json_decode($json, true);
         $renumbered = false;
         $why = hsec_refusal($me, $coll, $old, $new);
+        if ($why === null && $coll === 'paydemands' && $new !== null) {
+            // The GM's decision on a payment demand: only the GM (or an admin) sets it, under their own name and time.
+            $before = $new;
+            hsec_pd_gm($me, $old, $new);
+            if ($new !== $before) {
+                $json = json_encode($new, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+        }
+        if ($why === null && $coll === 'journals' && $old === null && $new !== null
+            && ($new['source']['c'] ?? '') === 'paydemands' && ($new['source']['ev'] ?? '') === 'pay') {
+            $why = hsec_pd_paycheck($db, (string) ($new['source']['id'] ?? ''));
+        }
         if ($why === null && $coll === 'journals') {
             // Approval rules; the check also writes the signed-in name, id and time onto the voucher.
             $before = $new;
