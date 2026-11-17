@@ -383,13 +383,49 @@
       x.n++; x.a += a; if (k === "paid") { x.dn++; x.da += a; } else { x.pn++; x.pa += a; }
     });
     var f = function (k) { return g[k] || { n: 0, a: 0 }; }, pend = { n: tot.n - f("paid").n, a: tot.a - f("paid").a };
-    var card = function (t, x, c) { return "<div class=\"fs-pdcard " + (c || "") + "\"><span>" + t + "</span><b>" + x.n + "</b><em>Rs " + fmt(x.a) + "</em></div>"; };
+    // each box filters the list below to its demands (hassan, 2026-11-17: "these tabs should be clickable")
+    var cur = window.FS_STF ? window.FS_STF.get(DEM) : "";
+    var card = function (t, x, c, v) {
+      return "<button type=\"button\" class=\"fs-pdcard " + (c || "") + (cur === v ? " on" : "") + "\" data-pdcard=\"" + esc(v) + "\" data-pdcl=\"" + esc(t) + "\" title=\"Show these in the list below\"><span>" + t + "</span><b>" + x.n + "</b><em>Rs " + fmt(x.a) + "</em></button>";
+    };
+    var ap = gmDays(), td = ap.days[localDay(new Date())] || { n: 0, a: 0, ids: [] };
     var bk = Object.keys(by).sort();
-    return "<div class=\"fs-pdsum\">" + rangeBar() + "<div class=\"fs-pdcards\">" + card("All demands", tot) + card("Paid", f("paid"), "good") + card("Pending", pend, "warn") +
-      (f("appr").n ? card("Demand in approval", f("appr")) : "") + (f("gm").n ? card("Waiting for GM", f("gm"), "warn") : "") + (f("gmno").n ? card("Not approved by GM", f("gmno"), "bad") : "") + card("To be paid", f("topay")) + card("Payment in approval", f("payappr")) + (f("back").n ? card("Returned", f("back"), "bad") : "") + "</div>" +
+    return "<div class=\"fs-pdsum\">" + rangeBar() + "<div class=\"fs-pdcards\">" + card("All demands", tot, "", "") + card("Paid", f("paid"), "good", "Paid") + card("Pending", pend, "warn", "!Paid") +
+      (f("appr").n ? card("Demand in approval", f("appr"), "", "Demand in approval") : "") + (f("gm").n ? card("Waiting for GM", f("gm"), "warn", "Waiting for GM approval") : "") +
+      card("Approved by GM today", td, "good", "@" + td.ids.join(",")) +
+      (f("gmno").n ? card("Not approved by GM", f("gmno"), "bad", "Not approved by GM") : "") + card("To be paid", f("topay"), "", "To be paid") + card("Payment in approval", f("payappr"), "", "Payment in approval") +
+      (f("back").n ? card("Returned", f("back"), "bad", "Returned") : "") + "</div>" + gmDayTable(ap) +
       (bk.length ? "<div class=\"tw\"><table><thead><tr><th>Branch · company</th><th class=\"num\">Demands</th><th class=\"num\">Amount</th><th class=\"num\">Paid</th><th class=\"num\">Paid amount</th><th class=\"num\">Pending</th><th class=\"num\">Pending amount</th></tr></thead><tbody>" +
         bk.map(function (k) { var x = by[k]; return "<tr><td>" + esc(k) + "</td><td class=\"num\">" + x.n + "</td><td class=\"num\">" + fmt(x.a) + "</td><td class=\"num\">" + x.dn + "</td><td class=\"num\">" + fmt(x.da) + "</td><td class=\"num\">" + x.pn + "</td><td class=\"num\">" + fmt(x.pa) + "</td></tr>"; }).join("") +
         "</tbody></table></div>" : "") + gmBar(f("gm")) + "<p class=\"muted\" style=\"margin:6px 0 0\">Type Paid, Pending approval or a branch name in Search to filter the list below.</p></div>";
+  }
+
+  // what the GM approved, by the day it was approved (hassan, 2026-11-17: "once i approve it it should be shown how much is
+  // approved in todays date and on relevant date"). The day is the approval's own date, in this computer's time zone.
+  // With From/To set above, only approvals made in those dates are listed.
+  function localDay(d) { var p = function (x) { return (x < 10 ? "0" : "") + x; }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()); }
+  function gmDays() {
+    var days = {};
+    (typeof byEnt === "function" ? byEnt(D(DEM).slice()) : D(DEM).slice()).forEach(function (r) {
+      var g = r.gm; if (!g || g.status !== "Approved" || !g.at) return;
+      var t = new Date(g.at); if (isNaN(t)) return;
+      var d = localDay(t), x = days[d] = days[d] || { n: 0, a: 0, ids: [], paid: 0 };
+      x.n++; x.a += n(r.amount); x.ids.push(r.id); if (state(r).k === "paid") x.paid += n(r.amount);
+    });
+    return { days: days };
+  }
+  function gmDayTable(ap) {
+    var ks = Object.keys(ap.days).filter(function (d) { return (!R.from || d >= R.from) && (!R.to || d <= R.to); }).sort().reverse();
+    if (!ks.length) return "";
+    var more = !ranged() && ks.length > 7; if (more) ks = ks.slice(0, 7);
+    var cur = window.FS_STF ? window.FS_STF.get(DEM) : "";
+    return "<details class=\"fs-pdgmdays\"" + (/^@/.test(cur) ? " open" : "") + "><summary>Approved by GM, by date</summary><div class=\"tw\"><table><thead><tr><th>Approved on</th><th class=\"num\">Demands</th><th class=\"num\">Amount approved</th><th class=\"num\">Paid so far</th><th class=\"num\">Still to pay</th></tr></thead><tbody>" +
+      ks.map(function (d) {
+        var x = ap.days[d], v = "@" + x.ids.join(",");
+        return "<tr class=\"fs-pdday" + (cur === v ? " on" : "") + "\" data-pdcard=\"" + esc(v) + "\" data-pdcl=\"Approved by GM on " + esc(fdate(d)) + "\" title=\"Show these in the list below\"><td>" + esc(fdate(d)) + (d === localDay(new Date()) ? " (today)" : "") +
+          "</td><td class=\"num\">" + x.n + "</td><td class=\"num\">" + fmt(x.a) + "</td><td class=\"num\">" + fmt(x.paid) + "</td><td class=\"num\">" + fmt(x.a - x.paid) + "</td></tr>";
+      }).join("") + "</tbody></table></div><p class=\"muted\" style=\"margin:4px 0 0\">" + (more ? "The last 7 days with approvals. Set From and To above to see others. " : "") +
+      "Click a date to list those demands.</p></details>";
   }
 
   // the GM's bar above the list: tick the demands to pay, comment, approve or not
@@ -531,6 +567,18 @@
         exportMenu(ex); return;
       }
       if (!(e.target.closest && e.target.closest("#fsPdExp"))) { var om = document.getElementById("fsPdExp"); if (om) om.remove(); }
+      var cd = e.target.closest && e.target.closest("[data-pdcard]");
+      if (cd && window.FS_STF) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var v = cd.getAttribute("data-pdcard"), lab = cd.getAttribute("data-pdcl");
+        if (v === "@") { toast("Nothing approved on that day."); return; }
+        if (v && window.FS_STF.get(DEM) === v) v = ""; // a second click shows all again
+        if (window.FS_STF.set(v, lab)) {
+          var sm = document.querySelector(".fs-pdsum"); if (sm) sm.remove(); // drawn again with the box marked
+          var q0 = document.getElementById("q"); if (q0 && v) q0.closest(".bar").scrollIntoView({ block: "start", behavior: "smooth" });
+        }
+        return;
+      }
       var gall = e.target.closest && e.target.closest("#pdGmAll");
       if (gall) { document.querySelectorAll("[data-pdgm]").forEach(function (c) { c.checked = gall.checked; }); return; }
       var gtick = e.target.closest && e.target.closest(".fs-pdtick");
@@ -610,6 +658,10 @@
     css.textContent = ".fs-pdsum{margin:0 0 14px}.fs-pdcards{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}" +
       ".fs-pdcard{flex:1 1 150px;padding:10px 12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:var(--panel,#fff)}" +
       ".fs-pdcard span{display:block;font-size:12px;color:#64748b}.fs-pdcard b{display:block;font-size:22px}.fs-pdcard em{font-style:normal;font-size:12px;color:#475569}" +
+      "button.fs-pdcard{text-align:left;font:inherit;color:inherit;cursor:pointer}button.fs-pdcard:hover{border-color:#1F6FB8}" +
+      ".fs-pdcard.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.25)}" +
+      ".fs-pdgmdays{margin:0 0 10px}.fs-pdgmdays summary{cursor:pointer;font-weight:700;font-size:13px;margin-bottom:6px}" +
+      ".fs-pdday{cursor:pointer}.fs-pdday:hover td{background:#eff6ff}.fs-pdday.on td{background:#dbeafe;font-weight:600}" +
       ".fs-pdcard.good b{color:#15803d}.fs-pdcard.warn b{color:#b45309}.fs-pdcard.bad b{color:#b91c1c}" +
       ".fs-pdbreak{height:0;margin:18px 0;border-top:1px dashed #ccc}@media print{.fs-pdbreak{break-before:page;page-break-before:always;border:0;margin:0}}" +
       ".fs-pdbl{display:flex;align-items:center;justify-content:space-between;gap:8px}" +
