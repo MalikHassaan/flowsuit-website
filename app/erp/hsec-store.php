@@ -416,6 +416,51 @@ function hsec_pd_gm(array $me, ?array $old, array &$new): void
     $new['gm'] = ['status' => $st, 'note' => $note, 'name' => $me['name'], 'uid' => 'u' . $me['id'], 'at' => gmdate('Y-m-d\TH:i:s.000\Z')];
 }
 
+// One cheque is paid once (hassan, 2026-11-17, cheques issued register): a new voucher that pays out of a bank with a
+// cheque number already on another live voucher of the same company and bank is refused. Only real cheque numbers
+// (5 digits or more) are checked, and reversals and rejected or reversed vouchers do not count. One cheque paying
+// several demands in separate vouchers is allowed unless the amounts are the same or the register is involved.
+function hsec_dup_cheque(PDO $db, string $id, array $new): ?string
+{
+    $no = preg_replace('/\s+/', '', (string) ($new['chequeNo'] ?? ''));
+    if (!preg_match('/^\d{5,}$/', $no) || !empty($new['reversalOf'])) {
+        return null;
+    }
+    $banks = [];
+    $mine = 0.0;
+    foreach (($new['lines'] ?? []) as $l) {
+        if ((float) ($l['credit'] ?? 0) > 0 && !empty($l['account'])) {
+            $banks[(string) $l['account']] = true;
+            $mine += (float) $l['credit'];
+        }
+    }
+    if (!$banks) {
+        return null;
+    }
+    $st = $db->prepare("SELECT id, data FROM hsec_docs WHERE coll = 'journals' AND id <> ? AND data IS NOT NULL AND data LIKE ?");
+    $st->execute([$id, '%' . $no . '%']);
+    foreach ($st as $row) {
+        $j = json_decode((string) $row['data'], true);
+        if (!is_array($j) || preg_replace('/\s+/', '', (string) ($j['chequeNo'] ?? '')) !== $no || ($j['entity'] ?? '') !== ($new['entity'] ?? '')
+            || ($j['status'] ?? '') === 'Rejected' || !empty($j['reversalOf']) || !empty($j['reversedBy'])) {
+            continue;
+        }
+        $out = 0.0;
+        foreach (($j['lines'] ?? []) as $l) {
+            if (isset($banks[(string) ($l['account'] ?? '')])) {
+                $out += (float) ($l['credit'] ?? 0);
+            }
+        }
+        // one cheque may pay several demands in separate vouchers; the same cheque from the register twice, or the
+        // same amount again, is a duplicate
+        $reg = ($j['source']['c'] ?? '') === 'chqissued' || ($new['source']['c'] ?? '') === 'chqissued';
+        if ($out > 0 && ($reg || abs($out - $mine) < 0.5)) {
+            return 'Cheque ' . $no . ' is already paid out of this bank in voucher ' . ($j['ref'] ?? '') . '. A cheque can be paid only once; if that voucher is wrong, reject or reverse it first.';
+        }
+    }
+    return null;
+}
+
 // A bank payment voucher for a demand is made only once the GM has approved that demand.
 function hsec_pd_paycheck(PDO $db, string $id): ?string
 {
@@ -494,6 +539,9 @@ function hsec_write(array $me): void
             if ($new !== $before) {
                 $json = json_encode($new, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
+        }
+        if ($why === null && $coll === 'journals' && $old === null && $new !== null) {
+            $why = hsec_dup_cheque($db, $id, $new);
         }
         if ($why === null && $coll === 'journals' && $old === null && $new !== null
             && ($new['source']['c'] ?? '') === 'paydemands' && ($new['source']['ev'] ?? '') === 'pay') {
