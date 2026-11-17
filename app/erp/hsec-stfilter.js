@@ -24,11 +24,27 @@
     if (col < 0 && !n) return null;
     return { bar: bar, tb: tb, col: col, c: c, rows: rows, out: n };
   }
-  var stOf = function (T, tr) { return T.col < 0 ? "" : txt(tr.children[T.col]) || "(none)"; };
+  // the status itself, without notes drawn under it (the GM's "Approved by ... on ..." on payment demands)
+  var stOf = function (T, tr) {
+    if (T.col < 0) return "";
+    var td = tr.children[T.col], t = txt(td);
+    [].slice.call(td.querySelectorAll(".fs-pdgm")).forEach(function (x) { var u = txt(x); if (u) t = t.replace(u, "").trim(); });
+    return t || "(none)";
+  };
+  // a pick is a status, "!status" (every other status) or "@id,id" (those records, e.g. approved today); the last two
+  // come from the figure boxes above a list (hsec-demand.js) and carry a label for the picker
+  var LAB = {};
+  var keepRow = function (T, tr, want) {
+    if (!want) return true;
+    if (want.charAt(0) === "@") return want.slice(1).split(",").indexOf(tr.getAttribute("data-id")) >= 0;
+    if (want.charAt(0) === "!") return stOf(T, tr) !== want.slice(1);
+    return stOf(T, tr) === want;
+  };
+  var special = function (v) { return v && (v.charAt(0) === "@" || v.charAt(0) === "!"); };
 
   function apply(T) {
     var want = T.col < 0 ? "" : pick[T.c] || "", shown = 0, part = !!want || T.out > 0;
-    T.rows.forEach(function (tr) { var hide = !!want && stOf(T, tr) !== want; if (tr.hidden !== hide) tr.hidden = hide; if (!hide) shown++; });
+    T.rows.forEach(function (tr) { var hide = !keepRow(T, tr, want); if (tr.hidden !== hide) tr.hidden = hide; if (!hide) shown++; });
     var cnt = [].slice.call(T.bar.querySelectorAll(".muted")).find(function (s) { return /^\d[\d,]* records?( of \d[\d,]*)?$/.test(txt(s)); });
     if (cnt) { var t = want ? shown + " record" + (shown === 1 ? "" : "s") + " of " + T.rows.length : T.rows.length + " record" + (T.rows.length === 1 ? "" : "s"); if (txt(cnt) !== t) cnt.textContent = t; }
     var ft = T.tb.querySelector("tfoot tr");
@@ -45,12 +61,14 @@
     if (T.col < 0) { apply(T); return; }
     var counts = {}; T.rows.forEach(function (tr) { var s = stOf(T, tr); counts[s] = (counts[s] || 0) + 1; });
     var names = Object.keys(counts).sort();
-    if (pick[T.c] && !counts[pick[T.c]]) names.push(pick[T.c]);
+    var cur = pick[T.c] || "";
+    if (cur && !special(cur) && !counts[cur]) names.push(cur);
     var sel = document.getElementById("fsStF");
     var opts = "<option value=\"\">All statuses (" + T.rows.length + ")</option>" + names.map(function (s) {
       return "<option value=\"" + s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;") + "\"" + (pick[T.c] === s ? " selected" : "") + ">" +
         s.replace(/&/g, "&amp;").replace(/</g, "&lt;") + " (" + (counts[s] || 0) + ")</option>";
-    }).join("");
+    }).join("") + (special(cur) ? "<option value=\"" + cur.replace(/"/g, "&quot;") + "\" selected>" + String(LAB[cur] || (cur.charAt(0) === "!" ? "All except " + cur.slice(1) : "Picked above")).replace(/&/g, "&amp;").replace(/</g, "&lt;") + " (" +
+      T.rows.filter(function (tr) { return keepRow(T, tr, cur); }).length + ")</option>" : "");
     if (!sel) {
       var q = document.getElementById("q");
       var lab = document.createElement("label"); lab.className = "fs-stf"; lab.innerHTML = "Status <select id=\"fsStF\" aria-label=\"Filter by status\"></select>";
@@ -61,6 +79,16 @@
     apply(T);
   }
 
+  // for the figure boxes above a list: show only these rows, or all again ("")
+  window.FS_STF = {
+    set: function (v, label) {
+      var T = table(); if (!T) return false;
+      if (label) LAB[v] = label;
+      if (v) pick[T.c] = v; else delete pick[T.c];
+      keep(); run(); return true;
+    },
+    get: function (c) { return pick[c] || ""; }
+  };
   document.addEventListener("change", function (e) {
     if (!e.target || e.target.id !== "fsStF") return;
     var T = table(); if (!T) return;
