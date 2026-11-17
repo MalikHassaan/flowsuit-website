@@ -498,6 +498,43 @@ function hsec_old(PDO $db, string $coll, string $id): ?string
     return $old === false ? null : $old;
 }
 
+// A voucher sent for approval or posted must balance, and every amount needs an account (hassan, 2026-11-17: an
+// opening BRV could be saved with the debit line only). Drafts may stay unbalanced while being typed. Checked only when
+// the status moves on or the lines change, so an old voucher can still be reversed or marked.
+function hsec_jv_balance(?array $old, array $new): ?string
+{
+    $st = (string) ($new['status'] ?? '');
+    if (!in_array($st, ['Pending approval', 'Approved', 'Posted'], true)) {
+        return null;
+    }
+    if ($old !== null && (string) ($old['status'] ?? '') === $st && ($old['lines'] ?? null) == ($new['lines'] ?? null)) {
+        return null;
+    }
+    $dr = 0.0;
+    $cr = 0.0;
+    $n = 0;
+    foreach (($new['lines'] ?? []) as $l) {
+        $d = (float) ($l['debit'] ?? 0);
+        $c = (float) ($l['credit'] ?? 0);
+        if (($d != 0 || $c != 0) && empty($l['account'])) {
+            return 'A line has an amount but no account. Choose the account (and sub account) on every line, or remove the line.';
+        }
+        if ($d != 0 || $c != 0) {
+            $n++;
+        }
+        $dr += $d;
+        $cr += $c;
+    }
+    if ($n < 2 || $dr <= 0) {
+        return 'A voucher needs at least one debit line and one credit line. Add the other side of the entry before sending it.';
+    }
+    if (abs($dr - $cr) >= 0.5) {
+        return 'Debits (' . number_format($dr, 2) . ') and credits (' . number_format($cr, 2) . ') do not match; the difference is '
+            . number_format(abs($dr - $cr), 2) . '. Make the difference zero before sending or posting. You can still save it as a draft.';
+    }
+    return null;
+}
+
 function hsec_write(array $me): void
 {
     $in = json_decode((string) file_get_contents('php://input'));
@@ -546,6 +583,9 @@ function hsec_write(array $me): void
         if ($why === null && $coll === 'journals' && $old === null && $new !== null
             && ($new['source']['c'] ?? '') === 'paydemands' && ($new['source']['ev'] ?? '') === 'pay') {
             $why = hsec_pd_paycheck($db, (string) ($new['source']['id'] ?? ''));
+        }
+        if ($why === null && $coll === 'journals' && $new !== null) {
+            $why = hsec_jv_balance($old, $new);
         }
         if ($why === null && $coll === 'journals') {
             // Approval rules; the check also writes the signed-in name, id and time onto the voucher.
