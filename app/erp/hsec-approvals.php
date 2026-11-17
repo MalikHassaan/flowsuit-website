@@ -466,6 +466,7 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-undo.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-demand.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-chq.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-billsimple.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-company.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-brec.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-rvcust.js') . '</script>'
