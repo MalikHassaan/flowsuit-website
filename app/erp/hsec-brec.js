@@ -12,6 +12,14 @@
   var lastQ = "";
   var jv = function (id) { return ((Store && Store.data && Store.data.journals) || []).find(function (j) { return j.id === id; }); };
 
+  // Reversed pairs (hassan, 2026-11-18: "once the entry is reversed its impact should be reversed in all the system"):
+  // a posted voucher and its posted reversal cancel out, so neither belongs on the uncleared list or in the period's
+  // receipts and payments. Both stay in the ledger for the audit trail.
+  function pairOf(j) {
+    if (!j || j.status !== "Posted") return null;
+    var m = j.reversedBy ? jv(j.reversedBy) : j.reversalOf ? jv(j.reversalOf) : null;
+    return m && m.status === "Posted" && m.entity === j.entity && m.date ? m : null;
+  }
   var amt = function (x) { var v = Math.round(Math.abs(x)).toLocaleString("en-US"); return x < -0.5 ? "(" + v + ")" : v; };
   var pad = function (x) { return ("0" + x).slice(-2); };
   function dayBefore(d) { var t = new Date(d + "T00:00:00"); t.setDate(t.getDate() - 1); return t.getFullYear() + "-" + pad(t.getMonth() + 1) + "-" + pad(t.getDate()); }
@@ -22,7 +30,10 @@
     if (!to || !acc || typeof V === "undefined" || !V || !V.br) return;
     var ctls = to.closest(".ctls"); if (!ctls) return;
     var T = to.value; if (!T) return;
-    if (!V.br.from || V.br.from > T || V.br.fromFor !== T.slice(0, 7) && !V.br.fromSet) { V.br.from = T.slice(0, 8) + "01"; V.br.fromFor = T.slice(0, 7); }
+    // Any From and To date (hassan, 2026-11-18: "it should be general from any date can be selected from to till"): From
+    // only gets a default (the 1st of the To month) the first time; after that it stays where it was put, whatever To is.
+    if (!V.br.from) V.br.from = T.slice(0, 8) + "01";
+    if (V.br.from > T) V.br.from = T;
     var Fr = V.br.from;
     if (!document.getElementById("fsBrFrom")) {
       var lab = to.closest("label");
@@ -31,8 +42,8 @@
         if (lab.firstChild && lab.firstChild.nodeType === 3) lab.firstChild.nodeValue = "To (statement date) ";
         document.getElementById("fsBrFrom").addEventListener("change", function (e) {
           var v = e.target.value; if (!v) return;
-          if (v > T) { e.target.value = Fr; return; }
-          V.br.from = v; V.br.fromSet = true; if (typeof render === "function") render();
+          V.br.from = v; if (v > T) V.br.date = v;
+          if (typeof render === "function") render();
         });
       }
     }
@@ -40,6 +51,8 @@
     var ent = V.ent, a = acc.value, open = 0, rin = 0, rout = 0, nin = 0, nout = 0;
     (Store.data.journals || []).forEach(function (j) {
       if (j.status !== "Posted" || j.entity !== ent || !j.date || j.date > T) return;
+      var mate = pairOf(j);
+      if (mate && j.date >= Fr && mate.date >= Fr && mate.date <= T) return; // reversed pair inside the period: nets to nil
       (j.lines || []).forEach(function (l) {
         if (l.account !== a) return;
         var d = +l.debit || 0, c = +l.credit || 0;
@@ -61,6 +74,7 @@
     var box = document.querySelector("input[data-brk]"); if (!box) return;
     var table = box.closest("table"); if (!table || table.dataset.fsRef) return;
     table.dataset.fsRef = "1";
+    pairs(table);
     var head = table.querySelector("thead tr");
     if (head && head.children[2]) head.children[2].insertAdjacentHTML("afterend", "<th>Cheque / transfer ref</th>");
     table.querySelectorAll("tbody tr").forEach(function (tr) {
@@ -79,11 +93,29 @@
       inp.addEventListener("keydown", function (e) { e.stopPropagation(); });
     }
   }
+  function pairs(table) {
+    if (typeof V === "undefined" || !V || !V.br || !V.br.set) return;
+    var byJ = {}, add = [], hid = 0, jn = {};
+    table.querySelectorAll("input[data-brk]").forEach(function (cb) { var id = String(cb.getAttribute("data-brk")).split(":")[0]; (byJ[id] = byJ[id] || []).push(cb); });
+    Object.keys(byJ).forEach(function (id) {
+      var m = pairOf(jv(id)); if (!m || !byJ[m.id]) return; // both halves must be on this list
+      byJ[id].forEach(function (cb) {
+        var k = cb.getAttribute("data-brk"), tr = cb.closest("tr");
+        if (!V.br.set.has(k)) add.push(k);
+        if (tr) { tr.style.display = "none"; tr.classList.add("fs-brpair"); hid++; jn[id] = 1; }
+      });
+    });
+    if (hid) {
+      var tb = table.querySelector("tbody"), cols = (table.querySelector("thead tr") || {}).children;
+      if (tb) tb.insertAdjacentHTML("beforeend", "<tr class=\"fs-brpairnote\"><td colspan=\"" + ((cols && cols.length) || 6) + "\" class=\"muted\">" + Math.ceil(Object.keys(jn).length / 2) + " reversed voucher pair" + (Object.keys(jn).length <= 2 ? "" : "s") + " left out: a voucher and its reversal cancel each other, so they are cleared automatically.</td></tr>");
+    }
+    if (add.length) { add.forEach(function (k) { V.br.set.add(k); }); setTimeout(function () { if (typeof render === "function") render(); }, 0); }
+  }
   function filter(table, q) {
     q = String(q || "").toLowerCase().replace(/,/g, "").trim();
     var shown = 0, all = 0;
     table.querySelectorAll("tbody tr").forEach(function (tr) {
-      if (!tr.querySelector("input[data-brk]")) return;
+      if (!tr.querySelector("input[data-brk]") || tr.classList.contains("fs-brpair")) return;
       all++;
       var ok = !q || tr.textContent.toLowerCase().replace(/,/g, "").indexOf(q) >= 0;
       tr.style.display = ok ? "" : "none"; if (ok) shown++;
