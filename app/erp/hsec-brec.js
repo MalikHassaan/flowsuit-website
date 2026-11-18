@@ -94,17 +94,16 @@
       inp.addEventListener("keydown", function (e) { e.stopPropagation(); });
     }
   }
-  // "Mark reconciled" is greyed out until the statement's closing balance is entered and the difference is nil; the app
+  // "Mark reconciled" is refused until the statement's closing balance is entered and the difference is nil; the app
   // gives no reason, so say which one is missing (hassan, 2026-11-18: "mark reconciliation button is not working").
   function doneHint() {
     var b = document.getElementById("brDone"); if (!b) return;
-    var why = "";
-    if (b.disabled) {
-      var bal = document.getElementById("brBal"), diff = "";
-      [].slice.call(document.querySelectorAll("tr")).forEach(function (tr) { if (/^\s*Difference\s*$/i.test((tr.children[0] || {}).textContent || "")) diff = String(tr.children[1].textContent || "").trim(); });
-      why = !bal || !String(bal.value).trim() ? "Mark reconciled works once you type the closing balance from the bank statement above."
-        : "Mark reconciled works once the difference is 0 (now " + diff + "). Tick each entry that is on the statement, and draft a voucher for bank charges or profit that are only on the statement.";
-    }
+    // the live app keeps the button clickable but refuses quietly, so check the same two things whether or not it is greyed
+    var bal = document.getElementById("brBal"), diff = "";
+    [].slice.call(document.querySelectorAll("tr")).forEach(function (tr) { if (/^\s*Difference\s*$/i.test((tr.children[0] || {}).textContent || "") && tr.children[1]) diff = String(tr.children[1].textContent || "").trim(); });
+    var nil = /^\(?\s*-?0(\.0+)?\s*\)?$/.test(diff.replace(/,/g, "")) || /^[-–—]$/.test(diff);
+    var why = !bal || !String(bal.value).trim() ? "Mark reconciled works once you type the closing balance from the bank statement in \"Closing balance per bank statement\" above."
+      : diff && !nil ? "Mark reconciled works once the difference is 0 (now " + diff + "). Tick each entry that is on the statement, and draft a voucher for bank charges or profit that are only on the statement." : "";
     var p = document.getElementById("fsBrWhy");
     if (!why) { if (p) p.remove(); return; }
     if (!p) { b.parentNode.insertAdjacentHTML("afterend", "<p class=\"fs-brwhy\" id=\"fsBrWhy\"></p>"); p = document.getElementById("fsBrWhy"); }
