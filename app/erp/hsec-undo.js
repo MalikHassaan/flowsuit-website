@@ -116,7 +116,9 @@
     add("fix", "Reverse and correct" + (F.c === "journals" ? doc : ""), "");
     if (t.c !== "journals") add("del", "Reverse and delete" + (F.c === "journals" ? doc : ""), "danger");
   }
-  // Voucher lists show a reversed voucher as "Reversed" and its reversal as "Reversal" (hassan, 2026-11-18: "if an entry
+  // Renamed (hassan, 2026-11-18: "instead of reversal and reversed use the other"): "Cancelled" / "Cancellation"; the
+  // corrected voucher keeps plain "Posted", so it is the only live one in the list.
+  // Voucher lists show a reversed voucher as "Cancelled" and its reversal as "Cancellation" (hassan, 2026-11-18: "if an entry
   // got reversed the status should also be changed"). Only the label changes: in the books both stay Posted and cancel
   // each other out, so reports and balances are as before.
   function marks() {
@@ -130,7 +132,7 @@
         var want = j.reversedBy ? "rev" : j.reversalOf ? "of" : "";
         if (!want || td.getAttribute("data-fsrev") === want + (other ? other.ref || "" : "")) return;
         td.setAttribute("data-fsrev", want + (other ? other.ref || "" : ""));
-        td.innerHTML = "<span class=\"fs-revpill " + want + "\">" + (want === "rev" ? "Reversed" : "Reversal") + "</span>" +
+        td.innerHTML = "<span class=\"fs-revpill " + want + "\">" + (want === "rev" ? "Cancelled" : "Cancellation") + "</span>" +
           (other && other.ref ? "<div class=\"fs-revby\">" + (want === "rev" ? "by " : "of ") + String(other.ref).replace(/</g, "&lt;") + "</div>" : "");
       });
     });
