@@ -97,8 +97,13 @@
     } catch (x) { btn.disabled = false; er.textContent = x.message || "Could not reverse."; }
   }
   function buttons() {
-    var frm = document.getElementById("frm"), act = frm && frm.querySelector(".actions");
-    if (!act || act.querySelector("[data-fsundo]")) return;
+    // the form's own button row: the one with Delete / Cancel / Save (newer app files have other ".actions" rows earlier
+    // in the form, e.g. on the approval or documents boxes, where the buttons ended up out of sight)
+    var frm = document.getElementById("frm"); if (!frm) return;
+    if (frm.querySelector("[data-fsundo]")) return;
+    var key = frm.querySelector("#delBtn, #cancelBtn, #saveBtn"), rows = frm.querySelectorAll(".actions");
+    var act = (key && key.closest(".actions")) || (key && key.parentNode) || rows[rows.length - 1];
+    if (!act) return;
     var t = target(); if (!t) return;
     var add = function (kind, label, cls) {
       var b = document.createElement("button"); b.type = "button"; b.className = "btn " + cls; b.setAttribute("data-fsundo", kind); b.textContent = label;
