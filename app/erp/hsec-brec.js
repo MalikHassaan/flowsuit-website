@@ -76,6 +76,7 @@
     var table = box.closest("table"); if (!table || table.dataset.fsRef) return;
     table.dataset.fsRef = "1";
     pairs(table);
+    openings(table);
     var head = table.querySelector("thead tr");
     if (head && head.children[2]) head.children[2].insertAdjacentHTML("afterend", "<th>Cheque / transfer ref</th>");
     table.querySelectorAll("tbody tr").forEach(function (tr) {
@@ -101,6 +102,22 @@
   // and the reconciled balance should be equal to the closing balance of the statement"). Ticked entries move to an
   // "On the bank statement" table with a running balance. It starts from the balance brought forward (what the bank held
   // before these entries: books less everything listed here) and must end on the statement's closing balance.
+  // Opening balance fixed (hassan, 2026-11-18: "once the opening balance is entered it should be fixed ... why do we need
+  // to enter the opening balance every time"). A voucher marked Opening balance = Yes, or narrated "Opening ...", on this
+  // bank account is the bank's starting point, not an item to find on a statement: it is ticked automatically, taken
+  // off both lists and shown as the opening line that the ticked entries run on from.
+  var isOpen = function (j) { return !!j && (j.opening === "Yes" || /^\s*opening\b/i.test(String(j.narration || ""))); };
+  function openings(table) {
+    if (typeof V === "undefined" || !V || !V.br || !V.br.set) return;
+    var add = [];
+    table.querySelectorAll("input[data-brk]").forEach(function (cb) {
+      var k = cb.getAttribute("data-brk"), j = jv(String(k).split(":")[0]), tr = cb.closest("tr");
+      if (!isOpen(j) || !tr || tr.classList.contains("fs-brpair")) return;
+      tr.style.display = "none"; tr.classList.add("fs-bropen");
+      if (!V.br.set.has(k)) add.push(k);
+    });
+    if (add.length) { add.forEach(function (k) { V.br.set.add(k); }); setTimeout(function () { if (typeof render === "function") render(); }, 0); }
+  }
   function cleared(table) {
     var old = document.getElementById("fsBrCl"); if (old) old.remove();
     var acc = document.getElementById("brAcc"), to = document.getElementById("brDate"); if (!acc || !to || !to.value) return;
@@ -110,10 +127,12 @@
       (j.lines || []).forEach(function (l) { if (l.account === a) book += (+l.debit || 0) - (+l.credit || 0); });
     });
     var lineAmt = function (k) { var p = String(k).split(":"), j = jv(p[0]), l = j && (j.lines || [])[+p[1]]; return l ? (+l.debit || 0) - (+l.credit || 0) : 0; };
-    var rows = [];
+    var rows = [], opn = [];
     table.querySelectorAll("tbody tr").forEach(function (tr) {
       var cb = tr.querySelector("input[data-brk]"); if (!cb) return;
-      var v = lineAmt(cb.getAttribute("data-brk")); listed += v;
+      var v = lineAmt(cb.getAttribute("data-brk"));
+      if (tr.classList.contains("fs-bropen")) { opn.push(jv(String(cb.getAttribute("data-brk")).split(":")[0])); return; }
+      listed += v;
       if (cb.checked && !tr.classList.contains("fs-brpair")) rows.push({ tr: tr, v: v });
     });
     var bf = book - listed, cols = (table.querySelector("thead tr") || { children: [] }).children.length || 7;
@@ -123,7 +142,7 @@
     var div = document.createElement("div"); div.id = "fsBrCl"; div.className = "panel tw fs-brcl";
     div.innerHTML = "<h3>On the bank statement (ticked) · " + rows.length + "</h3><table>" + head + "<tbody></tbody><tfoot></tfoot></table>";
     var tb = div.querySelector("tbody");
-    tb.insertAdjacentHTML("beforeend", "<tr class=\"fs-brbf\"><td colspan=\"" + cols + "\">Balance brought forward (bank balance before the entries below: books less every entry on both lists)</td><td class=\"num\"><b>" + amt(bf) + "</b></td></tr>");
+    tb.insertAdjacentHTML("beforeend", "<tr class=\"fs-brbf\"><td colspan=\"" + cols + "\">" + (opn.length ? "Opening balance (" + opn.map(function (j) { return esc((j && j.ref) || "") + (j && j.date ? ", " + esc(fd(j.date)) : ""); }).join("; ") + ") and anything cleared on earlier statements. Fixed: it is not ticked again" : "Balance brought forward (cleared on earlier statements; 0 for a new account)") + "</td><td class=\"num\"><b>" + amt(bf) + "</b></td></tr>");
     rows.forEach(function (r) {
       run += r.v; if (r.v > 0) rin += r.v; else rout -= r.v;
       r.tr.insertAdjacentHTML("beforeend", "<td class=\"num\">" + amt(run) + "</td>");
@@ -173,7 +192,7 @@
     q = String(q || "").toLowerCase().replace(/,/g, "").trim();
     var shown = 0, all = 0;
     table.querySelectorAll("tbody tr").forEach(function (tr) {
-      if (!tr.querySelector("input[data-brk]") || tr.classList.contains("fs-brpair")) return;
+      if (!tr.querySelector("input[data-brk]") || tr.classList.contains("fs-brpair") || tr.classList.contains("fs-bropen")) return;
       all++;
       var ok = !q || tr.textContent.toLowerCase().replace(/,/g, "").indexOf(q) >= 0;
       tr.style.display = ok ? "" : "none"; if (ok) shown++;
