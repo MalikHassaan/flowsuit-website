@@ -72,6 +72,9 @@
     if (typeof Store === "undefined" || !Store.data) return;
     range();
     doneHint();
+    loadCounts();
+    history();
+    stmtFiles();
     var box = [].slice.call(document.querySelectorAll("input[data-brk]")).find(function (x) { return !x.closest("#fsBrCl"); }); if (!box) return;
     var table = box.closest("table"); if (!table || table.dataset.fsRef) return;
     table.dataset.fsRef = "1";
@@ -127,22 +130,22 @@
       (j.lines || []).forEach(function (l) { if (l.account === a) book += (+l.debit || 0) - (+l.credit || 0); });
     });
     var lineAmt = function (k) { var p = String(k).split(":"), j = jv(p[0]), l = j && (j.lines || [])[+p[1]]; return l ? (+l.debit || 0) - (+l.credit || 0) : 0; };
-    var rows = [], opn = [];
+    var rows = [], opn = [], early = 0, Fr = V.br && V.br.from && V.br.from <= T ? V.br.from : "";
     table.querySelectorAll("tbody tr").forEach(function (tr) {
       var cb = tr.querySelector("input[data-brk]"); if (!cb) return;
       var v = lineAmt(cb.getAttribute("data-brk"));
       if (tr.classList.contains("fs-bropen")) { opn.push(jv(String(cb.getAttribute("data-brk")).split(":")[0])); return; }
       listed += v;
-      if (cb.checked && !tr.classList.contains("fs-brpair")) rows.push({ tr: tr, v: v });
+      if (cb.checked && !tr.classList.contains("fs-brpair")) { var jd = (jv(String(cb.getAttribute("data-brk")).split(":")[0]) || {}).date || ""; if (Fr && jd && jd < Fr) { early += v; tr.style.display = "none"; tr.classList.add("fs-brearly"); } else rows.push({ tr: tr, v: v }); }
     });
-    var bf = book - listed, cols = (table.querySelector("thead tr") || { children: [] }).children.length || 7;
+    var bf = book - listed + early, cols = (table.querySelector("thead tr") || { children: [] }).children.length || 7;
     var bal = document.getElementById("brBal"), sv = bal ? String(bal.value).replace(/,/g, "").trim() : "", stmt = sv === "" ? null : parseFloat(sv.replace(/^\((.*)\)$/, "-$1"));
     var head = table.querySelector("thead") ? table.querySelector("thead").outerHTML.replace("</tr>", "<th class=\"num\">Balance</th></tr>") : "";
     var run = bf, rin = 0, rout = 0;
     var div = document.createElement("div"); div.id = "fsBrCl"; div.className = "panel tw fs-brcl";
     div.innerHTML = "<h3>On the bank statement (ticked) · " + rows.length + "</h3><table>" + head + "<tbody></tbody><tfoot></tfoot></table>";
     var tb = div.querySelector("tbody");
-    tb.insertAdjacentHTML("beforeend", "<tr class=\"fs-brbf\"><td colspan=\"" + cols + "\">" + (opn.length ? "Opening balance (" + opn.map(function (j) { return esc((j && j.ref) || "") + (j && j.date ? ", " + esc(fd(j.date)) : ""); }).join("; ") + ") and anything cleared on earlier statements. Fixed: it is not ticked again" : "Balance brought forward (cleared on earlier statements; 0 for a new account)") + "</td><td class=\"num\"><b>" + amt(bf) + "</b></td></tr>");
+    tb.insertAdjacentHTML("beforeend", "<tr class=\"fs-brbf\"><td colspan=\"" + cols + "\">" + (Fr ? "Opening balance on the bank at " + esc(fd(dayBefore(Fr))) + " (" + (opn.length ? "opening voucher " + opn.map(function (j) { return esc((j && j.ref) || ""); }).join(", ") + ", " : "") + "plus entries cleared before " + esc(fd(Fr)) + "). It moves with the From date" : opn.length ? "Opening balance (" + opn.map(function (j) { return esc((j && j.ref) || "") + (j && j.date ? ", " + esc(fd(j.date)) : ""); }).join("; ") + ") and anything cleared on earlier statements. Fixed: it is not ticked again" : "Balance brought forward (cleared on earlier statements; 0 for a new account)") + "</td><td class=\"num\"><b>" + amt(bf) + "</b></td></tr>");
     rows.forEach(function (r) {
       run += r.v; if (r.v > 0) rin += r.v; else rout -= r.v;
       r.tr.insertAdjacentHTML("beforeend", "<td class=\"num\">" + amt(run) + "</td>");
@@ -157,6 +160,98 @@
     var panel = table.closest(".panel") || table.parentNode;
     panel.insertAdjacentElement("afterend", div);
   }
+  // Earlier reconciliations (hassan, 2026-11-18: "instead of showing [the difference] show the reconciled entries and
+  // amount with it"): statement balance, books, the entries cleared on it (count and amounts) and its files; click a row
+  // to see the entries.
+  var openRec = "";
+  var recId = function (ent, code, date) { return (ent + "_" + code + "_" + date).replace(/[^A-Za-z0-9_\-.~:@+]/g, "-"); };
+  function keyAmt(k) { var p = String(k).split(":"), j = jv(p[0]), l = j && (j.lines || [])[+p[1]]; return { j: j, v: l ? (+l.debit || 0) - (+l.credit || 0) : 0 }; }
+  function history() {
+    var h3 = [].slice.call(document.querySelectorAll(".card h3")).find(function (x) { return /^\s*Earlier reconciliations/i.test(x.textContent); });
+    if (!h3) return;
+    var card = h3.closest(".card"); if (!card || card.getAttribute("data-fshist") === openRec + "|" + attSig) return;
+    var recs = (Store.data.bankrecs || []).filter(function (r) { return r.entity === V.ent; }).sort(function (a, b) { return String(b.stmtDate).localeCompare(String(a.stmtDate)); }).slice(0, 12);
+    if (!recs.length) return;
+    var html = "<div class=\"tw\"><table class=\"fs-brhist\"><thead><tr><th>Account</th><th>Statement date</th><th class=\"num\">Statement balance</th><th class=\"num\">Books</th><th>Entries cleared</th><th>Status</th><th>Files</th></tr></thead><tbody>";
+    recs.forEach(function (r) {
+      var cl = (r.cleared || []).map(keyAmt).filter(function (x) { return x.j; }), rin = 0, rout = 0;
+      cl.forEach(function (x) { if (x.v > 0) rin += x.v; else rout -= x.v; });
+      var nf = attCount["bankrecs/" + r.id] || 0;
+      html += "<tr class=\"click\" data-fsrec=\"" + esc(r.id) + "\"><td>" + esc(r.accCode) + "</td><td>" + esc(fd(r.stmtDate)) + "</td><td class=\"num\">" + amt(+r.stmtBalance || 0) + "</td><td class=\"num\">" + amt(+r.book || 0) + "</td>" +
+        "<td>" + cl.length + (cl.length ? " <span class=\"muted\">(+" + amt(rin) + " / −" + amt(rout) + ")</span>" : "") + "</td>" +
+        "<td><span class=\"pill " + (r.status === "Reconciled" ? "good" : "warn") + "\">" + esc(r.status || "") + "</span></td><td>" + (nf ? "📎 " + nf : "<span class=\"muted\">–</span>") + "</td></tr>";
+      if (openRec === r.id) {
+        html += "<tr class=\"fs-brhistx\"><td colspan=\"7\">" + (cl.length ? "<table><thead><tr><th>Date</th><th>Voucher</th><th>Payee / narration</th><th class=\"num\">Receipt</th><th class=\"num\">Payment</th></tr></thead><tbody>" +
+          cl.sort(function (a, b) { return String(a.j.date).localeCompare(String(b.j.date)); }).map(function (x) {
+            return "<tr><td>" + esc(fd(x.j.date)) + "</td><td class=\"mono\">" + esc(x.j.ref || "") + "</td><td>" + esc(((x.j.payee ? x.j.payee + " – " : "") + String(x.j.narration || "")).slice(0, 80)) + "</td><td class=\"num\">" + (x.v > 0 ? amt(x.v) : "") + "</td><td class=\"num\">" + (x.v < 0 ? amt(-x.v) : "") + "</td></tr>";
+          }).join("") + "</tbody></table>" : "<span class=\"muted\">No entries were ticked on this reconciliation.</span>") +
+          "<div class=\"fs-brhistf\" data-fsrecf=\"" + esc(r.id) + "\"></div></td></tr>";
+      }
+    });
+    html += "</tbody></table></div><p class=\"muted\" style=\"margin:6px 0 0\">Click a row to see the entries cleared on it and the attached statement.</p>";
+    while (card.children.length > 1) card.removeChild(card.lastChild);
+    card.insertAdjacentHTML("beforeend", html);
+    card.setAttribute("data-fshist", openRec + "|" + attSig);
+    var fbox = card.querySelector("[data-fsrecf]");
+    if (fbox && window.FS_ATT) window.FS_ATT.files(["bankrecs/" + openRec]).then(function (list) {
+      fbox.innerHTML = list.length ? "<b>Bank statement</b><div class=\"fs-attgrid\">" + list.map(function (f) { return window.FS_ATT.tile(f, true); }).join("") + "</div>" : "";
+    }).catch(function () {});
+  }
+  // counts of files per reconciliation, for the Files column
+  var attCount = {}, attSig = "", attAsked = 0;
+  function loadCounts() {
+    var C = window.FS_BRIDGE || {};
+    if (Date.now() - attAsked < 20000) return; attAsked = Date.now();
+    fetch((C.api || "/erp/m/hsec/api") + "/att/index", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+      attCount = d.counts || {}; attSig = JSON.stringify(Object.keys(attCount).filter(function (k) { return /^bankrecs\//.test(k); }).map(function (k) { return k + attCount[k]; }));
+      var c = document.querySelector("[data-fshist]"); if (c) c.removeAttribute("data-fshist");
+      history();
+    }).catch(function () {});
+  }
+  document.addEventListener("click", function (e) {
+    var tr = e.target.closest && e.target.closest("tr[data-fsrec]"); if (!tr) return;
+    var id = tr.getAttribute("data-fsrec"); openRec = openRec === id ? "" : id;
+    var c = document.querySelector("[data-fshist]"); if (c) c.removeAttribute("data-fshist");
+    history();
+  });
+
+  // Bank statement on the reconciliation (hassan, 2026-11-18: "add attachment option so that on daily reconciliation the
+  // attachment can be entered"): photos or PDFs of the statement are kept with that day's reconciliation. It has to be
+  // saved first (Save draft or Mark reconciled), because the files belong to the saved reconciliation.
+  var stmtShown = "";
+  function stmtFiles() {
+    var b = document.getElementById("brDone"), acc = document.getElementById("brAcc"), to = document.getElementById("brDate");
+    if (!b || !acc || !to || !window.FS_ATT) return;
+    var a = (Store.data.accounts || []).find(function (x) { return x.id === acc.value; }); if (!a) return;
+    var id = recId(V.ent, a.code, to.value), saved = (Store.data.bankrecs || []).some(function (r) { return r.id === id; });
+    var box = document.getElementById("fsBrAtt");
+    if (box && box.getAttribute("data-k") === id + "|" + saved + "|" + attSig) return;
+    if (!box) {
+      var anchor = document.getElementById("fsBrWhy") || b.parentNode;
+      anchor.insertAdjacentHTML("afterend", "<div class=\"fs-attbox fs-bratt\" id=\"fsBrAtt\"></div>");
+      box = document.getElementById("fsBrAtt");
+    }
+    box.setAttribute("data-k", id + "|" + saved + "|" + attSig);
+    var head = "<div class=\"fs-atthd\"><b>Bank statement for " + esc(fd(to.value)) + "</b>" +
+      (saved && window.FS_ATT.canEdit() ? "<label class=\"btn sm\">Attach statement (photo or PDF)<input type=\"file\" id=\"fsBrPick\" accept=\"image/*,application/pdf\" multiple hidden></label>" : "") +
+      "<span class=\"fs-attmsg\" id=\"fsBrMsg\"></span></div>";
+    if (!saved) { box.innerHTML = head + "<p class=\"muted fs-attnone\">Click Save draft first, then attach the statement here.</p>"; return; }
+    box.innerHTML = head + "<div class=\"fs-attgrid\"></div>";
+    window.FS_ATT.files(["bankrecs/" + id]).then(function (list) {
+      var g = box.querySelector(".fs-attgrid"); if (!g) return;
+      g.innerHTML = list.length ? list.map(function (f) { return window.FS_ATT.tile(f, true); }).join("") : "<p class=\"muted fs-attnone\">No statement attached yet.</p>";
+    }).catch(function () {});
+  }
+  document.addEventListener("change", function (e) {
+    if (!e.target || e.target.id !== "fsBrPick" || !window.FS_ATT) return;
+    var box = document.getElementById("fsBrAtt"), k = box && String(box.getAttribute("data-k")).split("|")[0]; if (!k) return;
+    var list = [].slice.call(e.target.files || []), msg = document.getElementById("fsBrMsg");
+    var say = function (t) { if (msg) msg.textContent = t; };
+    window.FS_ATT.upload("bankrecs/" + k, list, say).then(function (errs) {
+      say(errs.length ? errs.join(" ") : "Attached."); attAsked = 0; box.removeAttribute("data-k"); loadCounts(); stmtFiles();
+    });
+  });
+  document.addEventListener("fs-att", function () { window.FS_ATT && window.FS_ATT.forget("bankrecs/" + openRec); attAsked = 0; var b = document.getElementById("fsBrAtt"); if (b) b.removeAttribute("data-k"); loadCounts(); stmtFiles(); });
   function doneHint() {
     var b = document.getElementById("brDone"); if (!b) return;
     // the live app keeps the button clickable but refuses quietly, so check the same two things whether or not it is greyed
@@ -192,7 +287,7 @@
     q = String(q || "").toLowerCase().replace(/,/g, "").trim();
     var shown = 0, all = 0;
     table.querySelectorAll("tbody tr").forEach(function (tr) {
-      if (!tr.querySelector("input[data-brk]") || tr.classList.contains("fs-brpair") || tr.classList.contains("fs-bropen")) return;
+      if (!tr.querySelector("input[data-brk]") || tr.classList.contains("fs-brpair") || tr.classList.contains("fs-bropen") || tr.classList.contains("fs-brearly")) return;
       all++;
       var ok = !q || tr.textContent.toLowerCase().replace(/,/g, "").indexOf(q) >= 0;
       tr.style.display = ok ? "" : "none"; if (ok) shown++;
@@ -211,6 +306,7 @@
       ".fs-brcells b.in{color:#15803d}.fs-brcells b.out{color:#b91c1c}.fs-brcells .tot{background:#f1f5f9}@media(max-width:800px){.fs-brcells{grid-template-columns:1fr 1fr}}" +
       ".fs-brcl{margin-top:14px}.fs-brcl h3{margin:10px 12px}.fs-brcl .num{text-align:right}.fs-brbf td{background:#f8fafc;font-style:italic}" +
       ".fs-brcl tfoot td{font-weight:600;border-top:1px solid #e2e8f0}.fs-brok td{color:#15803d}.fs-brbad td{color:#b91c1c}" +
+      ".fs-brhist tr.click{cursor:pointer}.fs-brhist tr.click:hover td{background:#f1f5f9}.fs-brhistx>td{background:#f8fafc;padding:8px 10px}.fs-brhistx table{width:100%;font-size:12.5px}.fs-brhistf{margin-top:8px}.fs-bratt{margin-top:10px}" +
       ".fs-brwhy{margin:6px 0 0;font-size:12.5px;color:#b45309}" +
       ".fs-bf{font-size:11px;color:#b45309;font-weight:600}" +
       ".fs-brfind{display:flex;align-items:center;gap:8px;margin:8px 0}.fs-brfind label{font-weight:600;font-size:13px}.fs-brfind input{flex:0 1 360px;padding:6px 9px;font:inherit}";

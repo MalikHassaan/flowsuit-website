@@ -258,7 +258,7 @@
       e.preventDefault();
       if (!confirm("Remove this file from the record? The ERP keeps a note of who removed it.")) return;
       var fd = new FormData(); fd.append("id", t.getAttribute("data-attrm"));
-      post(API + "/delete", fd).then(function () { forget(t.getAttribute("data-attkey")); return loadCounts(); }).then(panel).catch(function (er) { alert(er.message); });
+      post(API + "/delete", fd).then(function () { forget(t.getAttribute("data-attkey")); return loadCounts(); }).then(function () { panel(); document.dispatchEvent(new Event("fs-att")); }).catch(function (er) { alert(er.message); });
     }, true);
 
     var queued = false;
@@ -283,6 +283,8 @@
     ".fs-attfig iframe{display:block;width:100%;height:720px;border:1px solid #ddd}.fs-pdfpages img{display:block;width:100%;margin:0 0 8px;border:1px solid #ddd;break-inside:avoid;page-break-inside:avoid}.fs-attfig figcaption{font-size:11px;color:#555;margin-top:4px}" +
     "@media print{.fs-veye,.fs-attbox,.fs-attnone{display:none!important}.fs-attfig img{max-height:24cm}.fs-attfig.pdf iframe,.fs-noprint-note{display:none}.fs-pdfpages img{max-height:23cm;object-fit:contain}.fs-attfig a{color:inherit;text-decoration:none}}";
   document.head.appendChild(css);
+  // for other screens that keep their own files (bank reconciliation statements, hsec-brec.js)
+  window.FS_ATT = { files: files, upload: upload, tile: tile, forget: forget, canEdit: function () { return !!C.edit; } };
   function start() { if (!hook()) setTimeout(start, 300); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
