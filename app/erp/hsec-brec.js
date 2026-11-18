@@ -72,7 +72,7 @@
     if (typeof Store === "undefined" || !Store.data) return;
     range();
     doneHint();
-    var box = document.querySelector("input[data-brk]"); if (!box) return;
+    var box = [].slice.call(document.querySelectorAll("input[data-brk]")).find(function (x) { return !x.closest("#fsBrCl"); }); if (!box) return;
     var table = box.closest("table"); if (!table || table.dataset.fsRef) return;
     table.dataset.fsRef = "1";
     pairs(table);
@@ -85,6 +85,7 @@
       if (typeof V !== "undefined" && V && V.br && V.br.from && j.date && j.date < V.br.from && tr.children[1]) tr.children[1].insertAdjacentHTML("beforeend", "<br><span class=\"fs-bf\">brought forward</span>");
       tr.children[2].insertAdjacentHTML("afterend", "<td class=\"fs-bref\">" + (ref ? "<b>" + esc(ref) + "</b>" + (j.chequeDate ? "<br><span class=\"muted\">" + esc(j.chequeDate) + "</span>" : "") : "<span class=\"muted\">–</span>") + "</td>");
     });
+    cleared(table);
     var wrap = table.closest(".panel") || table.parentNode;
     if (wrap && !document.getElementById("fsBrFind")) {
       wrap.insertAdjacentHTML("beforebegin", "<div class=\"fs-brfind\"><label for=\"fsBrFind\">Find on the list</label><input id=\"fsBrFind\" type=\"search\" autocomplete=\"off\" placeholder=\"Cheque no., portal reference, payee or amount\"><span class=\"muted\" id=\"fsBrCount\"></span></div>");
@@ -96,6 +97,47 @@
   }
   // "Mark reconciled" is refused until the statement's closing balance is entered and the difference is nil; the app
   // gives no reason, so say which one is missing (hassan, 2026-11-18: "mark reconciliation button is not working").
+  // Two lists (hassan, 2026-11-18: "there should be two tables, one reconciled entries and other unreconciled entries,
+  // and the reconciled balance should be equal to the closing balance of the statement"). Ticked entries move to an
+  // "On the bank statement" table with a running balance. It starts from the balance brought forward (what the bank held
+  // before these entries: books less everything listed here) and must end on the statement's closing balance.
+  function cleared(table) {
+    var old = document.getElementById("fsBrCl"); if (old) old.remove();
+    var acc = document.getElementById("brAcc"), to = document.getElementById("brDate"); if (!acc || !to || !to.value) return;
+    var a = acc.value, T = to.value, ent = V.ent, book = 0, listed = 0;
+    (Store.data.journals || []).forEach(function (j) {
+      if (j.status !== "Posted" || j.entity !== ent || !j.date || j.date > T) return;
+      (j.lines || []).forEach(function (l) { if (l.account === a) book += (+l.debit || 0) - (+l.credit || 0); });
+    });
+    var lineAmt = function (k) { var p = String(k).split(":"), j = jv(p[0]), l = j && (j.lines || [])[+p[1]]; return l ? (+l.debit || 0) - (+l.credit || 0) : 0; };
+    var rows = [];
+    table.querySelectorAll("tbody tr").forEach(function (tr) {
+      var cb = tr.querySelector("input[data-brk]"); if (!cb) return;
+      var v = lineAmt(cb.getAttribute("data-brk")); listed += v;
+      if (cb.checked && !tr.classList.contains("fs-brpair")) rows.push({ tr: tr, v: v });
+    });
+    var bf = book - listed, cols = (table.querySelector("thead tr") || { children: [] }).children.length || 7;
+    var bal = document.getElementById("brBal"), sv = bal ? String(bal.value).replace(/,/g, "").trim() : "", stmt = sv === "" ? null : parseFloat(sv.replace(/^\((.*)\)$/, "-$1"));
+    var head = table.querySelector("thead") ? table.querySelector("thead").outerHTML.replace("</tr>", "<th class=\"num\">Balance</th></tr>") : "";
+    var run = bf, rin = 0, rout = 0;
+    var div = document.createElement("div"); div.id = "fsBrCl"; div.className = "panel tw fs-brcl";
+    div.innerHTML = "<h3>On the bank statement (ticked) · " + rows.length + "</h3><table>" + head + "<tbody></tbody><tfoot></tfoot></table>";
+    var tb = div.querySelector("tbody");
+    tb.insertAdjacentHTML("beforeend", "<tr class=\"fs-brbf\"><td colspan=\"" + cols + "\">Balance brought forward (bank balance before the entries below: books less every entry on both lists)</td><td class=\"num\"><b>" + amt(bf) + "</b></td></tr>");
+    rows.forEach(function (r) {
+      run += r.v; if (r.v > 0) rin += r.v; else rout -= r.v;
+      r.tr.insertAdjacentHTML("beforeend", "<td class=\"num\">" + amt(run) + "</td>");
+      tb.appendChild(r.tr);
+    });
+    if (!rows.length) tb.insertAdjacentHTML("beforeend", "<tr><td colspan=\"" + (cols + 1) + "\" class=\"muted\">Nothing ticked yet. Tick each entry below that appears on the bank statement.</td></tr>");
+    var diff = stmt === null || isNaN(stmt) ? null : stmt - run, ok = diff !== null && Math.abs(diff) < 1;
+    div.querySelector("tfoot").innerHTML =
+      "<tr><td colspan=\"" + cols + "\">Balance per ticked entries (brought forward + " + amt(rin) + " received − " + amt(rout) + " paid)</td><td class=\"num\"><b>" + amt(run) + "</b></td></tr>" +
+      "<tr><td colspan=\"" + cols + "\">Closing balance per bank statement</td><td class=\"num\">" + (diff === null ? "<span class=\"muted\">Enter it above</span>" : amt(stmt)) + "</td></tr>" +
+      "<tr class=\"" + (diff === null ? "" : ok ? "fs-brok" : "fs-brbad") + "\"><td colspan=\"" + cols + "\">" + (diff === null ? "Difference" : ok ? "Difference: none, the ticked entries agree with the statement" : "Difference: entries on the statement but not in the books (bank charges, profit), or a wrong tick") + "</td><td class=\"num\"><b>" + (diff === null ? "" : amt(diff)) + "</b></td></tr>";
+    var panel = table.closest(".panel") || table.parentNode;
+    panel.insertAdjacentElement("afterend", div);
+  }
   function doneHint() {
     var b = document.getElementById("brDone"); if (!b) return;
     // the live app keeps the button clickable but refuses quietly, so check the same two things whether or not it is greyed
@@ -148,6 +190,8 @@
       ".fs-brrange{margin:10px 0}.fs-brrange h3{margin:0 0 8px}.fs-brcells{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}" +
       ".fs-brcells div{border:1px solid var(--line,#e2e8f0);border-radius:8px;padding:8px 10px}.fs-brcells span{display:block;font-size:12px;color:#64748b}.fs-brcells b{font-size:18px}" +
       ".fs-brcells b.in{color:#15803d}.fs-brcells b.out{color:#b91c1c}.fs-brcells .tot{background:#f1f5f9}@media(max-width:800px){.fs-brcells{grid-template-columns:1fr 1fr}}" +
+      ".fs-brcl{margin-top:14px}.fs-brcl h3{margin:10px 12px}.fs-brcl .num{text-align:right}.fs-brbf td{background:#f8fafc;font-style:italic}" +
+      ".fs-brcl tfoot td{font-weight:600;border-top:1px solid #e2e8f0}.fs-brok td{color:#15803d}.fs-brbad td{color:#b91c1c}" +
       ".fs-brwhy{margin:6px 0 0;font-size:12.5px;color:#b45309}" +
       ".fs-bf{font-size:11px;color:#b45309;font-weight:600}" +
       ".fs-brfind{display:flex;align-items:center;gap:8px;margin:8px 0}.fs-brfind label{font-weight:600;font-size:13px}.fs-brfind input{flex:0 1 360px;padding:6px 9px;font:inherit}";
