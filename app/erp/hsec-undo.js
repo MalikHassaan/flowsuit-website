@@ -117,8 +117,9 @@
     if (t.c !== "journals") add("del", "Reverse and delete" + (F.c === "journals" ? doc : ""), "danger");
   }
   function hook() {
-    if (typeof Store === "undefined" || !Store.data || typeof drawForm !== "function" || typeof nextVoucherNo !== "function" || typeof jvSheet !== "function") return false;
-    drawForm = (function (old) { // eslint-disable-line no-global-assign
+    if (typeof Store === "undefined" || !Store.data || typeof nextVoucherNo !== "function" || typeof jvSheet !== "function") return false;
+    // newer app files may draw forms another way; the page watcher below adds the buttons either way
+    if (typeof drawForm === "function") drawForm = (function (old) { // eslint-disable-line no-global-assign
       return function () { var out = old.apply(this, arguments); ask = ""; try { buttons(); } catch (e) { console.warn(e); } return out; };
     })(drawForm);
     // the voucher view (eye, voucher links) gets a button to open the voucher for amending
@@ -161,6 +162,8 @@
         if (hd && /^\W*Supporting documents \(invoice/.test(hd.textContent) && /No documents yet/.test(x.textContent) && !x.querySelector("#fsAtt")) x.hidden = true;
       });
       var er = document.getElementById("ferr");
+      // the app says "view-only access" for any refusal; on a posted voucher the real reason is that it is posted
+      if (er && /view-only access/i.test(er.textContent) && target() && F.c === "journals") er.textContent = "A posted voucher cannot be changed, not even by an admin, so the books keep a record of it. Use Reverse and correct (beside Delete) to fix it.";
       if (er && /cannot be deleted\. Reverse it instead\.$/.test(er.textContent) && document.querySelector("[data-fsundo]")) er.textContent = er.textContent.replace(/Reverse it instead\.$/, "Use Reverse and delete, or Reverse and correct, on this screen.");
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
     return true;
