@@ -116,6 +116,28 @@
     add("fix", "Reverse and correct" + (F.c === "journals" ? doc : ""), "");
     if (t.c !== "journals") add("del", "Reverse and delete" + (F.c === "journals" ? doc : ""), "danger");
   }
+  // Voucher lists show a reversed voucher as "Reversed" and its reversal as "Reversal" (hassan, 2026-11-18: "if an entry
+  // got reversed the status should also be changed"). Only the label changes: in the books both stay Posted and cancel
+  // each other out, so reports and balances are as before.
+  function marks() {
+    document.querySelectorAll("table").forEach(function (tb) {
+      var ths = [].slice.call(tb.querySelectorAll("thead th")), col = ths.findIndex(function (th) { return /^\s*status\s*$/i.test(th.textContent); });
+      if (col < 0) return;
+      tb.querySelectorAll("tbody tr[data-edit=\"journals\"][data-id]").forEach(function (tr) {
+        var td = tr.children[col]; if (!td) return;
+        var j = Store.data.journals.find(function (x) { return x.id === tr.getAttribute("data-id"); }); if (!j || !posted(j)) return;
+        var other = j.reversedBy ? Store.data.journals.find(function (x) { return x.id === j.reversedBy; }) : j.reversalOf ? Store.data.journals.find(function (x) { return x.id === j.reversalOf; }) : null;
+        var want = j.reversedBy ? "rev" : j.reversalOf ? "of" : "";
+        if (!want || td.getAttribute("data-fsrev") === want + (other ? other.ref || "" : "")) return;
+        td.setAttribute("data-fsrev", want + (other ? other.ref || "" : ""));
+        td.innerHTML = "<span class=\"fs-revpill " + want + "\">" + (want === "rev" ? "Reversed" : "Reversal") + "</span>" +
+          (other && other.ref ? "<div class=\"fs-revby\">" + (want === "rev" ? "by " : "of ") + String(other.ref).replace(/</g, "&lt;") + "</div>" : "");
+      });
+    });
+  }
+  var css = document.createElement("style");
+  css.textContent = ".fs-revpill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;background:#fee2e2;color:#b91c1c}.fs-revpill.of{background:#e5e7eb;color:#374151}.fs-revby{font-size:11px;color:#64748b;margin-top:2px}";
+  (document.head || document.documentElement).appendChild(css);
   function hook() {
     if (typeof Store === "undefined" || !Store.data || typeof nextVoucherNo !== "function" || typeof jvSheet !== "function") return false;
     // newer app files may draw forms another way; the page watcher below adds the buttons either way
@@ -155,6 +177,7 @@
     // the app's own "Reverse it instead" message now points at the buttons on this screen
     new MutationObserver(function () {
       try { buttons(); } catch (x) { console.warn(x); }
+      try { marks(); } catch (x) { /* never break the list */ }
       // newer app files have their own empty "Supporting documents (invoice, receipt, approval)" box; ours (hsec-att.js) keeps the files
       document.querySelectorAll("#frm div, #frm section").forEach(function (x) {
         if (x.hidden || x.id === "fsAtt" || x.closest("#fsAtt") || x.children.length > 8) return;
