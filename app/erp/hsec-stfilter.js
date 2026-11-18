@@ -28,7 +28,7 @@
   var stOf = function (T, tr) {
     if (T.col < 0) return "";
     var td = tr.children[T.col], t = txt(td);
-    [].slice.call(td.querySelectorAll(".fs-pdgm")).forEach(function (x) { var u = txt(x); if (u) t = t.replace(u, "").trim(); });
+    [].slice.call(td.querySelectorAll(".fs-pdgm, .fs-revby")).forEach(function (x) { var u = txt(x); if (u) t = t.replace(u, "").trim(); });
     return t || "(none)";
   };
   // a pick is a status, "!status" (every other status) or "@id,id" (those records, e.g. approved today); the last two
