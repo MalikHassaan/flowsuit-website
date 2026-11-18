@@ -16,6 +16,7 @@
     // what an advance is spent on: costs and expenses, stock and other current assets
     spend: function (a) { return /^(5|6|72|8|12)/.test(a.code) && !/^1210/.test(a.code); }
   };
+  window.FS_ACCKIND = KIND;
   var APP = { adminExp: { expAccount: "expense", paidFrom: "cashbank" }, taxes: { paidFrom: "bank" }, advances: { glAccount: "spend" } };
 
   function hook() {

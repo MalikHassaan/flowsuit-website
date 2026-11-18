@@ -15,6 +15,7 @@
     return map.m;
   }
   function entFor(sel) {
+    var own = sel.getAttribute && sel.getAttribute("data-fsco"); if (own) return own; // a box that names its company (Paid by company on a demand)
     var inForm = sel.closest && sel.closest("#frm, #layer");
     var e = inForm ? safe(function () { return F && F.rec && F.rec.entity; }, "") : "";
     return e || safe(function () { return V.ent; }, "") || "";

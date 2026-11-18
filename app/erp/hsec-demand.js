@@ -38,6 +38,22 @@
     if (typeof liveJv === "function") return liveJv(DEM, id, ev);
     return vouchersOf(id).find(function (j) { return j.source.ev === ev && j.status !== "Rejected"; });
   };
+  // the company whose bank pays, when it is not the demand's own
+  var safe0 = function (f) { try { f(); } catch (e) { /* never break the form */ } };
+  var payer = function (r) { return r && r.payCo && r.payCo !== r.entity ? r.payCo : ""; };
+  var coName = function (e) { try { return window.coName ? window.coName(e) : (typeof coLabel === "function" ? coLabel(e) : e); } catch (x) { return e; } };
+  // the bank box lists the paying company's banks
+  function bankFor() {
+    var sel = document.getElementById("f_bank"), pc = document.getElementById("f_payCo"); if (!sel) return;
+    var ent = (document.getElementById("f_entity") || {}).value || (F && F.rec && F.rec.entity) || "", co = (pc && pc.value) || ent;
+    if (sel.getAttribute("data-fsco") === co) return;
+    var K = window.FS_ACCKIND && window.FS_ACCKIND.bank; if (!K) return;
+    var cur = sel.value, L = (Store.data.accounts || []).filter(function (a) { return a.posting !== "Header" && K(a) && a.hidden !== "Yes" && (!a.entity || !co || a.entity === co); })
+      .sort(function (a, b) { return String(a.code).localeCompare(String(b.code)); });
+    sel.innerHTML = "<option value=\"\"></option>" + L.map(function (a) { return "<option value=\"" + esc(a.id) + "\">" + esc(a.code + " " + a.name) + "</option>"; }).join("");
+    sel.value = L.some(function (a) { return a.id === cur; }) ? cur : "";
+    sel.setAttribute("data-fsco", co);
+  }
   var lineTot = function (it) { return Math.round((it || []).reduce(function (s, l) { return s + n(l.amount); }, 0) * 100) / 100; };
 
   // where a demand stands
@@ -189,6 +205,7 @@
       { k: "dueDate", l: "Needed by", t: "date" },
       { k: "payAcc", l: "Payable account (credit in the demand JV)", t: "acc", af: "payable", req: 1, hint: "Usually 220204 Other accrued expenses, or the creditors account for a supplier." },
       { k: "items", l: "Lines", t: "pdlines" },
+      { k: "payCo", l: "Paid by company", t: "select", o: [], hint: "Leave as is when this company pays from its own bank. When another group company pays (e.g. from JPL's bank), pick it: the bank payment voucher is made in its books, and the matching entry in this company's books." },
       { k: "bank", l: "Pay from bank", t: "acc", af: "bank", hint: "Choose when it is to be paid. Saving with a bank creates the bank payment voucher and sends it for approval." },
       { k: "chequeNo", l: "Cheque / transfer no." }, { k: "payDate", l: "Payment date", t: "date" },
       { k: "notes", l: "Notes", t: "textarea" }],
@@ -200,6 +217,13 @@
         ["pr", "", function (r) { return state(r).jv ? "<button type=\"button\" class=\"btn sm\" data-pdprint=\"" + esc(r.id) + "\">Print</button>" : ""; }]],
       sort: function (a, b) { return String(b.date).localeCompare(String(a.date)) || String(b.demandNo).localeCompare(String(a.demandNo)); } };
 
+    // "Paid by company" lists the group companies, read when the form is drawn
+    var pcf = S[DEM].fields.find(function (f) { return f.k === "payCo"; });
+    if (pcf) Object.defineProperty(pcf, "o", { configurable: true, get: function () {
+      var E = []; try { E = typeof ENTS === "function" ? ENTS() : []; } catch (x) { E = []; } // eslint-disable-line no-undef
+      var own = (document.getElementById("f_entity") || {}).value || (typeof F !== "undefined" && F && F.rec && F.rec.entity) || "";
+      return [["", "This company (its own bank)"]].concat(E.filter(function (e) { return !/^ENT\d$/.test(e) && e !== own; }).map(function (e) { return [e, coName(e) + " pays on its behalf"]; }));
+    } });
     POSTERS[DEM] = {
       accrue: { label: "demand journal voucher", keys: ["items", "amount", "payAcc", "date", "entity"],
         ready: function (r) { return !r.payAcc ? "choose the payable account" : (r.items || []).some(function (l) { return !l.account; }) ? "every line needs an account" : n(r.amount) > 0 ? true : "enter the amounts"; },
@@ -214,10 +238,28 @@
           return { vtype: "Journal voucher", date: r.date, entity: r.entity, payee: r.payee || "", dept: ((r.items || [])[0] || {}).dept || "",
             narration: "Payment demand " + r.demandNo + " from " + (r.branch || "") + " for " + (r.payee || "") + ": " + (r.description || ""), lines: lines };
         } },
-      pay: { label: "bank payment voucher", keys: ["bank", "amount", "payAcc"],
-        ready: function (r) { return !live(r.id, "accrue") ? "save the demand so its JV is made first" : !r.bank ? "choose the bank it is paid from" : true; },
+      pay: { label: "bank payment voucher", keys: ["bank", "amount", "payAcc", "payCo"],
+        ready: function (r) {
+          if (!live(r.id, "accrue")) return "save the demand so its JV is made first";
+          if (!r.bank) return "choose the bank it is paid from";
+          var co = payer(r); if (!co) return true;
+          if (!window.FS_IC) return "the intercompany part of the system has not loaded; reload the page";
+          if (!window.FS_IC.icAcc("1207", r.entity, co)) return "there is no \"Due from " + coName(r.entity) + "\" account in " + coName(co) + "'s books. Add one under 1207 Due from group companies, marked Intercompany";
+          if (!window.FS_IC.icAcc("2204", co, r.entity)) return "there is no \"Due to " + coName(co) + "\" account in " + coName(r.entity) + "'s books. Add one under 2204 Due to group companies, marked Intercompany";
+          return true;
+        },
         build: function (r) {
-          var a = Math.round(n(r.amount));
+          var a = Math.round(n(r.amount)), co = payer(r);
+          // another group company pays from its bank (hassan, 2026-11-18: "demand is for HSEC and payment is going from
+          // JPL's account"): the voucher is in the payer's books, Dr Due from <demand company> / Cr its bank, on behalf of
+          // the demand's company; hsec-ic.js makes the matching JV there: Dr the demand's payable / Cr Due to the payer.
+          if (co) {
+            var due = window.FS_IC.icAcc("1207", r.entity, co);
+            return { vtype: "Bank payment voucher", date: r.payDate || todayStr(), entity: co, payee: r.payee || "", chequeNo: r.chequeNo || "", dept: ((r.items || [])[0] || {}).dept || "",
+              icFor: r.entity, icCharge: r.payAcc,
+              narration: "Payment of " + coName(r.entity) + " demand " + r.demandNo + " (" + (r.branch || "") + ") to " + (r.payee || "") + " on behalf of " + coName(r.entity) + ": " + (r.description || ""),
+              lines: [{ account: due.id, debit: a, credit: 0, desc: "Paid for " + coName(r.entity) + ", demand " + r.demandNo + " – " + (r.payee || "") }, { account: r.bank, debit: 0, credit: a, desc: r.chequeNo ? "Cheque / transfer " + r.chequeNo : "" }] };
+          }
           return { vtype: "Bank payment voucher", date: r.payDate || todayStr(), entity: r.entity, payee: r.payee || "", chequeNo: r.chequeNo || "", dept: ((r.items || [])[0] || {}).dept || "",
             narration: "Payment of demand " + r.demandNo + " (" + (r.branch || "") + ") to " + (r.payee || "") + ": " + (r.description || ""),
             lines: [{ account: r.payAcc, debit: a, credit: 0, desc: "Demand " + r.demandNo + " – " + (r.payee || "") }, { account: r.bank, debit: 0, credit: a, desc: r.chequeNo ? "Cheque / transfer " + r.chequeNo : "" }] };
@@ -353,6 +395,9 @@
     }
     r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
     if (r.bank && !r.payDate) r.payDate = todayStr();
+    if (r.payCo === r.entity) r.payCo = "";
+    var bk = r.bank && Store.data.accounts.find(function (a) { return a.id === r.bank; }), pco = r.payCo || r.entity;
+    if (bk && bk.entity && bk.entity !== pco && !live(r.id, "pay")) return err("The bank " + bk.name + " belongs to " + coName(bk.entity) + ". Set \"Paid by company\" to " + coName(bk.entity) + ", or choose a bank of " + coName(pco) + ".");
     return true;
   }
 
@@ -635,6 +680,7 @@
         keepR(); scheduleRender(); return;
       }
       if (typeof F === "undefined" || !F || F.c !== DEM || !e.target) return;
+      if (e.target.id === "f_entity" || e.target.id === "f_payCo") safe0(bankFor);
       if (e.target.id === "f_entity") { F.rec.items = readLines(); redraw(); } // the company sets which accounts are offered
       else if (e.target.closest && e.target.closest("#pdBox")) totals();
     });
@@ -643,6 +689,8 @@
       if (typeof F === "undefined" || !F || F.c !== DEM) return;
       var fm = document.getElementById("frm"); if (!fm) return;
       if (!fm.classList.contains("wide")) fm.classList.add("wide");
+      var pcs = document.getElementById("f_payCo"), bks = document.getElementById("f_bank");
+      if (pcs && bks && bks.getAttribute("data-fsco") !== (pcs.value || (document.getElementById("f_entity") || {}).value || F.rec.entity || "")) safe0(bankFor);
       if (F.rec.id && !fm.querySelector(".fs-pdgmbox")) {
         var gp = gmPanel(), at = fm.querySelector("#f_bank"); at = at && at.closest(".f");
         if (gp) { if (at) at.insertAdjacentHTML("beforebegin", gp); else { var a0 = fm.querySelector(".actions"); if (a0) a0.insertAdjacentHTML("beforebegin", gp); } }

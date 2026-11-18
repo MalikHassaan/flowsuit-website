@@ -184,6 +184,7 @@
     }
   }
 
+  window.FS_IC = { icAcc: function (prefix, other, own, loan) { try { return icAcc(prefix, other, own, loan); } catch (e) { return null; } } };
   function hook() {
     if (typeof S === "undefined" || !S.journals || typeof submitForm !== "function" || !Store || !Store.save) return false; // eslint-disable-line no-undef
     addFields();
@@ -210,7 +211,9 @@
     var save = Store.save;
     Store.save = async function (c, rec) {
       var id = await save.apply(this, arguments);
-      if (c === "journals" && rec && !rec.icOf && !rec.source && (rec.icFor || mirrorOf(id))) {
+      // a payment demand paid from another company's bank (hsec-demand.js) gets its matching voucher the same way
+      var fromDoc = rec && rec.source && rec.source.c !== "paydemands";
+      if (c === "journals" && rec && !rec.icOf && !fromDoc && (rec.icFor || mirrorOf(id))) {
         var self = this, r = Object.assign({}, rec, { id: id });
         busy[id] = (busy[id] || Promise.resolve()).then(function () { return sync(function (cc, x) { return save.call(self, cc, x); }, r); })
           .catch(function (e) { toast("The matching voucher in the other company was not saved: " + (e && e.message || "error") + ". Enter it by hand."); });
