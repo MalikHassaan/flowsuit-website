@@ -142,7 +142,23 @@
   // Two tabs (hassan, 2026-11-19: "there should be two tabs, one reconciled transactions and other unreconciled
   // transactions; once a transaction is marked it should go into the reconciled tab, where the balances are, and that
   // balance should be equal to our bank statement"). Ticking moves an entry across; the counts are on the tabs.
-  var tab = "un";
+  var tab = "un", SUM = null;
+  // Payments still to be made from this bank (hassan, 2026-11-19: "the difference should state how much pending payments
+  // are there which need to be cleared"): payment demands of this company whose demand JV is posted but whose bank
+  // payment is not posted yet, either not paid at all or with its BPV still in approval, and set to this bank or to no
+  // bank yet. They are not in the bank account until the BPV posts; then they appear on Unreconciled with the BPV number.
+  function pendingPays(acc, ent) {
+    var J = Store.data.journals || [], out = [];
+    (Store.data.paydemands || []).forEach(function (d) {
+      if ((d.payCo || d.entity) !== ent || (d.bank && d.bank !== acc)) return;
+      var mine = J.filter(function (j) { return j.source && j.source.c === "paydemands" && j.source.id === d.id && !j.reversedBy && !j.reversalOf && j.status !== "Rejected"; });
+      var jvA = mine.find(function (j) { return j.source.ev === "accrue"; }), bp = mine.find(function (j) { return j.source.ev === "pay"; });
+      if (!jvA || jvA.status !== "Posted" || (bp && bp.status === "Posted")) return;
+      if (d.gm && d.gm.status === "Not approved") return;
+      out.push({ d: d, jv: jvA, bp: bp, st: bp ? (bp.ref || "BPV") + " in approval" : d.gm && d.gm.status === "Approved" ? "Approved, to be paid" : "Waiting for GM approval" });
+    });
+    return out.sort(function (a, b) { return String(a.d.date).localeCompare(String(b.d.date)); });
+  }
   function tabs(table) {
     var panel = table.closest(".panel") || table.parentNode, cl = document.getElementById("fsBrCl"); if (!panel || !cl) return;
     var head = [].slice.call(document.querySelectorAll(".ctls h3")).find(function (h) { return /not yet cleared/i.test(h.textContent); });
@@ -150,14 +166,37 @@
     var find = document.querySelector(".fs-brfind");
     var nUn = [].slice.call(table.querySelectorAll("tbody tr")).filter(function (tr) { var cb = tr.querySelector("input[data-brk]"); return cb && !cb.checked && !/fs-br(pair|open|early)/.test(tr.className); }).length;
     var nCl = cl.querySelectorAll("input[data-brk]").length;
+    var acc = (document.getElementById("brAcc") || {}).value || "", pend = pendingPays(acc, V.ent), pTot = pend.reduce(function (t, x) { return t + (+x.d.amount || 0); }, 0);
+    // the summary: books = reconciled + unreconciled; then what is still to be paid
+    var sum = document.getElementById("fsBrSum");
+    if (SUM) {
+      var shtml = "<div class=\"fs-brcells fs-brsum5\"><div><span>Bank ledger balance (books)</span><b>" + amt(SUM.book) + "</b></div>" +
+        "<div><span>Reconciled (on the statement)</span><b>" + amt(SUM.run) + "</b></div>" +
+        "<div><span>Unreconciled: receipts (" + SUM.nIn + ") not yet in the bank</span><b class=\"in\">+ " + amt(SUM.uIn) + "</b></div>" +
+        "<div><span>Unreconciled: payments (" + SUM.nOut + ") not yet presented</span><b class=\"out\">− " + amt(SUM.uOut) + "</b></div>" +
+        "<div class=\"tot\"><span>Payments still to be made (" + pend.length + " demands)</span><b class=\"out\">− " + amt(pTot) + "</b></div></div>" +
+        "<p class=\"muted\" style=\"margin:6px 0 0\">Books " + amt(SUM.book) + " = reconciled " + amt(SUM.run) + " + unreconciled receipts " + amt(SUM.uIn) + " − unreconciled payments " + amt(SUM.uOut) +
+        ". After the " + pend.length + " payments still to be made, the bank will be about <b>" + amt(SUM.book - pTot) + "</b>.</p>";
+      if (!sum) { (document.getElementById("fsBrTabs") || head || panel).insertAdjacentHTML("beforebegin", "<div class=\"card fs-brsumc\" id=\"fsBrSum\"><h3>Where the bank balance stands</h3><div></div></div>"); sum = document.getElementById("fsBrSum"); }
+      var sb = sum.lastElementChild; if (sb.innerHTML !== shtml) sb.innerHTML = shtml;
+    }
+    var pp = document.getElementById("fsBrPend");
+    var phtml = "<h3>Payments still to be made from this bank · " + pend.length + "</h3>" + (pend.length ? "<table><thead><tr><th>Demand</th><th>Date</th><th>Pay to</th><th>For</th><th>Stage</th><th class=\"num\">Amount</th></tr></thead><tbody>" +
+      pend.map(function (x) { return "<tr><td class=\"mono\">" + esc(x.d.demandNo || "") + "</td><td>" + esc(fd(x.d.date)) + "</td><td>" + esc(x.d.payee || "") + "</td><td>" + esc(String(x.d.description || "").slice(0, 70)) + "</td><td>" + esc(x.st) + "</td><td class=\"num\">" + amt(+x.d.amount || 0) + "</td></tr>"; }).join("") +
+      "</tbody><tfoot><tr><td colspan=\"5\">Total still to be paid</td><td class=\"num\"><b>" + amt(pTot) + "</b></td></tr></tfoot></table><p class=\"muted\" style=\"margin:6px 12px 10px\">Booked as payables (demand JV posted) but not paid from the bank yet. Once its bank payment voucher is posted, a demand leaves this list and shows on Unreconciled with the BPV number.</p>" :
+      "<p class=\"muted\" style=\"margin:0 12px 12px\">No approved payment demands waiting to be paid from this bank.</p>");
+    if (!pp) { cl.insertAdjacentHTML("afterend", "<div class=\"panel tw fs-brcl\" id=\"fsBrPend\"></div>"); pp = document.getElementById("fsBrPend"); }
+    if (pp.innerHTML !== phtml) pp.innerHTML = phtml;
     var bar = document.getElementById("fsBrTabs");
     if (!bar) { (head || find || panel).insertAdjacentHTML("beforebegin", "<div class=\"fs-brtabs\" id=\"fsBrTabs\" role=\"tablist\"></div>"); bar = document.getElementById("fsBrTabs"); }
     var html = "<button type=\"button\" role=\"tab\" data-fsbrtab=\"un\" aria-selected=\"" + (tab === "un") + "\">Unreconciled transactions <span>" + nUn + "</span></button>" +
-      "<button type=\"button\" role=\"tab\" data-fsbrtab=\"cl\" aria-selected=\"" + (tab === "cl") + "\">Reconciled transactions <span>" + nCl + "</span></button>";
+      "<button type=\"button\" role=\"tab\" data-fsbrtab=\"cl\" aria-selected=\"" + (tab === "cl") + "\">Reconciled transactions <span>" + nCl + "</span></button>" +
+      "<button type=\"button\" role=\"tab\" data-fsbrtab=\"pp\" aria-selected=\"" + (tab === "pp") + "\">Payments still to be made <span>" + pend.length + "</span></button>";
     if (bar.innerHTML !== html) bar.innerHTML = html;
     var showUn = tab === "un";
     [head, find, panel].forEach(function (el) { if (el) { var w = showUn ? "" : "none"; if (el.style.display !== w) el.style.display = w; } });
-    var w2 = showUn ? "none" : ""; if (cl.style.display !== w2) cl.style.display = w2;
+    var w2 = tab === "cl" ? "" : "none"; if (cl.style.display !== w2) cl.style.display = w2;
+    var w3 = tab === "pp" ? "" : "none"; if (pp.style.display !== w3) pp.style.display = w3;
   }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("[data-fsbrtab]"); if (!b) return;
@@ -196,12 +235,13 @@
       (j.lines || []).forEach(function (l) { if (l.account === a) book += (+l.debit || 0) - (+l.credit || 0); });
     });
     var lineAmt = function (k) { var p = String(k).split(":"), j = jv(p[0]), l = j && (j.lines || [])[+p[1]]; return l ? (+l.debit || 0) - (+l.credit || 0) : 0; };
-    var rows = [], opn = [], early = 0, Fr = V.br && V.br.from && V.br.from <= T ? V.br.from : "";
+    var rows = [], opn = [], early = 0, uIn = 0, uOut = 0, nIn = 0, nOut = 0, Fr = V.br && V.br.from && V.br.from <= T ? V.br.from : "";
     table.querySelectorAll("tbody tr").forEach(function (tr) {
       var cb = tr.querySelector("input[data-brk]"); if (!cb) return;
       var v = lineAmt(cb.getAttribute("data-brk"));
       if (tr.classList.contains("fs-bropen")) { opn.push(jv(String(cb.getAttribute("data-brk")).split(":")[0])); return; }
       listed += v;
+      if (!cb.checked && !tr.classList.contains("fs-brpair")) { if (v > 0) { uIn += v; nIn++; } else { uOut -= v; nOut++; } }
       if (cb.checked && !tr.classList.contains("fs-brpair")) { var jd = (jv(String(cb.getAttribute("data-brk")).split(":")[0]) || {}).date || ""; if (Fr && jd && jd < Fr) { early += v; tr.style.display = "none"; tr.classList.add("fs-brearly"); } else rows.push({ tr: tr, v: v }); }
     });
     var bf = book - listed + early, cols = (table.querySelector("thead tr") || { children: [] }).children.length || 7;
@@ -218,6 +258,7 @@
       tb.appendChild(r.tr);
     });
     if (!rows.length) tb.insertAdjacentHTML("beforeend", "<tr><td colspan=\"" + (cols + 1) + "\" class=\"muted\">Nothing ticked yet. Tick each entry below that appears on the bank statement.</td></tr>");
+    SUM = { book: book, run: run, uIn: uIn, uOut: uOut, nIn: nIn, nOut: nOut, acc: a, T: T };
     var diff = stmt === null || isNaN(stmt) ? null : stmt - run, ok = diff !== null && Math.abs(diff) < 1;
     div.querySelector("tfoot").innerHTML =
       "<tr><td colspan=\"" + cols + "\">Balance per ticked entries (brought forward + " + amt(rin) + " received − " + amt(rout) + " paid)</td><td class=\"num\"><b>" + amt(run) + "</b></td></tr>" +
@@ -376,6 +417,7 @@
       ".fs-brpick{padding:18px;margin-top:12px;color:#334155;background:#f8fafc}" +
       ".fs-brtabs{display:flex;gap:4px;margin:14px 0 0;border-bottom:2px solid #e2e8f0}.fs-brtabs button{border:0;background:none;padding:9px 16px;font:inherit;font-weight:600;color:#64748b;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}" +
       ".fs-brtabs button[aria-selected=true]{color:#1F6FB8;border-bottom-color:#1F6FB8}.fs-brtabs span{display:inline-block;min-width:20px;padding:0 6px;margin-left:4px;border-radius:999px;background:#e2e8f0;color:#334155;font-size:12px}" +
+      ".fs-brsumc{margin-top:12px}.fs-brsumc h3{margin:0 0 8px}.fs-brsum5{grid-template-columns:repeat(5,1fr)}@media(max-width:900px){.fs-brsum5{grid-template-columns:1fr 1fr}}" +
       ".fs-brwhy{margin:6px 0 0;font-size:12.5px;color:#b45309}" +
       ".fs-bf{font-size:11px;color:#b45309;font-weight:600}" +
       ".fs-brfind{display:flex;align-items:center;gap:8px;margin:8px 0}.fs-brfind label{font-weight:600;font-size:13px}.fs-brfind input{flex:0 1 360px;padding:6px 9px;font:inherit}";
