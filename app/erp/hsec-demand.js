@@ -203,6 +203,11 @@
       { k: "branch", l: "Branch / office", t: "pdbranch", req: 1, hint: "Where the demand comes from: Head office, Lahore, Multan ..." },
       { k: "requestedBy", l: "Requested by", req: 1 }, { k: "payee", l: "Pay to", req: 1, hint: "The supplier, landlord, staff member or party to be paid." },
       { k: "dueDate", l: "Needed by", t: "date" },
+      // Two kinds (hassan, 2026-11-19: "some accrued expenses are those which they paid, and some they are demanding the
+      // money so that it can be done"): spent already / a bill to pay books the expense now (Dr expense heads); money
+      // asked for in advance books an advance (Dr Advances, 120403 for staff) and the expense comes when the bills do.
+      { k: "kind", l: "Type of demand", t: "select", o: [["", "Expense already incurred, or a bill to pay (books the expense now)"], ["advance", "Advance: money needed to do the work (expense booked when the bills come)"]] },
+      { k: "advAcc", l: "Advance account (debit in the demand JV)", t: "acc", hint: "120403 Advances to employees when staff will spend it, 120401 Advances to suppliers when a supplier is paid before the work. When the bills come, settle it with a JV: Dr the expense heads / Cr this account." },
       { k: "payAcc", l: "Payable account (credit in the demand JV)", t: "acc", af: "payable", req: 1, hint: "Usually 220204 Other accrued expenses, or the creditors account for a supplier." },
       { k: "items", l: "Lines", t: "pdlines" },
       { k: "payCo", l: "Paid by company", t: "select", o: [], hint: "Leave as is when this company pays from its own bank. When another group company pays (e.g. from JPL's bank), pick it: the bank payment voucher is made in its books, and the matching entry in this company's books." },
@@ -225,9 +230,17 @@
       return [["", "This company (its own bank)"]].concat(E.filter(function (e) { return !/^ENT\d$/.test(e) && e !== own; }).map(function (e) { return [e, coName(e) + " pays on its behalf"]; }));
     } });
     POSTERS[DEM] = {
-      accrue: { label: "demand journal voucher", keys: ["items", "amount", "payAcc", "date", "entity"],
-        ready: function (r) { return !r.payAcc ? "choose the payable account" : (r.items || []).some(function (l) { return !l.account; }) ? "every line needs an account" : n(r.amount) > 0 ? true : "enter the amounts"; },
+      accrue: { label: "demand journal voucher", keys: ["items", "amount", "payAcc", "date", "entity", "kind", "advAcc"],
+        ready: function (r) { return !r.payAcc ? "choose the payable account" : r.kind === "advance" ? (!r.advAcc ? "choose the advance account" : n(r.amount) > 0 ? true : "enter the amounts") : (r.items || []).some(function (l) { return !l.account; }) ? "every line needs an account" : n(r.amount) > 0 ? true : "enter the amounts"; },
         build: function (r) {
+          if (r.kind === "advance") {
+            var t0 = Math.round(n(r.amount)), d0 = ((r.items || [])[0] || {});
+            var adv = { account: r.advAcc, debit: t0, credit: 0, desc: ("Advance to " + (r.payee || "") + " for: " + (r.description || "")).slice(0, 200) };
+            if (d0.project) adv.project = d0.project; if (d0.dept) adv.dept = d0.dept;
+            return { vtype: "Journal voucher", date: r.date, entity: r.entity, payee: r.payee || "", dept: d0.dept || "",
+              narration: "Advance demand " + r.demandNo + " from " + (r.branch || "") + " for " + (r.payee || "") + ": " + (r.description || ""),
+              lines: [adv, { account: r.payAcc, debit: 0, credit: t0, desc: "Payable to " + (r.payee || "") }] };
+          }
           var lines = (r.items || []).map(function (x) {
             var l = { account: x.account, debit: Math.round(n(x.amount)), credit: 0, desc: (String(x.desc || "") + (n(x.qty) && n(x.qty) !== 1 ? " (" + x.qty + " × " + fmt(x.rate) + ")" : "")).slice(0, 200) };
             if (x.project) l.project = x.project; if (x.dept) l.dept = x.dept;
@@ -378,15 +391,17 @@
     r.items = (r.items || []).filter(function (l) { return l.account || n(l.amount) || l.desc; });
     if (!r.items.length) return err("Add at least one line.");
     for (var i = 0; i < r.items.length; i++) {
-      if (!r.items[i].account) return err("Line " + (i + 1) + ": choose the account.");
+      if (!r.items[i].account && r.kind !== "advance") return err("Line " + (i + 1) + ": choose the account.");
       if (!(n(r.items[i].amount) > 0)) return err("Line " + (i + 1) + ": enter the quantity and rate.");
       if (!String(r.items[i].desc || "").trim()) return err("Line " + (i + 1) + ": say what it is for.");
     }
     r.amount = lineTot(r.items);
+    if (r.kind === "advance" && !r.advAcc) return err("Choose the advance account (120403 Advances to employees, or 120401 Advances to suppliers).");
+    if (r.kind !== "advance") r.advAcc = "";
     // Once its JV is in the books, what was demanded can only change by reversing it.
     var was = r.id && byId(DEM, r.id), jv = r.id && live(r.id, "accrue");
     if (was && jv && jv.status === "Posted") {
-      var key = function (x) { return JSON.stringify([x.entity, x.payAcc, x.date, (x.items || []).map(function (l) { return [l.account, n(l.amount), l.project || "", l.dept || ""]; })]); };
+      var key = function (x) { return JSON.stringify([x.entity, x.payAcc, x.kind || "", x.advAcc || "", x.date, (x.items || []).map(function (l) { return [l.account, n(l.amount), l.project || "", l.dept || ""]; })]); };
       if (key(was) !== key(r)) return err("The demand JV " + (jv.ref || "") + " is already posted, so the lines, amounts, accounts, company and date cannot change. Use Reverse and correct to change them.");
     }
     if (r.bank && jv && jv.status === "Posted" && !live(r.id, "pay")) {
@@ -514,7 +529,7 @@
       return function (c, id, pre) {
         if (c === DEM && !id) {
           var pa = (accByCode()["220204"] || {}).id || "";
-          pre = Object.assign({ demandNo: nextNo(DEM, "demandNo", "PD-"), requestedBy: approverName() || "", payAcc: pa, branch: "Head office" }, pre || {});
+          pre = Object.assign({ demandNo: nextNo(DEM, "demandNo", "PD-"), requestedBy: approverName() || "", payAcc: pa, advAcc: (accByCode()["120403"] || {}).id || "", branch: "Head office" }, pre || {});
         }
         return old.call(this, c, id, pre);
       };
@@ -577,6 +592,14 @@
         return typeof out === "string" ? summary() + out : out;
       };
     })(listView);
+    // the advance account only shows for an advance demand; the line account is then optional (it notes the planned head)
+    var kindSync = function () {
+      var k = document.getElementById("f_kind"), a = document.getElementById("f_advAcc"); if (!k || !a) return;
+      var adv = k.value === "advance", w = a.closest(".f") || a.parentNode;
+      var want = adv ? "" : "none"; if (w && w.style.display !== want) w.style.display = want;
+    };
+    document.addEventListener("change", function (e) { if (e.target && e.target.id === "f_kind") kindSync(); });
+    new MutationObserver(function () { if (document.getElementById("f_kind")) kindSync(); }).observe(document.body, { childList: true, subtree: true });
     // without listView (newer app files), the summary goes above the list when the tab is open
     var sumLast = "";
     new MutationObserver(function () {
