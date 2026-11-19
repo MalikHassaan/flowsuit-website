@@ -29,7 +29,21 @@
     var to = document.getElementById("brDate"), acc = document.getElementById("brAcc");
     if (!to || !acc || typeof V === "undefined" || !V || !V.br) return;
     var ctls = to.closest(".ctls"); if (!ctls) return;
+    // Blank dates until picked (hassan, 2026-11-19: "the dates are fixed in October, it should be blank where the user
+    // can see it and then select it"): the app fills the statement date with last month's end, so until the To date is
+    // picked on this visit both boxes show empty and the reconciliation below stays hidden.
+    if (!picked) {
+      if (!document.getElementById("fsBrFrom")) {
+        var lb0 = to.closest("label");
+        if (lb0) {
+          lb0.insertAdjacentHTML("beforebegin", "<label for=\"fsBrFrom\">From <input type=\"date\" id=\"fsBrFrom\" value=\"" + esc(fromPick || "") + "\"></label>");
+          if (lb0.firstChild && lb0.firstChild.nodeType === 3) lb0.firstChild.nodeValue = "To (statement date) ";
+        }
+      }
+      return;
+    }
     var T = to.value; if (!T) return;
+    if (fromPick) { V.br.from = fromPick; fromPick = ""; }
     // Any From and To date (hassan, 2026-11-18: "it should be general from any date can be selected from to till"): From
     // only gets a default (the 1st of the To month) the first time; after that it stays where it was put, whatever To is.
     if (!V.br.from) V.br.from = T.slice(0, 8) + "01";
@@ -40,11 +54,7 @@
       if (lab) {
         lab.insertAdjacentHTML("beforebegin", "<label for=\"fsBrFrom\">From <input type=\"date\" id=\"fsBrFrom\" value=\"" + esc(Fr) + "\"></label>");
         if (lab.firstChild && lab.firstChild.nodeType === 3) lab.firstChild.nodeValue = "To (statement date) ";
-        document.getElementById("fsBrFrom").addEventListener("change", function (e) {
-          var v = e.target.value; if (!v) return;
-          V.br.from = v; if (v > T) V.br.date = v;
-          if (typeof render === "function") render();
-        });
+
       }
     }
     if (document.getElementById("fsBrRange")) return;
@@ -68,8 +78,37 @@
       "<p class=\"muted\" style=\"margin:6px 0 0\">Posted vouchers only. Compare the opening and closing balance with the same dates on the bank statement. Brackets mean an overdraft (credit balance).</p></div>");
   }
 
+  var picked = false, fromPick = "";
+  // the From box (made here, so one listener for it)
+  document.addEventListener("change", function (e) {
+    if (!e.target || e.target.id !== "fsBrFrom" || typeof V === "undefined" || !V || !V.br) return;
+    var v = e.target.value; if (!v) return;
+    if (!picked) { fromPick = v; return; }
+    var T = (document.getElementById("brDate") || {}).value || "";
+    V.br.from = v; if (T && v > T) V.br.date = v;
+    if (typeof render === "function") render();
+  });
+  // picking the To date (the app's own statement date) opens the reconciliation; a new company starts blank again
+  ["input", "change"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { if (e.target && e.target.id === "brDate" && e.target.value) picked = true; }, true);
+  });
+  var lastEnt = null;
+  function gate() {
+    var to = document.getElementById("brDate"); if (!to) return false;
+    if (typeof V !== "undefined" && V && V.ent !== lastEnt) { if (lastEnt !== null) { picked = false; fromPick = ""; } lastEnt = V.ent; }
+    var ctls = to.closest(".ctls"), msg = document.getElementById("fsBrPick");
+    if (picked) { if (msg) msg.remove(); return false; }
+    if (to.value) to.value = "";
+    if (ctls) {
+      var el = ctls.nextElementSibling;
+      while (el) { if (el.id !== "fsBrPick" && el.style.display !== "none") el.style.display = "none"; el = el.nextElementSibling; }
+      if (!msg) ctls.insertAdjacentHTML("afterend", "<div class=\"panel fs-brpick\" id=\"fsBrPick\"><b>Choose the dates to start</b><br>Pick the From date and the To (statement) date above. The balances, the entries and the earlier reconciliations show once the To date is picked.</div>");
+    }
+    return true;
+  }
   function enhance() {
     if (typeof Store === "undefined" || !Store.data) return;
+    if (gate()) { range(); return; }
     range();
     doneHint();
     loadCounts();
@@ -307,6 +346,7 @@
       ".fs-brcl{margin-top:14px}.fs-brcl h3{margin:10px 12px}.fs-brcl .num{text-align:right}.fs-brbf td{background:#f8fafc;font-style:italic}" +
       ".fs-brcl tfoot td{font-weight:600;border-top:1px solid #e2e8f0}.fs-brok td{color:#15803d}.fs-brbad td{color:#b91c1c}" +
       ".fs-brhist tr.click{cursor:pointer}.fs-brhist tr.click:hover td{background:#f1f5f9}.fs-brhistx>td{background:#f8fafc;padding:8px 10px}.fs-brhistx table{width:100%;font-size:12.5px}.fs-brhistf{margin-top:8px}.fs-bratt{margin-top:10px}" +
+      ".fs-brpick{padding:18px;margin-top:12px;color:#334155;background:#f8fafc}" +
       ".fs-brwhy{margin:6px 0 0;font-size:12.5px;color:#b45309}" +
       ".fs-bf{font-size:11px;color:#b45309;font-weight:600}" +
       ".fs-brfind{display:flex;align-items:center;gap:8px;margin:8px 0}.fs-brfind label{font-weight:600;font-size:13px}.fs-brfind input{flex:0 1 360px;padding:6px 9px;font:inherit}";
