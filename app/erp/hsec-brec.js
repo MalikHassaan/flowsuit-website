@@ -137,7 +137,34 @@
       inp.addEventListener("input", function () { lastQ = inp.value; filter(table, inp.value); });
       inp.addEventListener("keydown", function (e) { e.stopPropagation(); });
     }
+    tabs(table);
   }
+  // Two tabs (hassan, 2026-11-19: "there should be two tabs, one reconciled transactions and other unreconciled
+  // transactions; once a transaction is marked it should go into the reconciled tab, where the balances are, and that
+  // balance should be equal to our bank statement"). Ticking moves an entry across; the counts are on the tabs.
+  var tab = "un";
+  function tabs(table) {
+    var panel = table.closest(".panel") || table.parentNode, cl = document.getElementById("fsBrCl"); if (!panel || !cl) return;
+    var head = [].slice.call(document.querySelectorAll(".ctls h3")).find(function (h) { return /not yet cleared/i.test(h.textContent); });
+    head = head && head.closest(".ctls");
+    var find = document.querySelector(".fs-brfind");
+    var nUn = [].slice.call(table.querySelectorAll("tbody tr")).filter(function (tr) { var cb = tr.querySelector("input[data-brk]"); return cb && !cb.checked && !/fs-br(pair|open|early)/.test(tr.className); }).length;
+    var nCl = cl.querySelectorAll("input[data-brk]").length;
+    var bar = document.getElementById("fsBrTabs");
+    if (!bar) { (head || find || panel).insertAdjacentHTML("beforebegin", "<div class=\"fs-brtabs\" id=\"fsBrTabs\" role=\"tablist\"></div>"); bar = document.getElementById("fsBrTabs"); }
+    var html = "<button type=\"button\" role=\"tab\" data-fsbrtab=\"un\" aria-selected=\"" + (tab === "un") + "\">Unreconciled transactions <span>" + nUn + "</span></button>" +
+      "<button type=\"button\" role=\"tab\" data-fsbrtab=\"cl\" aria-selected=\"" + (tab === "cl") + "\">Reconciled transactions <span>" + nCl + "</span></button>";
+    if (bar.innerHTML !== html) bar.innerHTML = html;
+    var showUn = tab === "un";
+    [head, find, panel].forEach(function (el) { if (el) { var w = showUn ? "" : "none"; if (el.style.display !== w) el.style.display = w; } });
+    var w2 = showUn ? "none" : ""; if (cl.style.display !== w2) cl.style.display = w2;
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-fsbrtab]"); if (!b) return;
+    tab = b.getAttribute("data-fsbrtab");
+    var box = [].slice.call(document.querySelectorAll("input[data-brk]")).find(function (x) { return !x.closest("#fsBrCl"); });
+    var t = box && box.closest("table"); if (t) tabs(t);
+  });
   // "Mark reconciled" is refused until the statement's closing balance is entered and the difference is nil; the app
   // gives no reason, so say which one is missing (hassan, 2026-11-18: "mark reconciliation button is not working").
   // Two lists (hassan, 2026-11-18: "there should be two tables, one reconciled entries and other unreconciled entries,
@@ -347,6 +374,8 @@
       ".fs-brcl tfoot td{font-weight:600;border-top:1px solid #e2e8f0}.fs-brok td{color:#15803d}.fs-brbad td{color:#b91c1c}" +
       ".fs-brhist tr.click{cursor:pointer}.fs-brhist tr.click:hover td{background:#f1f5f9}.fs-brhistx>td{background:#f8fafc;padding:8px 10px}.fs-brhistx table{width:100%;font-size:12.5px}.fs-brhistf{margin-top:8px}.fs-bratt{margin-top:10px}" +
       ".fs-brpick{padding:18px;margin-top:12px;color:#334155;background:#f8fafc}" +
+      ".fs-brtabs{display:flex;gap:4px;margin:14px 0 0;border-bottom:2px solid #e2e8f0}.fs-brtabs button{border:0;background:none;padding:9px 16px;font:inherit;font-weight:600;color:#64748b;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}" +
+      ".fs-brtabs button[aria-selected=true]{color:#1F6FB8;border-bottom-color:#1F6FB8}.fs-brtabs span{display:inline-block;min-width:20px;padding:0 6px;margin-left:4px;border-radius:999px;background:#e2e8f0;color:#334155;font-size:12px}" +
       ".fs-brwhy{margin:6px 0 0;font-size:12.5px;color:#b45309}" +
       ".fs-bf{font-size:11px;color:#b45309;font-weight:600}" +
       ".fs-brfind{display:flex;align-items:center;gap:8px;margin:8px 0}.fs-brfind label{font-weight:600;font-size:13px}.fs-brfind input{flex:0 1 360px;padding:6px 9px;font:inherit}";
