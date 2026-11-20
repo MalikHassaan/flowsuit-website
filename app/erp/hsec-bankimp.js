@@ -31,6 +31,10 @@
     var c = norm(company); if (!c) return "";
     var E = ents(), hit = E.filter(function (e) { return norm(coName(e)) === c || norm(e) === c; });
     if (hit.length === 1) return hit[0];
+    // the company's initials are its ERP code: Jeewajee Services Private Limited = JSPL (hassan, 2026-11-20)
+    var ini = str(company).replace(/[()\.]/g, " ").split(/\s+/).filter(Boolean).map(function (w) { return w[0]; }).join("").toUpperCase();
+    var byCode = E.filter(function (e) { return e.toUpperCase() === ini; });
+    if (byCode.length === 1) return byCode[0];
     // "Hong Kong Shanghai Electric" vs "Honk Kong Shenghai Electric": compare words that match closely
     var words = function (s) { return s.split(" ").filter(function (w) { return w.length > 2; }); }, cw = words(c);
     var score = function (e) { var ew = words(norm(coName(e))); if (!ew.length) return 0; var m = 0; cw.forEach(function (w) { if (ew.some(function (x) { return x === w || (x.length > 3 && w.length > 3 && lev(x, w) <= (w.length > 6 ? 2 : 1)); })) m++; }); return m / Math.max(cw.length, ew.length); };
