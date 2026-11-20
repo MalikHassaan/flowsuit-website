@@ -451,6 +451,7 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-paysched.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-pwfix.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-projimport.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-bankimp.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-advbg.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-qbproj.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-regions.js') . '</script>'
