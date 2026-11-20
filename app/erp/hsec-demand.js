@@ -409,6 +409,61 @@
     Store.save("fsstaff", { id: id, name: name.trim(), entity: ent, by: (typeof approverName === "function" && approverName()) || "", at: new Date().toISOString() })
       .then(function () { if (typeof toast === "function") toast(name.trim() + " added to the staff list for advances"); }, function () {});
   }
+  // Advances booked from a demand also show in Treasury › Advances (hassan, 2026-11-20: "the advance which is booked
+  // from the demand it should also reflect in cash advance module as well"). One linked record per demand (id
+  // "pd-<demand id>"), status Advance issued once the demand JV has put the money on the advance account. Its own
+  // issue voucher is switched off (the demand's JV and BPV already did that); it is settled there as usual, and the
+  // settlement credits the advance account the demand used.
+  var ADV = "advances", advId = function (d) { return "pd-" + d.id; };
+  function advRec(d, jv, bp) {
+    var cur = byId(ADV, advId(d)), a = (Store.data.accounts || []).find(function (x) { return x.id === d.advAcc; }) || {};
+    var it0 = (d.items || [])[0] || {}, refs = [jv && jv.ref, bp && bp.ref].filter(Boolean).join(" / ");
+    var r = Object.assign({}, cur || {}, {
+      reqNo: d.demandNo, date: d.date, entity: d.entity, dept: it0.dept || (cur && cur.dept) || "", requestedBy: d.requestedBy || "",
+      payeeType: a.code === "120401" || /supplier|vendor/i.test(a.name || "") ? "Supplier" : "Employee", payee: d.payee || "",
+      project: it0.project || (cur && cur.project) || "",
+      purpose: d.description || (d.items || []).map(function (l) { return l.desc; }).filter(Boolean).join("; ") || ("Advance demand " + d.demandNo),
+      amount: Math.round(n(d.amount)), advanceAmount: Math.round(n(d.amount)), payMethod: "Bank transfer", payRef: d.chequeNo || "",
+      issueDate: d.payDate || d.date, voucherNo: refs, demandId: d.id, demandNo: d.demandNo, advAcc: d.advAcc,
+      status: cur && ["Settled", "Cancelled"].indexOf(cur.status) >= 0 ? cur.status : "Advance issued" });
+    if (!cur) r.approvals = [{ stage: "Payment demand", action: "Approved", by: d.requestedBy || "", at: new Date().toISOString(), comment: "Booked through payment demand " + d.demandNo }];
+    return { cur: cur, r: r };
+  }
+  var advKeys = ["reqNo", "date", "entity", "payeeType", "payee", "purpose", "amount", "advanceAmount", "payRef", "issueDate", "voucherNo", "advAcc", "status"];
+  async function syncAdv(d, jv, bp) {
+    if (!d || !d.id || !Array.isArray(Store.data[ADV])) return;
+    var cur = byId(ADV, advId(d));
+    if (d.kind !== "advance") { // the demand was changed to an expense: drop the open advance
+      if (cur && cur.status === "Advance issued" && !n(cur.actualSpent)) await Store.save(ADV, Object.assign({}, cur, { status: "Cancelled", settleRemarks: "Demand " + d.demandNo + " changed to an expense." }));
+      return;
+    }
+    jv = jv || live(d.id, "accrue"); bp = bp || live(d.id, "pay");
+    if (!jv || jv.status !== "Posted") return; // journals not loaded yet, or not posted: leave as is
+    if (cur && cur.status === "Settled") return;
+    var x = advRec(d, jv, bp);
+    if (x.cur && advKeys.every(function (k) { return String(x.cur[k] == null ? "" : x.cur[k]) === String(x.r[k] == null ? "" : x.r[k]); })) return;
+    x.r.id = advId(d); await Store.save(ADV, x.r);
+  }
+  var syncing = false;
+  async function syncAll() {
+    if (syncing || !Array.isArray(Store.data[DEM]) || !Array.isArray(Store.data.journals) || !Store.data.journals.length) return;
+    syncing = true;
+    try { for (var i = 0; i < Store.data[DEM].length; i++) { var d = Store.data[DEM][i]; if (d.kind === "advance" || byId(ADV, advId(d))) await syncAdv(d); } }
+    catch (e) { /* no access to advances: nothing to do */ }
+    finally { syncing = false; }
+  }
+  function advHooks() {
+    var P = POSTERS[ADV]; if (!P || P.__fsDem) return;
+    P.__fsDem = true;
+    if (P.issue) P.issue.ready = (function (old) { return function (r) { return r && r.demandId ? "not needed, the cash went out through payment demand " + (r.demandNo || "") + (r.voucherNo ? " (" + r.voucherNo + ")" : "") : old.apply(this, arguments); }; })(P.issue.ready);
+    if (P.settle) P.settle.build = (function (old) { return function (r) {
+      var j = old.apply(this, arguments); if (!j || !r || !r.advAcc) return j;
+      var A = accByCode(), std = (A[r.payeeType === "Supplier" ? "120401" : "120403"] || {}).id;
+      if (std && std !== r.advAcc) (j.lines || []).forEach(function (l) { if (l.account === std && n(l.credit) > 0) l.account = r.advAcc; });
+      if (r.demandNo) j.narration = String(j.narration || "").replace(/\.$/, "") + " (advance from payment demand " + r.demandNo + ").";
+      return j; }; })(P.settle.build);
+  }
+
   function err(m) { var e = document.getElementById("ferr"); if (e) e.textContent = m; return false; }
   function check() {
     var r = F.rec;
@@ -597,9 +652,10 @@
         if (!saved) return ok;
         if (isEmpAdv(saved)) addStaff(saved.payee, saved.entity);
         try {
-          var made = [], a = await post(saved, "accrue"); if (a) made.push(a.ref);
-          if (saved.bank) { var b = await post(saved, "pay"); if (b) made.push(b.ref); }
+          var made = [], b = null, a = await post(saved, "accrue"); if (a) made.push(a.ref);
+          if (saved.bank) { b = await post(saved, "pay"); if (b) made.push(b.ref); }
           if (made.length) toast(saved.demandNo + ": " + made.join(" and ") + " sent for approval.");
+          if (saved.kind === "advance" || byId(ADV, advId(saved))) await syncAdv(saved, a && Object.assign({}, a, { status: "Posted" }), b);
         } catch (x) { toast(saved.demandNo + " saved, but " + (x.message || x)); }
         return ok;
       };
@@ -799,6 +855,8 @@
       ".fs-pdgmbox{grid-column:1/-1;margin:6px 0;padding:10px 12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:#f8fafc}" +
       ".fs-pdpayhl{outline:3px solid #16a34a;outline-offset:4px;border-radius:6px;transition:outline-color 1s}";
     document.head.appendChild(css);
+    safe0(advHooks);
+    setTimeout(syncAll, 4000); setInterval(syncAll, 20000); // demands booked before this link, and BPVs made later
     scheduleRender();
     return true;
   }
