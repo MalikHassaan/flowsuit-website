@@ -597,6 +597,10 @@
       var k = document.getElementById("f_kind"), a = document.getElementById("f_advAcc"); if (!k || !a) return;
       var adv = k.value === "advance", w = a.closest(".f") || a.parentNode;
       var want = adv ? "" : "none"; if (w && w.style.display !== want) w.style.display = want;
+      // on an advance the line account is only the planned expense head; the JV debits the Advance account above
+      var th = [].slice.call(document.querySelectorAll("#pdBox th, .bitab th")).find(function (x) { return /^(Account \(debit\)|Planned expense head)/.test(x.textContent); });
+      var lbl = adv ? "Planned expense head (for settlement, optional)" : "Account (debit) *";
+      if (th && th.textContent !== lbl) th.textContent = lbl;
     };
     document.addEventListener("change", function (e) { if (e.target && e.target.id === "f_kind") kindSync(); });
     new MutationObserver(function () { if (document.getElementById("f_kind")) kindSync(); }).observe(document.body, { childList: true, subtree: true });
