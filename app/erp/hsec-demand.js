@@ -287,6 +287,12 @@
 
   function subscribe() {
     // offices added with + are shared with everyone (hassan, 2026-10-31: "anything entered by the maker should be shown to everyone")
+    // staff named on employee advances who are not in HR's employee list yet, shared with everyone
+    if (COLLS.indexOf("fsstaff") < 0) COLLS.push("fsstaff");
+    if (!Array.isArray(Store.data.fsstaff)) Store.data.fsstaff = [];
+    if (Store.db) Store.db.collection("fsstaff").onSnapshot(function (s2) {
+      Store.data.fsstaff = s2.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+    });
     if (COLLS.indexOf("fsbranches") < 0) COLLS.push("fsbranches");
     if (!Array.isArray(Store.data.fsbranches)) Store.data.fsbranches = [];
     if (Store.db) Store.db.collection("fsbranches").onSnapshot(function (s) {
@@ -385,6 +391,24 @@
         function (x) { if (typeof toast === "function") toast("Kept on this demand only: " + ((x && x.message) || "could not save the branch list")); });
   }
 
+  // Employee advances name the staff member (hassan, 2026-11-20: "when we select advances to employee it should state to
+  // which staff; staff should be selected, if not then the name should be added"). Pay to offers HR's employees of the
+  // company plus staff named on earlier advances; a new name is added to that shared list when the demand is saved.
+  var isEmpAdv = function (r) { if (!r || r.kind !== "advance" || !r.advAcc) return false; var a = Store.data.accounts.find(function (x) { return x.id === r.advAcc; }); return !!a && (a.code === "120403" || /employ|staff/i.test(a.name || "")); };
+  var GENERIC = /^\s*(employees?|staff|workers?|labou?r|person|someone|n\/?a|-)\s*$/i;
+  function staffNames(ent) {
+    var seen = {}, out = [];
+    var add = function (nm) { nm = String(nm || "").trim(); var k = nm.toLowerCase(); if (nm && !seen[k]) { seen[k] = 1; out.push(nm); } };
+    (Store.data.employees || []).forEach(function (e) { if ((!e.entity || e.entity === ent) && !/left|resign|terminat|inactive/i.test(e.status || "")) add(e.name); });
+    (Store.data.fsstaff || []).forEach(function (x) { if (!x.entity || x.entity === ent) add(x.name); });
+    return out.sort(function (a, b) { return a.localeCompare(b); });
+  }
+  function addStaff(name, ent) {
+    if (!name || GENERIC.test(name) || staffNames(ent).some(function (x) { return x.toLowerCase() === name.trim().toLowerCase(); })) return;
+    var id = (ent + "-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).slice(0, 80);
+    Store.save("fsstaff", { id: id, name: name.trim(), entity: ent, by: (typeof approverName === "function" && approverName()) || "", at: new Date().toISOString() })
+      .then(function () { if (typeof toast === "function") toast(name.trim() + " added to the staff list for advances"); }, function () {});
+  }
   function err(m) { var e = document.getElementById("ferr"); if (e) e.textContent = m; return false; }
   function check() {
     var r = F.rec;
@@ -408,6 +432,7 @@
       var g0 = was && was.gm && was.gm.status;
       if (g0 !== "Approved") return err(g0 === "Not approved" ? "The GM did not approve this demand, so it cannot be paid. Clear Pay from bank to save other changes." : "The GM has not approved this demand yet. It can be paid once the GM approves it. Clear Pay from bank to save other changes.");
     }
+    if (isEmpAdv(r) && (!String(r.payee || "").trim() || GENERIC.test(r.payee))) return err("Pay to: choose the staff member who gets the advance from the list, or type their full name (not \"" + (r.payee || "Employee") + "\").");
     r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
     if (r.bank && !r.payDate) r.payDate = todayStr();
     if (r.payCo === r.entity) r.payCo = "";
@@ -570,6 +595,7 @@
         try { ok = await old.apply(this, arguments); } finally { Store.save = save; }
         if (ok === false) { if (why) err("Could not save: " + (why.message || why) + "."); return ok; }
         if (!saved) return ok;
+        if (isEmpAdv(saved)) addStaff(saved.payee, saved.entity);
         try {
           var made = [], a = await post(saved, "accrue"); if (a) made.push(a.ref);
           if (saved.bank) { var b = await post(saved, "pay"); if (b) made.push(b.ref); }
@@ -601,8 +627,28 @@
       var th = [].slice.call(document.querySelectorAll("#pdBox th, .bitab th")).find(function (x) { return /^(Account \(debit\)|Planned expense head)/.test(x.textContent); });
       var lbl = adv ? "Planned expense head (for settlement, optional)" : "Account (debit) *";
       if (th && th.textContent !== lbl) th.textContent = lbl;
+      // Pay to becomes a staff pick on an employee advance
+      var py = document.getElementById("f_payee"); if (!py) return;
+      var emp = adv && isEmpAdv({ kind: "advance", advAcc: a.value }), ent = (document.getElementById("f_entity") || {}).value || "";
+      var hint = (py.closest(".f") || py.parentNode).querySelector(".hint");
+      if (hint && !hint.hasAttribute("data-fs0")) hint.setAttribute("data-fs0", hint.textContent);
+      if (emp) {
+        var names = staffNames(ent), sig = ent + "|" + names.join("|"), dl = document.getElementById("fsPdStaff");
+        if (!dl) { py.insertAdjacentHTML("afterend", "<datalist id=\"fsPdStaff\"></datalist>"); dl = document.getElementById("fsPdStaff"); }
+        if (dl.getAttribute("data-sig") !== sig) { dl.innerHTML = names.map(function (x) { return "<option value=\"" + esc(x) + "\">"; }).join(""); dl.setAttribute("data-sig", sig); }
+        if (py.getAttribute("list") !== "fsPdStaff") { py.setAttribute("list", "fsPdStaff"); py.setAttribute("placeholder", "Staff member's name"); }
+        var known = names.some(function (x) { return x.toLowerCase() === String(py.value || "").trim().toLowerCase(); });
+        var ht = !py.value.trim() || GENERIC.test(py.value) ? "Which staff member gets this advance? Pick from the list (" + names.length + " staff of this company), or type the full name of someone new."
+          : known ? "Staff member on the list." : "New name: it is added to the staff list when you save.";
+        if (hint && hint.textContent !== ht) hint.textContent = ht;
+        if (hint) hint.classList.toggle("fs-pdwarn", !py.value.trim() || GENERIC.test(py.value));
+      } else if (py.getAttribute("list") === "fsPdStaff") {
+        py.removeAttribute("list"); py.removeAttribute("placeholder");
+        if (hint) { hint.textContent = hint.getAttribute("data-fs0") || ""; hint.classList.remove("fs-pdwarn"); }
+      }
     };
-    document.addEventListener("change", function (e) { if (e.target && e.target.id === "f_kind") kindSync(); });
+    document.addEventListener("change", function (e) { if (e.target && /^f_(kind|advAcc|entity)$/.test(e.target.id)) kindSync(); });
+    document.addEventListener("input", function (e) { if (e.target && e.target.id === "f_payee") kindSync(); });
     new MutationObserver(function () { if (document.getElementById("f_kind")) kindSync(); }).observe(document.body, { childList: true, subtree: true });
     // without listView (newer app files), the summary goes above the list when the tab is open
     var sumLast = "";
@@ -739,7 +785,7 @@
       ".fs-pdday{cursor:pointer}.fs-pdday:hover td{background:#eff6ff}.fs-pdday.on td{background:#dbeafe;font-weight:600}" +
       ".fs-pdcard.good b{color:#15803d}.fs-pdcard.warn b{color:#b45309}.fs-pdcard.bad b{color:#b91c1c}" +
       ".fs-pdbreak{height:0;margin:18px 0;border-top:1px dashed #ccc}@media print{.fs-pdbreak{break-before:page;page-break-before:always;border:0;margin:0}}" +
-      ".fs-pdbl{display:flex;align-items:center;justify-content:space-between;gap:8px}" +
+      ".fs-pdwarn{color:#b45309!important;font-weight:600}.fs-pdbl{display:flex;align-items:center;justify-content:space-between;gap:8px}" +
       ".fs-pdbplus{width:26px;height:26px;padding:0;border:1px solid #16a34a;border-radius:6px;background:#ecfdf3;color:#15803d;font-size:18px;line-height:1;cursor:pointer}" +
       ".fs-pdbplus:hover{background:#16a34a;color:#fff}.fs-pdbnew{display:flex;gap:6px}.fs-pdbnew[hidden]{display:none}.fs-pdbnew input{flex:1;min-width:0}" +
       ".fs-pdrange{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:10px}.fs-pdrange label{display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px}" +
