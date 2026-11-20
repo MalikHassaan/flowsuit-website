@@ -403,6 +403,24 @@
     (Store.data.fsstaff || []).forEach(function (x) { if (!x.entity || x.entity === ent) add(x.name); });
     return out.sort(function (a, b) { return a.localeCompare(b); });
   }
+  // Supplier advances: Pay to is picked from Purchasing › Vendors; a new name is added there (Under review) on save
+  // (hassan, 2026-11-20: "if on demand the supplier is selected on advance then the supplier should be selected and if
+  // it's not listed then it should be added from here and same should be put in to supplier as well").
+  var isSupAdv = function (r) { if (!r || r.kind !== "advance" || !r.advAcc) return false; var a = Store.data.accounts.find(function (x) { return x.id === r.advAcc; }); return !!a && (a.code === "120401" || /supplier|vendor|contractor/i.test(a.name || "")); };
+  var GENSUP = /^\s*(suppliers?|vendors?|contractors?|party|someone|n\/?a|-)\s*$/i;
+  var vkey = function (x) { return String(x || "").trim().toLowerCase().replace(/\s+/g, " "); };
+  var vendorOf = function (name) { var k = vkey(name); return k ? (Store.data.vendors || []).find(function (v) { return vkey(v.name) === k; }) || null : null; };
+  function vendorNames() {
+    return (Store.data.vendors || []).filter(function (v) { return String(v.name || "").trim() && v.status !== "Blocked"; })
+      .map(function (v) { return String(v.name).trim(); }).sort(function (a, b) { return a.localeCompare(b); });
+  }
+  async function addVendor(name) {
+    name = String(name || "").trim(); if (!name || GENSUP.test(name) || vendorOf(name)) return;
+    try {
+      await Store.save("vendors", { name: name, category: "Other", filer: "Not checked", status: "Under review" });
+      if (typeof toast === "function") toast(name + " added to Purchasing › Vendors (Under review). Complete its NTN and bank details there.");
+    } catch (e) { if (typeof toast === "function") toast("The demand is saved, but " + name + " could not be added to the vendor list: " + ((e && e.message) || "no access to vendors") + "."); }
+  }
   function addStaff(name, ent) {
     if (!name || GENERIC.test(name) || staffNames(ent).some(function (x) { return x.toLowerCase() === name.trim().toLowerCase(); })) return;
     var id = (ent + "-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).slice(0, 80);
@@ -424,12 +442,13 @@
       project: it0.project || (cur && cur.project) || "",
       purpose: d.description || (d.items || []).map(function (l) { return l.desc; }).filter(Boolean).join("; ") || ("Advance demand " + d.demandNo),
       amount: Math.round(n(d.amount)), advanceAmount: Math.round(n(d.amount)), payMethod: "Bank transfer", payRef: d.chequeNo || "",
+      vendor: ((isSupAdv(d) && vendorOf(d.payee)) || {}).id || (cur && cur.vendor) || "",
       issueDate: d.payDate || d.date, voucherNo: refs, demandId: d.id, demandNo: d.demandNo, advAcc: d.advAcc,
       status: cur && ["Settled", "Cancelled"].indexOf(cur.status) >= 0 ? cur.status : "Advance issued" });
     if (!cur) r.approvals = [{ stage: "Payment demand", action: "Approved", by: d.requestedBy || "", at: new Date().toISOString(), comment: "Booked through payment demand " + d.demandNo }];
     return { cur: cur, r: r };
   }
-  var advKeys = ["reqNo", "date", "entity", "payeeType", "payee", "purpose", "amount", "advanceAmount", "payRef", "issueDate", "voucherNo", "advAcc", "status"];
+  var advKeys = ["vendor", "reqNo", "date", "entity", "payeeType", "payee", "purpose", "amount", "advanceAmount", "payRef", "issueDate", "voucherNo", "advAcc", "status"];
   async function syncAdv(d, jv, bp) {
     if (!d || !d.id || !Array.isArray(Store.data[ADV])) return;
     var cur = byId(ADV, advId(d));
@@ -486,6 +505,11 @@
     if (r.bank && jv && jv.status === "Posted" && !live(r.id, "pay")) {
       var g0 = was && was.gm && was.gm.status;
       if (g0 !== "Approved") return err(g0 === "Not approved" ? "The GM did not approve this demand, so it cannot be paid. Clear Pay from bank to save other changes." : "The GM has not approved this demand yet. It can be paid once the GM approves it. Clear Pay from bank to save other changes.");
+    }
+    if (isSupAdv(r)) {
+      if (!String(r.payee || "").trim() || GENSUP.test(r.payee)) return err("Pay to: choose the supplier from the list, or type the supplier's full name to add it to the vendor list.");
+      var vx = vendorOf(r.payee); if (vx && vx.status === "Blocked") return err("Pay to: " + vx.name + " is Blocked in Purchasing › Vendors. Choose another supplier, or unblock it there first.");
+      if (vx) r.payee = String(vx.name).trim();
     }
     if (isEmpAdv(r) && (!String(r.payee || "").trim() || GENERIC.test(r.payee))) return err("Pay to: choose the staff member who gets the advance from the list, or type their full name (not \"" + (r.payee || "Employee") + "\").");
     r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
@@ -651,6 +675,7 @@
         if (ok === false) { if (why) err("Could not save: " + (why.message || why) + "."); return ok; }
         if (!saved) return ok;
         if (isEmpAdv(saved)) addStaff(saved.payee, saved.entity);
+        if (isSupAdv(saved)) await addVendor(saved.payee);
         try {
           var made = [], b = null, a = await post(saved, "accrue"); if (a) made.push(a.ref);
           if (saved.bank) { b = await post(saved, "pay"); if (b) made.push(b.ref); }
@@ -685,7 +710,7 @@
       if (th && th.textContent !== lbl) th.textContent = lbl;
       // Pay to becomes a staff pick on an employee advance
       var py = document.getElementById("f_payee"); if (!py) return;
-      var emp = adv && isEmpAdv({ kind: "advance", advAcc: a.value }), ent = (document.getElementById("f_entity") || {}).value || "";
+      var emp = adv && isEmpAdv({ kind: "advance", advAcc: a.value }), sup = adv && !emp && isSupAdv({ kind: "advance", advAcc: a.value }), ent = (document.getElementById("f_entity") || {}).value || "";
       var hint = (py.closest(".f") || py.parentNode).querySelector(".hint");
       if (hint && !hint.hasAttribute("data-fs0")) hint.setAttribute("data-fs0", hint.textContent);
       if (emp) {
@@ -698,7 +723,18 @@
           : known ? "Staff member on the list." : "New name: it is added to the staff list when you save.";
         if (hint && hint.textContent !== ht) hint.textContent = ht;
         if (hint) hint.classList.toggle("fs-pdwarn", !py.value.trim() || GENERIC.test(py.value));
-      } else if (py.getAttribute("list") === "fsPdStaff") {
+      } else if (sup) {
+        var vn = vendorNames(), vsig = vn.join("|"), vl = document.getElementById("fsPdVend");
+        if (!vl) { py.insertAdjacentHTML("afterend", "<datalist id=\"fsPdVend\"></datalist>"); vl = document.getElementById("fsPdVend"); }
+        if (vl.getAttribute("data-sig") !== vsig) { vl.innerHTML = vn.map(function (x) { return "<option value=\"" + esc(x) + "\">"; }).join(""); vl.setAttribute("data-sig", vsig); }
+        if (py.getAttribute("list") !== "fsPdVend") { py.setAttribute("list", "fsPdVend"); py.setAttribute("placeholder", "Supplier's name"); }
+        var vv = vendorOf(py.value), bad = !py.value.trim() || GENSUP.test(py.value) || (vv && vv.status === "Blocked");
+        var vt = !py.value.trim() || GENSUP.test(py.value) ? "Which supplier gets this advance? Pick from the vendor list (" + vn.length + " suppliers), or type the full name of a new one."
+          : vv && vv.status === "Blocked" ? vv.name + " is Blocked in Purchasing › Vendors. Choose another supplier."
+          : vv ? "Supplier on the vendor list." : "New supplier: it is added to Purchasing › Vendors (Under review) when you save.";
+        if (hint && hint.textContent !== vt) hint.textContent = vt;
+        if (hint) hint.classList.toggle("fs-pdwarn", !!bad);
+      } else if (py.getAttribute("list") === "fsPdStaff" || py.getAttribute("list") === "fsPdVend") {
         py.removeAttribute("list"); py.removeAttribute("placeholder");
         if (hint) { hint.textContent = hint.getAttribute("data-fs0") || ""; hint.classList.remove("fs-pdwarn"); }
       }
