@@ -208,6 +208,9 @@
       // asked for in advance books an advance (Dr Advances, 120403 for staff) and the expense comes when the bills do.
       { k: "kind", l: "Type of demand", t: "select", o: [["", "Expense already incurred, or a bill to pay (books the expense now)"], ["advance", "Advance: money needed to do the work (expense booked when the bills come)"]] },
       { k: "advAcc", l: "Advance account (debit in the demand JV)", t: "acc", hint: "120403 Advances to employees when staff will spend it, 120401 Advances to suppliers when a supplier is paid before the work. When the bills come, settle it with a JV: Dr the expense heads / Cr this account." },
+      // full or part of the cost (hassan, 2026-11-20: "it should also be mentioned that is it fully advance or partially")
+      { k: "advPart", l: "Full or partial advance", t: "select", o: [["Full", "Full: this advance covers the whole cost"], ["Partial", "Partial: part now, the rest paid later"]] },
+      { k: "advTotal", l: "Total cost of the work (PKR)", t: "money", hint: "The full amount agreed or expected. The lines below are the part paid now as advance; the balance is paid later against the bill." },
       { k: "payAcc", l: "Payable account (credit in the demand JV)", t: "acc", af: "payable", req: 1, hint: "Usually 220204 Other accrued expenses, or the creditors account for a supplier." },
       { k: "items", l: "Lines", t: "pdlines" },
       { k: "payCo", l: "Paid by company", t: "select", o: [], hint: "Leave as is when this company pays from its own bank. When another group company pays (e.g. from JPL's bank), pick it: the bank payment voucher is made in its books, and the matching entry in this company's books." },
@@ -216,7 +219,7 @@
       { k: "notes", l: "Notes", t: "textarea" }],
       cols: [["demandNo", "Demand", function (r) { return mono(r.demandNo); }], ["date", "Date", function (r) { return fdate(r.date); }],
         ["entity", "Company"], ["branch", "Branch"], ["payee", "Pay to", function (r) { return esc(r.payee || "") + (r.requestedBy ? "<br><span class=\"muted\">by " + esc(r.requestedBy) + "</span>" : ""); }],
-        ["description", "For"], ["amount", "Amount", null, "num"],
+        ["description", "For"], ["amount", "Amount", function (r) { return fmt(r.amount) + (r.kind === "advance" ? "<br><span class=\"muted\">" + (r.advPart === "Partial" && n(r.advTotal) ? "Partial advance of " + fmt(r.advTotal) : "Full advance") + "</span>" : ""); }, "num"],
         ["jv", "Demand JV", function (r) { return tag(state(r).jv); }], ["bp", "Bank payment", function (r) { var s = state(r); return s.k === "topay" ? "<button type=\"button\" class=\"btn sm pri\" data-pdpay=\"" + esc(r.id) + "\">Pay</button>" : s.k === "gm" && isGm() ? "<label class=\"fs-pdtick\"><input type=\"checkbox\" data-pdgm=\"" + esc(r.id) + "\"> Approve?</label>" : tag(s.bp); }],
         ["st", "Status", function (r) { var s = state(r); return pill(s.l, s.c) + gmTxt(r); }],
         ["pr", "", function (r) { return state(r).jv ? "<button type=\"button\" class=\"btn sm\" data-pdprint=\"" + esc(r.id) + "\">Print</button>" : ""; }]],
@@ -238,7 +241,7 @@
             var adv = { account: r.advAcc, debit: t0, credit: 0, desc: ("Advance to " + (r.payee || "") + " for: " + (r.description || "")).slice(0, 200) };
             if (d0.project) adv.project = d0.project; if (d0.dept) adv.dept = d0.dept;
             return { vtype: "Journal voucher", date: r.date, entity: r.entity, payee: r.payee || "", dept: d0.dept || "",
-              narration: "Advance demand " + r.demandNo + " from " + (r.branch || "") + " for " + (r.payee || "") + ": " + (r.description || ""),
+              narration: (r.advPart === "Partial" ? "Partial advance" : "Advance") + " demand " + r.demandNo + " from " + (r.branch || "") + " for " + (r.payee || "") + ": " + (r.description || "") + (r.advPart === "Partial" && n(r.advTotal) ? " (" + fmt(t0) + " of total " + fmt(r.advTotal) + ", balance " + fmt(n(r.advTotal) - t0) + " later)" : ""),
               lines: [adv, { account: r.payAcc, debit: 0, credit: t0, desc: "Payable to " + (r.payee || "") }] };
           }
           var lines = (r.items || []).map(function (x) {
@@ -421,6 +424,33 @@
       if (typeof toast === "function") toast(name + " added to Purchasing › Vendors (Under review). Complete its NTN and bank details there.");
     } catch (e) { if (typeof toast === "function") toast("The demand is saved, but " + name + " could not be added to the vendor list: " + ((e && e.message) || "no access to vendors") + "."); }
   }
+  // the green + beside Pay to: add a supplier without leaving the demand (hassan, 2026-11-20: "if supplier is not there
+  // there should be + button where he routes to the supplier and then supplier is added and then the advance can be booked")
+  function nvOpen() {
+    var old = document.getElementById("fsPdNv"); if (old) old.remove();
+    var py = document.getElementById("f_payee"), typed = py && !vendorOf(py.value) && !GENSUP.test(py.value) ? py.value.trim() : "";
+    var f = function (id, l, ta, v) { return "<label class=\"fs-pdnvf\"><span>" + l + "</span>" + (ta ? "<textarea id=\"" + id + "\" rows=\"2\"></textarea>" : "<input id=\"" + id + "\" value=\"" + esc(v || "") + "\" autocomplete=\"off\">") + "</label>"; };
+    document.body.insertAdjacentHTML("beforeend", "<div class=\"overlay center\" id=\"fsPdNv\"><div class=\"fs-pdnvbox\"><h3 style=\"margin:0 0 4px\">Add supplier</h3>" +
+      "<p class=\"muted\" style=\"margin:0 0 10px\">Saved to Purchasing › Vendors as \"Under review\". Complete its tax and bank details there later.</p>" +
+      f("fsPdNvName", "Supplier name <b style=\"color:#b0412e\">*</b>", 0, typed) + f("fsPdNvContact", "Contact person") + f("fsPdNvPhone", "Phone") + f("fsPdNvNtn", "NTN") + f("fsPdNvAddr", "Address", 1) +
+      "<p class=\"err\" id=\"fsPdNvErr\"></p><div class=\"fs-pdnvbtns\"><button class=\"btn pri\" type=\"button\" id=\"fsPdNvSave\">Save supplier</button><button class=\"btn\" type=\"button\" id=\"fsPdNvClose\">Cancel</button></div></div></div>");
+    var nm = document.getElementById("fsPdNvName"); if (nm) nm.focus();
+  }
+  async function nvSave() {
+    var g = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ""; }, er = document.getElementById("fsPdNvErr"), btn = document.getElementById("fsPdNvSave");
+    var name = g("fsPdNvName"); if (!name || GENSUP.test(name)) { if (er) er.textContent = "Type the supplier's full name."; return; }
+    var ex = vendorOf(name);
+    if (ex && ex.status === "Blocked") { if (er) er.textContent = ex.name + " is in the vendor list but Blocked."; return; }
+    if (!ex) {
+      if (btn) btn.disabled = true;
+      try { await Store.save("vendors", { name: name, contact: g("fsPdNvContact"), phone: g("fsPdNvPhone"), ntn: g("fsPdNvNtn"), address: g("fsPdNvAddr"), category: "Other", filer: "Not checked", status: "Under review" }); }
+      catch (x) { if (btn) btn.disabled = false; if (er) er.textContent = "Could not add the supplier: " + ((x && x.message) || "no access to Purchasing › Vendors") + ". Ask an admin to add it."; return; }
+      if (!vendorOf(name) && Array.isArray(Store.data.vendors)) Store.data.vendors.push({ id: "pending-" + Date.now(), name: name, status: "Under review" }); // until the list reloads
+      if (typeof toast === "function") toast(name + " added to Purchasing › Vendors.");
+    } else if (typeof toast === "function") toast(ex.name + " is already in the vendor list, so it was picked.");
+    var o = document.getElementById("fsPdNv"); if (o) o.remove();
+    var py = document.getElementById("f_payee"); if (py) { py.value = ex ? String(ex.name).trim() : name; py.dispatchEvent(new Event("input", { bubbles: true })); }
+  }
   function addStaff(name, ent) {
     if (!name || GENERIC.test(name) || staffNames(ent).some(function (x) { return x.toLowerCase() === name.trim().toLowerCase(); })) return;
     var id = (ent + "-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).slice(0, 80);
@@ -441,14 +471,14 @@
       payeeType: a.code === "120401" || /supplier|vendor/i.test(a.name || "") ? "Supplier" : "Employee", payee: d.payee || "",
       project: it0.project || (cur && cur.project) || "",
       purpose: d.description || (d.items || []).map(function (l) { return l.desc; }).filter(Boolean).join("; ") || ("Advance demand " + d.demandNo),
-      amount: Math.round(n(d.amount)), advanceAmount: Math.round(n(d.amount)), payMethod: "Bank transfer", payRef: d.chequeNo || "",
+      amount: Math.round(d.advPart === "Partial" && n(d.advTotal) > n(d.amount) ? n(d.advTotal) : n(d.amount)), advanceAmount: Math.round(n(d.amount)), advPart: d.advPart || "Full", payMethod: "Bank transfer", payRef: d.chequeNo || "",
       vendor: ((isSupAdv(d) && vendorOf(d.payee)) || {}).id || (cur && cur.vendor) || "",
       issueDate: d.payDate || d.date, voucherNo: refs, demandId: d.id, demandNo: d.demandNo, advAcc: d.advAcc,
       status: cur && ["Settled", "Cancelled"].indexOf(cur.status) >= 0 ? cur.status : "Advance issued" });
     if (!cur) r.approvals = [{ stage: "Payment demand", action: "Approved", by: d.requestedBy || "", at: new Date().toISOString(), comment: "Booked through payment demand " + d.demandNo }];
     return { cur: cur, r: r };
   }
-  var advKeys = ["vendor", "reqNo", "date", "entity", "payeeType", "payee", "purpose", "amount", "advanceAmount", "payRef", "issueDate", "voucherNo", "advAcc", "status"];
+  var advKeys = ["advPart", "vendor", "reqNo", "date", "entity", "payeeType", "payee", "purpose", "amount", "advanceAmount", "payRef", "issueDate", "voucherNo", "advAcc", "status"];
   async function syncAdv(d, jv, bp) {
     if (!d || !d.id || !Array.isArray(Store.data[ADV])) return;
     var cur = byId(ADV, advId(d));
@@ -495,7 +525,14 @@
     }
     r.amount = lineTot(r.items);
     if (r.kind === "advance" && !r.advAcc) return err("Choose the advance account (120403 Advances to employees, or 120401 Advances to suppliers).");
-    if (r.kind !== "advance") r.advAcc = "";
+    if (r.kind !== "advance") { r.advAcc = ""; r.advPart = ""; r.advTotal = ""; }
+    else {
+      if (!r.advPart) r.advPart = "Full";
+      if (r.advPart === "Partial") {
+        if (!(n(r.advTotal) > 0)) return err("Partial advance: enter the total cost of the work, so the balance still to pay is known.");
+        if (n(r.advTotal) <= lineTot(r.items)) return err("Partial advance: the total cost (" + fmt(r.advTotal) + ") must be more than this advance (" + fmt(lineTot(r.items)) + "). If it is the whole cost, choose Full.");
+      } else r.advTotal = "";
+    }
     // Once its JV is in the books, what was demanded can only change by reversing it.
     var was = r.id && byId(DEM, r.id), jv = r.id && live(r.id, "accrue");
     if (was && jv && jv.status === "Posted") {
@@ -507,8 +544,10 @@
       if (g0 !== "Approved") return err(g0 === "Not approved" ? "The GM did not approve this demand, so it cannot be paid. Clear Pay from bank to save other changes." : "The GM has not approved this demand yet. It can be paid once the GM approves it. Clear Pay from bank to save other changes.");
     }
     if (isSupAdv(r)) {
-      if (!String(r.payee || "").trim() || GENSUP.test(r.payee)) return err("Pay to: choose the supplier from the list, or type the supplier's full name to add it to the vendor list.");
-      var vx = vendorOf(r.payee); if (vx && vx.status === "Blocked") return err("Pay to: " + vx.name + " is Blocked in Purchasing › Vendors. Choose another supplier, or unblock it there first.");
+      if (!String(r.payee || "").trim() || GENSUP.test(r.payee)) return err("Pay to: choose the supplier from the vendor list. If it is not there, click the green + beside Pay to and add it first.");
+      var vx = vendorOf(r.payee);
+      if (!vx) return err("Pay to: " + r.payee + " is not in the vendor list. Click the green + beside Pay to, add the supplier, then save the advance.");
+      if (vx.status === "Blocked") return err("Pay to: " + vx.name + " is Blocked in Purchasing › Vendors. Choose another supplier, or unblock it there first.");
       if (vx) r.payee = String(vx.name).trim();
     }
     if (isEmpAdv(r) && (!String(r.payee || "").trim() || GENERIC.test(r.payee))) return err("Pay to: choose the staff member who gets the advance from the list, or type their full name (not \"" + (r.payee || "Employee") + "\").");
@@ -675,7 +714,6 @@
         if (ok === false) { if (why) err("Could not save: " + (why.message || why) + "."); return ok; }
         if (!saved) return ok;
         if (isEmpAdv(saved)) addStaff(saved.payee, saved.entity);
-        if (isSupAdv(saved)) await addVendor(saved.payee);
         try {
           var made = [], b = null, a = await post(saved, "accrue"); if (a) made.push(a.ref);
           if (saved.bank) { b = await post(saved, "pay"); if (b) made.push(b.ref); }
@@ -704,6 +742,9 @@
       var k = document.getElementById("f_kind"), a = document.getElementById("f_advAcc"); if (!k || !a) return;
       var adv = k.value === "advance", w = a.closest(".f") || a.parentNode;
       var want = adv ? "" : "none"; if (w && w.style.display !== want) w.style.display = want;
+      var pp = document.getElementById("f_advPart"), pt = document.getElementById("f_advTotal");
+      var shw = function (el, on) { var x = el && (el.closest(".f") || el.parentNode); if (x && x.style.display !== (on ? "" : "none")) x.style.display = on ? "" : "none"; };
+      shw(pp, adv); shw(pt, adv && pp && pp.value === "Partial");
       // on an advance the line account is only the planned expense head; the JV debits the Advance account above
       var th = [].slice.call(document.querySelectorAll("#pdBox th, .bitab th")).find(function (x) { return /^(Account \(debit\)|Planned expense head)/.test(x.textContent); });
       var lbl = adv ? "Planned expense head (for settlement, optional)" : "Account (debit) *";
@@ -729,17 +770,21 @@
         if (vl.getAttribute("data-sig") !== vsig) { vl.innerHTML = vn.map(function (x) { return "<option value=\"" + esc(x) + "\">"; }).join(""); vl.setAttribute("data-sig", vsig); }
         if (py.getAttribute("list") !== "fsPdVend") { py.setAttribute("list", "fsPdVend"); py.setAttribute("placeholder", "Supplier's name"); }
         var vv = vendorOf(py.value), bad = !py.value.trim() || GENSUP.test(py.value) || (vv && vv.status === "Blocked");
-        var vt = !py.value.trim() || GENSUP.test(py.value) ? "Which supplier gets this advance? Pick from the vendor list (" + vn.length + " suppliers), or type the full name of a new one."
+        var vt = !py.value.trim() || GENSUP.test(py.value) ? "Which supplier gets this advance? Pick from the vendor list (" + vn.length + " suppliers). Not there? Click the green + to add it."
           : vv && vv.status === "Blocked" ? vv.name + " is Blocked in Purchasing › Vendors. Choose another supplier."
-          : vv ? "Supplier on the vendor list." : "New supplier: it is added to Purchasing › Vendors (Under review) when you save.";
+          : vv ? "Supplier on the vendor list." : "Not in the vendor list. Click the green + to add this supplier, then save.";
         if (hint && hint.textContent !== vt) hint.textContent = vt;
-        if (hint) hint.classList.toggle("fs-pdwarn", !!bad);
-      } else if (py.getAttribute("list") === "fsPdStaff" || py.getAttribute("list") === "fsPdVend") {
+        if (hint) hint.classList.toggle("fs-pdwarn", !!bad || !vv);
+        var lb = (py.closest(".f") || py.parentNode).querySelector("label");
+        if (lb && !lb.querySelector("#fsPdVAdd")) { lb.classList.add("fs-pdbl"); lb.insertAdjacentHTML("beforeend", "<button type=\"button\" class=\"fs-pdbplus\" id=\"fsPdVAdd\" title=\"Add a new supplier to the vendor list\" aria-label=\"Add a new supplier\">+</button>"); }
+      }
+      if (!sup) { var pb = document.getElementById("fsPdVAdd"); if (pb) pb.remove(); }
+      if (emp || sup) { /* list set above */ } else if (py.getAttribute("list") === "fsPdStaff" || py.getAttribute("list") === "fsPdVend") {
         py.removeAttribute("list"); py.removeAttribute("placeholder");
         if (hint) { hint.textContent = hint.getAttribute("data-fs0") || ""; hint.classList.remove("fs-pdwarn"); }
       }
     };
-    document.addEventListener("change", function (e) { if (e.target && /^f_(kind|advAcc|entity)$/.test(e.target.id)) kindSync(); });
+    document.addEventListener("change", function (e) { if (e.target && /^f_(kind|advAcc|entity|advPart)$/.test(e.target.id)) kindSync(); });
     document.addEventListener("input", function (e) { if (e.target && e.target.id === "f_payee") kindSync(); });
     new MutationObserver(function () { if (document.getElementById("f_kind")) kindSync(); }).observe(document.body, { childList: true, subtree: true });
     // without listView (newer app files), the summary goes above the list when the tab is open
@@ -827,6 +872,8 @@
         var r = byId(DEM, p.id === "fsPdPrint" ? F.rec.id : p.getAttribute("data-pdprint")); if (r) printSet(r);
         return;
       }
+      var nv = e.target.closest && e.target.closest("#fsPdVAdd, #fsPdNvSave, #fsPdNvClose");
+      if (nv) { e.preventDefault(); e.stopImmediatePropagation(); if (nv.id === "fsPdVAdd") nvOpen(); else if (nv.id === "fsPdNvSave") nvSave(); else { var ov = document.getElementById("fsPdNv"); if (ov) ov.remove(); } return; }
       var b = e.target.closest && e.target.closest("#fsPdBrAdd, #fsPdBrOk, #fsPdBrNo");
       if (b) { e.preventDefault(); e.stopImmediatePropagation(); branchBtn(b.id); return; }
       var t = e.target.closest && e.target.closest("#pdAdd, [data-pdrm]");
@@ -889,6 +936,8 @@
       ".fs-pdgmrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}.fs-pdgmrow input:not([type=checkbox]){flex:1 1 260px;min-width:0}" +
       ".fs-pdtick{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}" +
       ".fs-pdgmbox{grid-column:1/-1;margin:6px 0;padding:10px 12px;border:1px solid var(--line,#e3e6eb);border-radius:10px;background:#f8fafc}" +
+      "#fsPdNv{z-index:200}.fs-pdnvbox{width:min(440px,92vw);max-height:90vh;overflow:auto;padding:18px;border-radius:12px;background:var(--panel,#fff);box-shadow:0 20px 50px rgba(15,23,42,.3)}" +
+      ".fs-pdnvf{display:flex;flex-direction:column;gap:3px;margin-bottom:8px;font-size:13px;font-weight:600}.fs-pdnvf input,.fs-pdnvf textarea{font-weight:400}.fs-pdnvbtns{display:flex;gap:8px}" +
       ".fs-pdpayhl{outline:3px solid #16a34a;outline-offset:4px;border-radius:6px;transition:outline-color 1s}";
     document.head.appendChild(css);
     safe0(advHooks);
