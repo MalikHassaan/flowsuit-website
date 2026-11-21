@@ -369,6 +369,11 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
         return $coll === 'projects' ? 'You can only add or change maintenance contracts (AMC) and spare parts supply. Set the type to "' . implode('" or "', HSEC_AMC_TYPES) . '".'
             : 'You can only work on invoices of AMC and spare parts supply projects.';
     }
+    // A completed bank reconciliation is locked (hassan, 2026-11-21, QuickBooks-style): only an ERP admin can change or
+    // undo it, so the entries cleared on it cannot be unticked and its statement balance cannot move.
+    if ($coll === 'bankrecs' && $old !== null && ($old['status'] ?? '') === 'Reconciled' && empty($me['is_admin'])) {
+        return 'This bank reconciliation is completed and locked. Only an ERP admin can undo it.';
+    }
     if ($coll === 'journals' && $old !== null && ($old['status'] ?? '') === 'Posted') {
         if ($new === null) {
             return 'A posted voucher cannot be deleted. Post a reversing voucher instead.';
