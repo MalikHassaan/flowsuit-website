@@ -7,7 +7,7 @@
 // receipts, payments and closing balance in the books for that period. Entries before From that are still uncleared
 // stay on the list (they are still outstanding) and are marked "brought forward".
 (function () {
-  /* global Store, V, render */
+  /* global Store, V, render, F, toast, approverName */
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); };
   var lastQ = "";
   var jv = function (id) { return ((Store && Store.data && Store.data.journals) || []).find(function (j) { return j.id === id; }); };
@@ -108,8 +108,10 @@
   }
   function enhance() {
     if (typeof Store === "undefined" || !Store.data) return;
+    jvMark();
     if (gate()) { range(); return; }
     range();
+    lock();
     doneHint();
     loadCounts();
     history();
@@ -361,6 +363,7 @@
   document.addEventListener("fs-att", function () { window.FS_ATT && window.FS_ATT.forget("bankrecs/" + openRec); attAsked = 0; var b = document.getElementById("fsBrAtt"); if (b) b.removeAttribute("data-k"); loadCounts(); stmtFiles(); });
   function doneHint() {
     var b = document.getElementById("brDone"); if (!b) return;
+    if (LK) { var p0 = document.getElementById("fsBrWhy"); if (p0) p0.remove(); return; }
     // the live app keeps the button clickable but refuses quietly, so check the same two things whether or not it is greyed
     var bal = document.getElementById("brBal"), diff = "";
     [].slice.call(document.querySelectorAll("tr")).forEach(function (tr) { if (/^\s*Difference\s*$/i.test((tr.children[0] || {}).textContent || "") && tr.children[1]) diff = String(tr.children[1].textContent || "").trim(); });
@@ -371,6 +374,68 @@
     if (!why) { if (p) p.remove(); return; }
     if (!p) { b.parentNode.insertAdjacentHTML("afterend", "<p class=\"fs-brwhy\" id=\"fsBrWhy\"></p>"); p = document.getElementById("fsBrWhy"); }
     if (p && p.textContent !== why) p.textContent = why;
+  }
+  // Lock (hassan, 2026-11-21, QuickBooks-style "R" entries): a completed reconciliation cannot be changed; its ticks,
+  // statement balance and buttons are frozen, and only an ERP admin can undo it (the server refuses anyone else). A
+  // statement dated before one already completed for the same bank cannot be reconciled either, because that would clear
+  // entries twice: undo the later one first. Vouchers cleared on a completed reconciliation say so on their form.
+  var LK = null;
+  var isAdmin = function () { return !!(window.FS_BRIDGE && window.FS_BRIDGE.owner); };
+  function lockState() {
+    var acc = document.getElementById("brAcc"), to = document.getElementById("brDate");
+    if (!acc || !to || !to.value || typeof V === "undefined" || !V) return null;
+    var a = (Store.data.accounts || []).find(function (x) { return x.id === acc.value; }); if (!a) return null;
+    var R = Store.data.bankrecs || [], id = recId(V.ent, a.code, to.value), rec = R.find(function (r) { return r.id === id; });
+    if (rec && rec.status === "Reconciled") return { k: "done", rec: rec, id: id };
+    var later = R.filter(function (r) { return r.entity === V.ent && r.account === a.id && r.status === "Reconciled" && String(r.stmtDate) > to.value; })
+      .sort(function (x, y) { return String(y.stmtDate).localeCompare(String(x.stmtDate)); })[0];
+    return later ? { k: "later", rec: later, id: id } : null;
+  }
+  function lock() {
+    LK = lockState();
+    var bar = document.getElementById("fsBrLock"), done = document.getElementById("brDone");
+    if (!LK) { if (bar) bar.remove(); return; }
+    var by = (LK.rec.preparedBy || {}).name || "", at = String((LK.rec.preparedBy || {}).at || "").slice(0, 10);
+    var html = LK.k === "done"
+      ? "<b>🔒 Reconciled" + (by ? " by " + esc(by) : "") + (at ? " on " + esc(fd(at)) : "") + ". Locked.</b> The ticked entries, the statement balance and this reconciliation cannot be changed." +
+        (isAdmin() ? " <button type=\"button\" class=\"btn sm danger\" id=\"fsBrUndo\">Undo reconciliation</button>" : " Only an ERP admin can undo it.")
+      : "<b>🔒 A later statement (" + esc(fd(LK.rec.stmtDate)) + ") is already reconciled for this bank.</b> Reconcile statements in date order: pick a date after " + esc(fd(LK.rec.stmtDate)) + ", or ask an ERP admin to undo that reconciliation first.";
+    if (!bar) { var anchor = done ? done.parentNode : document.querySelector(".ctls"); if (!anchor) return; anchor.insertAdjacentHTML("beforebegin", "<div class=\"fs-brlock\" id=\"fsBrLock\"></div>"); bar = document.getElementById("fsBrLock"); }
+    if (bar.innerHTML !== html) bar.innerHTML = html;
+    document.querySelectorAll("input[data-brk]").forEach(function (cb) { if (!cb.disabled) cb.disabled = true; });
+    ["brSave", "brDone", "brAll", "brNone"].forEach(function (i) { var b = document.getElementById(i); if (b && !b.disabled) b.disabled = true; });
+    var bal = document.getElementById("brBal"); if (bal && !bal.readOnly) bal.readOnly = true;
+  }
+  // the app keeps some of its buttons clickable, so stop them here while locked
+  document.addEventListener("click", function (e) {
+    var t = e.target; if (!t || !t.closest) return;
+    if (LK && (t.closest("#brSave, #brDone, #brAll, #brNone, #brJv") || (t.matches && t.matches("input[data-brk]")))) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (typeof toast === "function") toast(LK.k === "done" ? "This reconciliation is locked." : "A later statement is already reconciled for this bank.");
+      return;
+    }
+    if (t.id === "fsBrUndo" && LK && LK.k === "done" && isAdmin()) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      var nm = (typeof approverName === "function" && approverName()) || (window.FS_BRIDGE && window.FS_BRIDGE.name) || "admin";
+      t.disabled = true;
+      Store.save("bankrecs", Object.assign({}, LK.rec, { status: "Draft", undone: (LK.rec.undone || []).concat([{ name: nm, at: new Date().toISOString() }]) }))
+        .then(function () { if (typeof toast === "function") toast("Reconciliation undone. It is a draft again."); LK = null; if (typeof render === "function") render(); },
+          function (er) { t.disabled = false; if (typeof toast === "function") toast((er && er.message) || "Could not undo it."); });
+    }
+  }, true);
+  document.addEventListener("keydown", function (e) { if (LK && e.target && e.target.id === "brBal") { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+  // on a voucher: the reconciliations that cleared it
+  function jvMark() {
+    if (typeof F === "undefined" || !F || F.c !== "journals" || !F.rec || !F.rec.id) { var o = document.getElementById("fsJvRec"); if (o) o.remove(); return; }
+    var h2 = document.querySelector("#frm h2"); if (!h2) return;
+    var pre = F.rec.id + ":", hits = (Store.data.bankrecs || []).filter(function (r) { return r.status === "Reconciled" && (r.cleared || []).some(function (k) { return String(k).indexOf(pre) === 0; }); });
+    var cur = document.getElementById("fsJvRec");
+    if (!hits.length) { if (cur) cur.remove(); return; }
+    var txt = "🔒 Cleared on the bank reconciliation of " + hits.map(function (r) { return fd(r.stmtDate) + " (" + (r.accCode || "") + ")"; }).join(", ") +
+      ". It cannot be changed. If it was wrong (e.g. a bounced cheque), post a reversing voucher: the reversal comes onto the next reconciliation.";
+    if (cur && cur.textContent === txt) return;
+    if (!cur) { h2.insertAdjacentHTML("afterend", "<p class=\"banner info fs-jvrec\" id=\"fsJvRec\"></p>"); cur = document.getElementById("fsJvRec"); }
+    cur.textContent = txt;
   }
   function pairs(table) {
     if (typeof V === "undefined" || !V || !V.br || !V.br.set) return;
@@ -418,6 +483,7 @@
       ".fs-brtabs{display:flex;gap:4px;margin:14px 0 0;border-bottom:2px solid #e2e8f0}.fs-brtabs button{border:0;background:none;padding:9px 16px;font:inherit;font-weight:600;color:#64748b;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}" +
       ".fs-brtabs button[aria-selected=true]{color:#1F6FB8;border-bottom-color:#1F6FB8}.fs-brtabs span{display:inline-block;min-width:20px;padding:0 6px;margin-left:4px;border-radius:999px;background:#e2e8f0;color:#334155;font-size:12px}" +
       ".fs-brsumc{margin-top:12px}.fs-brsumc h3{margin:0 0 8px}.fs-brsum5{grid-template-columns:repeat(5,1fr)}@media(max-width:900px){.fs-brsum5{grid-template-columns:1fr 1fr}}" +
+      ".fs-brlock{margin:10px 0;padding:10px 12px;border:1px solid #93c5fd;border-radius:10px;background:#eff6ff;font-size:13px;color:#1e3a8a}.fs-brlock .btn{margin-left:8px}" +
       ".fs-brwhy{margin:6px 0 0;font-size:12.5px;color:#b45309}" +
       ".fs-bf{font-size:11px;color:#b45309;font-weight:600}" +
       ".fs-brfind{display:flex;align-items:center;gap:8px;margin:8px 0}.fs-brfind label{font-weight:600;font-size:13px}.fs-brfind input{flex:0 1 360px;padding:6px 9px;font:inherit}";
