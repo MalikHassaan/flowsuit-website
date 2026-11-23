@@ -74,7 +74,7 @@
     // columns left off the screen (hassan, 2026-11-23: "remove contract PKR, contract USD, contract asset, cash position from
     // here but the system should save it"): the figures are still worked out, saved and exported; only the cells are hidden
     ths.forEach(function (th, i) {
-      if (!/^(contract pkr|contract usd|contract asset.*|cash position)$/i.test(txt(th)) || th.classList.contains("fs-colhide")) return;
+      if (!/^(contract usd|contract asset.*|cash position)$/i.test(txt(th)) || th.classList.contains("fs-colhide")) return;
       th.classList.add("fs-colhide");
       [].slice.call(T.tb.querySelectorAll("tbody tr, tfoot tr")).forEach(function (tr) { var td = cellAt(tr, i); if (td && (td.colSpan || 1) === 1) td.classList.add("fs-colhide"); });
     });
