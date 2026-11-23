@@ -74,7 +74,10 @@
       L.concat(v && L.indexOf(v) < 0 ? [v] : []).map(function (x) { return "<option value=\"" + e$(x) + "\"" + (x === v ? " selected" : "") + ">" + e$(x) + "</option>"; }).join("");
     var req = limited(ent) || (F && F.c === "projects" && must(rec));
     if (req && !one) opts = opts.replace(/^<option value=""[^>]*>[^<]*<\/option>/, "<option value=\"\">Choose the office…</option>");
-    return "<div class=\"f fs-rgf\"><label for=\"f_region\">Office / region" + (req ? " *" : "") + "</label><select id=\"f_region\"" + (one ? " disabled" : "") + ">" + opts + "</select>" +
+    // admins add a new office right here (hassan, 2026-11-23: "add plus button to add the region if any new region is entered")
+    var plus = window.FS_ADMIN && !limited(ent) ? "<button type=\"button\" class=\"btn sm\" id=\"fsRgFPlus\" title=\"Add a new office / region for " + e$(ent) + "\">+</button>" +
+      "<span id=\"fsRgFNew\" hidden><input id=\"fsRgFName\" maxlength=\"40\" placeholder=\"New office, e.g. Peshawar\" autocomplete=\"off\"><button type=\"button\" class=\"btn sm pri\" id=\"fsRgFOk\">Add</button><button type=\"button\" class=\"btn sm\" id=\"fsRgFNo\">Cancel</button></span>" : "";
+    return "<div class=\"f fs-rgf\"><label for=\"f_region\">Office / region" + (req ? " *" : "") + "</label><div class=\"fs-rgrow\"><select id=\"f_region\"" + (one ? " disabled" : "") + ">" + opts + "</select>" + plus + "</div>" +
       "<span class=\"hint\">" + (one ? "Records you make are for your office." : "Reports can be run for one office from the Office picker at the top.") + "</span></div>";
   }
   function placeField() {
@@ -106,14 +109,24 @@
     var co = document.querySelector("#main .top .coline"), tag = co && co.querySelector(".fs-rgc"), t = c === NONE ? " · No office set" : c ? " · " + c + " office" : "";
     if (co && (tag ? tag.textContent : "") !== t) { if (!tag) { tag = document.createElement("span"); tag.className = "fs-rgc"; co.appendChild(tag); } tag.textContent = t; }
   }
-  async function addOffice() {
-    var inp = document.getElementById("fsRgName"), name = String((inp && inp.value) || "").replace(/[|,]/g, " ").replace(/\s+/g, " ").trim();
+  async function addOffice(inForm) {
+    var inp = document.getElementById(inForm ? "fsRgFName" : "fsRgName"), name = String((inp && inp.value) || "").replace(/[|,]/g, " ").replace(/\s+/g, " ").trim();
     if (!name) { if (inp) inp.focus(); return; }
-    var s = settings(), all = Object.assign({}, s.regions || {}), L = (all[V.ent] || []).slice();
-    if (L.some(function (x) { return x.toLowerCase() === name.toLowerCase(); })) { toast(name + " is already an office of " + V.ent + "."); return; }
-    L.push(name); all[V.ent] = L;
-    try { await Store.save("settings", Object.assign({}, s, { id: "main", regions: all })); pick[V.ent] = name; keep(); toast(name + " added as an office of " + coLabel(V.ent) + "."); }
-    catch (e) { toast("Could not add the office: " + (e.message || e)); return; }
+    var ent = inForm ? (document.getElementById("f_entity") || {}).value || (F && F.rec.entity) : V.ent;
+    if (!ent || ent === "All") { toast("Choose the company first."); return; }
+    var s = settings(), all = Object.assign({}, s.regions || {}), L = (all[ent] || []).slice();
+    var dup = L.find(function (x) { return x.toLowerCase() === name.toLowerCase(); });
+    if (dup && !inForm) { toast(name + " is already an office of " + ent + "."); return; }
+    if (!dup) {
+      L.push(name); all[ent] = L;
+      try { await Store.save("settings", Object.assign({}, s, { id: "main", regions: all })); var sm = (Store.data.settings || []).find(function (x) { return x.id === "main"; }); if (sm) sm.regions = all; toast(name + " added as an office of " + coLabel(ent) + "."); }
+      catch (e) { toast("Could not add the office: " + (e.message || e)); return; }
+    }
+    if (inForm) { // pick it on the form, keep everything typed
+      if (F) { try { readForm(); } catch (x) { /* keep going */ } F.rec.region = dup || name; placeField(); }
+      return;
+    }
+    pick[ent] = name; keep();
     render();
   }
 
@@ -202,12 +215,21 @@
       }
     });
     document.addEventListener("click", function (e) {
-      var b = e.target.closest && e.target.closest("#fsRgOk, #fsRgNo");
+      var b = e.target.closest && e.target.closest("#fsRgOk, #fsRgNo, #fsRgFPlus, #fsRgFOk, #fsRgFNo");
       if (!b) return;
       e.preventDefault();
+      var fn = document.getElementById("fsRgFNew");
+      if (b.id === "fsRgFPlus") { if (fn) { fn.hidden = false; b.hidden = true; document.getElementById("fsRgFName").focus(); } return; }
+      if (b.id === "fsRgFOk") { addOffice(true); return; }
+      if (b.id === "fsRgFNo") { if (fn) fn.hidden = true; var pb = document.getElementById("fsRgFPlus"); if (pb) pb.hidden = false; return; }
       if (b.id === "fsRgOk") addOffice(); else { var n = document.getElementById("fsRgNew"); if (n) n.hidden = true; }
     });
     document.addEventListener("keydown", function (e) {
+      if (e.target && e.target.id === "fsRgFName" && (e.key === "Enter" || e.key === "Escape")) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (e.key === "Enter") addOffice(true); else { document.getElementById("fsRgFNew").hidden = true; var pb = document.getElementById("fsRgFPlus"); if (pb) pb.hidden = false; }
+        return;
+      }
       if (e.target && e.target.id === "fsRgName" && (e.key === "Enter" || e.key === "Escape")) {
         e.preventDefault(); e.stopImmediatePropagation();
         if (e.key === "Enter") addOffice(); else document.getElementById("fsRgNew").hidden = true;
@@ -226,6 +248,8 @@
   var css = document.createElement("style");
   css.textContent = "#fsRgSel{padding:4px 6px;border:1px solid #cfd6de;border-radius:6px;font:inherit;background:#fff;color:#222}" +
     "#fsRgSel.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18);font-weight:600}#fsRgNew{display:inline-flex;gap:4px;align-items:center}" +
-    "#fsRgNew[hidden]{display:none}#fsRgName{padding:4px 6px;border:1px solid #cfd6de;border-radius:6px;font:inherit;width:120px}@media print{#fsRgLab{display:none}}";
+    "#fsRgNew[hidden],#fsRgFNew[hidden],#fsRgFPlus[hidden]{display:none}.fs-rgrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.fs-rgrow #f_region{flex:1 1 160px;min-width:0}" +
+    "#fsRgFPlus{min-width:34px;font-size:18px;font-weight:700;line-height:1}#fsRgFNew{display:inline-flex;gap:4px;align-items:center;flex:1 1 100%}#fsRgFName{flex:1;padding:6px 8px;border:1px solid #cfd6de;border-radius:6px;font:inherit}" +
+    "#fsRgName{padding:4px 6px;border:1px solid #cfd6de;border-radius:6px;font:inherit;width:120px}@media print{#fsRgLab{display:none}}";
   (document.head || document.documentElement).appendChild(css);
 })();
