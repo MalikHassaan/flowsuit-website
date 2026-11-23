@@ -45,14 +45,36 @@
   // Status picker and the Office picker; the count and totals follow all of them. Months come from the voucher date.
   var MKEY = "fs-mof", mpick = (function () { try { return JSON.parse(sessionStorage.getItem(MKEY)) || {}; } catch (e) { return {}; } })();
   var mkeep = function () { try { sessionStorage.setItem(MKEY, JSON.stringify(mpick)); } catch (e) { /* private window */ } };
-  var MDATE = { journals: "date" };
   var MN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   var mLabel = function (m) { return m === "-" ? "No date" : MN[+m.slice(5, 7) - 1] + " " + m.slice(0, 4); };
-  function months(T) { // data-id -> "YYYY-MM"
-    if (!MDATE[T.c]) return null;
+  // The same picker sorts Projects (customer POs) by their type (hassan, 2026-11-23: "some are new installation some are
+  // maintenance ... show in which category the PO is ... selection option all, New installation, category wise").
+  var EXT = {
+    journals: { word: "Month", all: "All months", desc: true, label: mLabel,
+      key: function (r) { var d = String(r.date || ""); return /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : "-"; } },
+    projects: { word: "Type", all: "All types", label: function (x) { return x === "-" ? "No type set" : x; },
+      key: function (r) { return String(r.type || "").trim() || "-"; } }
+  };
+  function months(T) { // data-id -> the row's month (vouchers) or type (projects)
+    var X = EXT[T.c]; if (!X) return null;
     var all = (typeof Store !== "undefined" && Store.data && Store.data[T.c]) || null; if (!all) return null;
-    var by = {}; all.forEach(function (r) { var d = String(r[MDATE[T.c]] || ""); by[r.id] = /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : "-"; });
+    var by = {}; all.forEach(function (r) { by[r.id] = X.key(r); });
     return by;
+  }
+  // projects: the type under each project's name, so every PO shows its category
+  function tags(T) {
+    if (T.c !== "projects" || !T.mon) return;
+    var ths = [].slice.call(T.tb.querySelectorAll("thead th")), col = ths.findIndex(function (th) { return /^project$/i.test(txt(th)); });
+    if (col < 0) return;
+    T.rows.forEach(function (tr) {
+      var td = tr.children[col], ty = T.mon[tr.getAttribute("data-id")]; if (!td) return;
+      var tag = td.querySelector(".fs-tytag"), t = ty && ty !== "-" ? ty : "";
+      if (!t) { if (tag) tag.remove(); return; }
+      if (!tag) { tag = document.createElement("span"); tag.className = "fs-tytag"; td.appendChild(tag); }
+      if (tag.textContent !== t) tag.textContent = t;
+      var k = /AMC|maint/i.test(t) ? "amc" : /supply/i.test(t) ? "sup" : /service job/i.test(t) ? "svc" : /modern/i.test(t) ? "mod" : "new";
+      if (tag.getAttribute("data-k") !== k) tag.setAttribute("data-k", k);
+    });
   }
   var mOk = function (T, tr) { var w = T.mon && mpick[T.c]; return !w || T.mon[tr.getAttribute("data-id")] === w; };
   var special = function (v) { return v && (v.charAt(0) === "@" || v.charAt(0) === "!"); };
@@ -76,16 +98,20 @@
     if (!T.mon) { if (sel) sel.closest("label").remove(); return; }
     var want = T.col < 0 ? "" : pick[T.c] || "", counts = {};
     T.rows.forEach(function (tr) { if (!keepRow(T, tr, want)) return; var m = T.mon[tr.getAttribute("data-id")] || "-"; counts[m] = (counts[m] || 0) + 1; });
-    var ms = Object.keys(counts).sort().reverse(), cur = mpick[T.c] || "", tot = ms.reduce(function (a, m) { return a + counts[m]; }, 0);
+    var X = EXT[T.c], ms = Object.keys(counts).sort(), cur = mpick[T.c] || "", tot = ms.reduce(function (a, m) { return a + counts[m]; }, 0);
+    if (X.desc) ms.reverse();
     if (cur && !counts[cur]) ms.unshift(cur);
-    var opts = "<option value=\"\">All months (" + tot + ")</option>" + ms.map(function (m) { return "<option value=\"" + m + "\"" + (m === cur ? " selected" : "") + ">" + mLabel(m) + " (" + (counts[m] || 0) + ")</option>"; }).join("");
+    var q = function (v) { return String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
+    var opts = "<option value=\"\">" + X.all + " (" + tot + ")</option>" + ms.map(function (m) { return "<option value=\"" + q(m) + "\"" + (m === cur ? " selected" : "") + ">" + q(X.label(m)) + " (" + (counts[m] || 0) + ")</option>"; }).join("");
     if (!sel) {
       var anchor = document.getElementById("fsStF"); anchor = anchor ? anchor.closest("label") : document.getElementById("q");
-      var lab = document.createElement("label"); lab.className = "fs-stf"; lab.innerHTML = "Month <select id=\"fsMoF\" aria-label=\"Filter by month\"></select>";
+      var lab = document.createElement("label"); lab.className = "fs-stf"; lab.innerHTML = X.word + " <select id=\"fsMoF\" aria-label=\"Filter by " + X.word.toLowerCase() + "\"></select>";
       anchor.insertAdjacentElement("afterend", lab); sel = lab.querySelector("select");
     }
     if (sel.getAttribute("data-c") !== T.c || sel.getAttribute("data-o") !== opts) { sel.innerHTML = opts; sel.setAttribute("data-c", T.c); sel.setAttribute("data-o", opts); }
+    var lw = sel.closest("label").firstChild; if (lw && lw.nodeType === 3 && lw.nodeValue !== X.word + " ") lw.nodeValue = X.word + " ";
     sel.classList.toggle("on", !!cur);
+    tags(T);
   }
   function run() {
     var T = table(); if (!T) { var ms = document.getElementById("fsMoF"); if (ms) ms.closest("label").remove(); return; }
@@ -139,6 +165,9 @@
   })();
   var css = document.createElement("style");
   css.textContent = ".fs-stf{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#555}.fs-stf select{padding:6px 8px;border:1px solid #cfd6de;border-radius:8px;background:#fff;font:inherit;color:#222;max-width:220px}" +
+    ".fs-tytag{display:inline-block;margin-top:4px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:18px;background:#e0ecf8;color:#1F6FB8;white-space:nowrap}" +
+    ".fs-tytag[data-k=amc]{background:#dcfce7;color:#15803d}.fs-tytag[data-k=sup]{background:#fef3c7;color:#92400e}.fs-tytag[data-k=svc]{background:#ede9fe;color:#6d28d9}.fs-tytag[data-k=mod]{background:#e0f2fe;color:#0369a1}" +
+    "td>.fs-tytag{display:table;margin-top:4px}" +
     ".fs-stf select.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18);font-weight:600}@media print{.fs-stf{display:none}}";
   (document.head || document.documentElement).appendChild(css);
 })();
