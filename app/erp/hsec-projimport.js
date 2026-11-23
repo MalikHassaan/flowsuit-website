@@ -76,8 +76,11 @@
     return { rows: out };
   }
 
+  // folded to one button until it is used (hassan, 2026-11-23: "remove the import text"); a file being previewed keeps it open
+  var opened = false;
   function panel() {
-    var p = '<div class="panel" id="fsPi" style="margin-bottom:12px"><h3 style="margin-top:0">Import projects from Excel</h3>' +
+    if (!opened && !(plan && (plan.rows || plan.err))) return '<div id="fsPi" class="fs-pimin"><button class="btn line" type="button" id="fsPiOpen">Import projects from Excel</button></div>';
+    var p = '<div class="panel" id="fsPi" style="margin-bottom:12px"><h3 style="margin-top:0;display:flex;justify-content:space-between;align-items:center">Import projects from Excel <button class="btn sm line" type="button" id="fsPiClose">Close</button></h3>' +
       '<p class="muted" style="margin-top:0">One row per project with Project, Contract Value and Expected LC, then either one % column per milestone (Advance, On BG, After LC opening, Pre-shipment, Shipping docs / BL, Arrival at port, Delivery at site, Installation, Testing &amp; commissioning, Handover, Third-party inspection, 3 months after T&amp;C) or a Payment Terms text. Projects already here are updated, not added twice.</p>';
     if (V.ent === "All") return p + '<p class="muted">Pick one company at the top right first; the projects are created in that company.</p></div>';
     p += '<div class="actions"><label class="btn" for="fsPiFile" style="cursor:pointer">Choose Excel file</label><input type="file" id="fsPiFile" accept=".xlsx,.xls" style="position:absolute;left:-9999px">' +
@@ -174,7 +177,17 @@
       if (e.target.id === "fsPiTpl") template();
       if (e.target.id === "fsPiGo") create();
       if (e.target.id === "fsPiX") { plan = null; render(); }
+      if (e.target.id === "fsPiOpen") { opened = true; render(); }
+      if (e.target.id === "fsPiClose") { opened = false; plan = null; render(); }
     });
+    // the folded button sits in the list's own toolbar, beside Print report
+    new MutationObserver(function () {
+      var w = document.querySelector("#fsPi.fs-pimin"), q = document.getElementById("q"), bar = q && q.closest(".bar");
+      if (!w || !bar || w.parentNode === bar) return;
+      var pr = [].slice.call(bar.querySelectorAll("button")).find(function (b) { return /print/i.test(b.textContent); });
+      if (pr) bar.insertBefore(w, pr); else bar.appendChild(w);
+    }).observe(document.body, { childList: true, subtree: true });
+    var st = document.createElement("style"); st.textContent = ".fs-pimin{display:inline-flex;margin:0 0 12px}.bar .fs-pimin{margin:0}"; document.head.appendChild(st);
     if (/projects/.test(location.hash) && typeof render === "function") render();
     return true;
   }
