@@ -119,7 +119,7 @@
 
   // ---- project form: province fills the AMC sales tax %; a maintenance contract starts Active
   function formFix(why) {
-    var t = document.getElementById("f_type"); if (!t || t.value !== AMC) return;
+    var t = document.getElementById("f_type"); if (!t || (t.value !== AMC && t.value !== "Service job (installation / dismantling / repair)")) return; // service jobs too (hsec-svcjob.js)
     var st = document.getElementById("f_status"); if (st && st.value === "Tendering") { st.value = "Active"; }
     var pv = document.getElementById("f_province"), tx = document.getElementById("f_amcTaxPct");
     if (!pv || !tx) return;

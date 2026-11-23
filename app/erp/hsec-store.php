@@ -47,7 +47,8 @@ function hsec_visible(?array $allowed, ?array $data): bool
 // that lists customer invoices (Receivables, balances, Reports, Management), they get only the AMC invoices too.
 const HSEC_AMC_TYPE = 'Maintenance contract (AMC)';
 // Project types an AMC-only user may see and work on (hassan, 2026-11-04: maintenance and spare parts supply).
-const HSEC_AMC_TYPES = [HSEC_AMC_TYPE, 'Supply only'];
+// and one-off lift service jobs on a PO (hassan, 2026-11-23: temporary lift installation, dismantling, repair)
+const HSEC_AMC_TYPES = [HSEC_AMC_TYPE, 'Supply only', 'Service job (installation / dismantling / repair)'];
 function hsec_amc_scope(array $me): int
 {
     if (!empty($me['is_admin'])) {
@@ -366,7 +367,7 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
     }
     $amc = hsec_amc_scope($me);
     if (hsec_amc_hidden($amc, $coll, $old) || hsec_amc_hidden($amc, $coll, $new)) {
-        return $coll === 'projects' ? 'You can only add or change maintenance contracts (AMC) and spare parts supply. Set the type to "' . implode('" or "', HSEC_AMC_TYPES) . '".'
+        return $coll === 'projects' ? 'You can only add or change maintenance contracts (AMC), spare parts supply and service jobs. Set the type to "' . implode('" or "', HSEC_AMC_TYPES) . '".'
             : 'You can only work on invoices of AMC and spare parts supply projects.';
     }
     // A completed bank reconciliation is locked (hassan, 2026-11-21, QuickBooks-style): only an ERP admin can change or

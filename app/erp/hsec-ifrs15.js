@@ -37,7 +37,8 @@
     var cnt = {};
     Store.data.receivables.forEach(function (r) { if (r.projectId === p.id && r.revAccount) cnt[r.revAccount] = (cnt[r.revAccount] || 0) + 1; });
     var best = Object.keys(cnt).sort(function (a, b) { return cnt[b] - cnt[a]; })[0];
-    return best || idc(p.type === "Modernisation" ? "410103" : p.type === "Supply only" ? "410302" : "410101");
+    var sv = p.type === "Service job (installation / dismantling / repair)" && window.FS_SVC ? window.FS_SVC.acc() : ""; // service jobs: their own income account
+    return best || sv || idc(p.type === "Modernisation" ? "410103" : p.type === "Supply only" ? "410302" : "410101");
   }
   function rows(ent, ym) {
     var end = iso(monthB(ym).e);
