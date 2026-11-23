@@ -375,6 +375,13 @@ function hsec_refusal(array $me, string $coll, ?array $old, ?array $new): ?strin
         return 'This bank reconciliation is completed and locked. Only an ERP admin can undo it.';
     }
     if ($coll === 'journals' && $old !== null && ($old['status'] ?? '') === 'Posted') {
+        // An unpaid payment demand is deleted with its demand JV by an ERP admin (hassan, 2026-11-23: "only when the JV is
+        // made [delete]; if the BPV is made then it will get reversed"). The JV never touched a bank; the history table
+        // still keeps it. A paid demand's vouchers are reversed, never deleted.
+        $src = is_array($old['source'] ?? null) ? $old['source'] : [];
+        if ($new === null && !empty($me['is_admin']) && ($src['c'] ?? '') === 'paydemands' && ($src['ev'] ?? '') === 'accrue') {
+            return null;
+        }
         if ($new === null) {
             return 'A posted voucher cannot be deleted. Post a reversing voucher instead.';
         }
