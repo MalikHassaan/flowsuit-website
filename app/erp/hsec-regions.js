@@ -9,7 +9,7 @@
 // Who may see and change which office's records is decided on the server (users.hsec_regions, see hsec-store.php);
 // FS_REGIONS is that person's limit, e.g. {"JSPL": ["Karachi"]}, or null.
 (function () {
-  /* global Store, S, V, F, LEDGER, ledger, drawForm, readForm, render, scheduleRender, settings, esc, toast, coLabel */
+  /* global Store, S, V, F, LEDGER, ledger, drawForm, readForm, submitForm, render, scheduleRender, settings, esc, toast, coLabel */
   var COLLS = ["journals", "payables", "receivables", "crnotes", "requisitions", "pos", "projects", "lcs", "advances", "vadvances",
     "custadv", "invdocs", "quotes", "paydemands", "adminExp", "bgs", "recexp", "recmon"];
   var KEY = "fs-rg", NONE = "-";
@@ -30,6 +30,14 @@
     var L = list(V.ent), p = pick[V.ent] || "";
     if (limited(V.ent) && L.length === 1) return ""; // their records are already only that office
     return p === NONE ? (limited(V.ent) ? "" : NONE) : L.indexOf(p) >= 0 ? p : "";
+  };
+  // Maintenance-side projects (AMC, spare parts supply, service jobs) must say which office they belong to when the
+  // company has offices (hassan, 2026-11-23: "while adding the maintenance project in amc the region wise addition is
+  // mandatory ... this project is located in Multan, this one pertains to Lahore, so the report can be all or region wise").
+  var MUST = ["Maintenance contract (AMC)", "Supply only", "Service job (installation / dismantling / repair)"];
+  var must = function (rec) {
+    var t = document.getElementById("f_type"), ty = t && F && F.c === "projects" ? t.value : rec && rec.type;
+    return !!(rec && MUST.indexOf(ty) >= 0 && list(rec.entity).length);
   };
   var match = function (rec, r) { return r === NONE ? !rec.region : rec.region === r; };
   var find = function (c, id) { return id && Store.data[c] ? Store.data[c].find(function (x) { return x.id === id; }) : null; };
@@ -64,7 +72,9 @@
     var one = limited(ent) && L.length === 1;
     var opts = (one ? "" : "<option value=\"\">" + (limited(ent) ? "Choose your office…" : "Head office / not set") + "</option>") +
       L.concat(v && L.indexOf(v) < 0 ? [v] : []).map(function (x) { return "<option value=\"" + e$(x) + "\"" + (x === v ? " selected" : "") + ">" + e$(x) + "</option>"; }).join("");
-    return "<div class=\"f fs-rgf\"><label for=\"f_region\">Office / region" + (limited(ent) ? " *" : "") + "</label><select id=\"f_region\"" + (one ? " disabled" : "") + ">" + opts + "</select>" +
+    var req = limited(ent) || (F && F.c === "projects" && must(rec));
+    if (req && !one) opts = opts.replace(/^<option value=""[^>]*>[^<]*<\/option>/, "<option value=\"\">Choose the office…</option>");
+    return "<div class=\"f fs-rgf\"><label for=\"f_region\">Office / region" + (req ? " *" : "") + "</label><select id=\"f_region\"" + (one ? " disabled" : "") + ">" + opts + "</select>" +
       "<span class=\"hint\">" + (one ? "Records you make are for your office." : "Reports can be run for one office from the Office picker at the top.") + "</span></div>";
   }
   function placeField() {
@@ -119,7 +129,7 @@
   };
 
   function hook() {
-    if (typeof Store === "undefined" || typeof ledger !== "function" || typeof drawForm !== "function" || typeof readForm !== "function" || typeof V === "undefined" || typeof S === "undefined") return false;
+    if (typeof Store === "undefined" || typeof ledger !== "function" || typeof drawForm !== "function" || typeof readForm !== "function" || typeof submitForm !== "function" || typeof V === "undefined" || typeof S === "undefined") return false;
 
     var oldL = ledger, lc = { base: null, key: "", val: null };
     ledger = function () { // eslint-disable-line no-global-assign
@@ -153,6 +163,24 @@
         return out;
       };
     })(readForm);
+
+    submitForm = (function (old) { // eslint-disable-line no-global-assign
+      return async function () {
+        if (F && F.c === "projects") {
+          readForm();
+          if (must(F.rec) && !F.rec.region) {
+            var er = document.getElementById("ferr"), el = document.getElementById("f_region");
+            if (er) er.textContent = "Choose the office / region this project belongs to (for example Multan or Lahore). The AMC reports can then be run for all offices or one.";
+            if (el) el.focus();
+            return false;
+          }
+        }
+        return old.apply(this, arguments);
+      };
+    })(submitForm);
+    document.addEventListener("change", function (e) { // the star follows the project type
+      if (e.target && e.target.id === "f_type" && F && F.c === "projects") { var v = document.getElementById("f_region"); var keep = v ? v.value : ""; try { readForm(); placeField(); } catch (x) { /* never break the form */ } v = document.getElementById("f_region"); if (v && keep) v.value = keep; }
+    });
 
     Store.save = (function (old) {
       return function (c, rec) {
