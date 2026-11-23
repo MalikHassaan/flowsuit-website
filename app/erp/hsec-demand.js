@@ -874,13 +874,32 @@
       if (dl) {
         e.preventDefault(); e.stopImmediatePropagation();
         var did = dl.getAttribute("data-pddel"), dr = byId(DEM, did); if (!dr) return;
-        if (!vouchersOf(did).some(function (j) { return j.status !== "Rejected" && !j.reversedBy && !j.reversalOf; })) {
-          Store.remove(DEM, did).then(function () { toast((dr.demandNo || "Demand") + " deleted."); }, function (x) { toast("Could not delete: " + ((x && x.message) || x)); });
+        var lv = vouchersOf(did).filter(function (j) { return j.status !== "Rejected" && !j.reversedBy && !j.reversalOf; });
+        var paid = lv.find(function (j) { return j.source.ev === "pay" && (j.status === "Posted" || j.status === "Approved"); });
+        if (paid) { // paid: the money left the bank, so its vouchers are reversed (Reverse and delete on the demand)
+          toast((dr.demandNo || "Demand") + " is paid by " + (paid.ref || "BPV") + ", so its vouchers will be reversed, not deleted. Click Confirm on the demand.");
+          openForm(DEM, did);
+          var tries = 0, go = function () { var b2 = document.querySelector("[data-fsundo=\"del\"]"); if (b2) { b2.scrollIntoView({ block: "center" }); b2.click(); } else if (++tries < 20) setTimeout(go, 150); };
+          setTimeout(go, 200);
           return;
         }
-        openForm(DEM, did);
-        var tries = 0, go = function () { var b2 = document.querySelector("[data-fsundo=\"del\"]"); if (b2) { b2.scrollIntoView({ block: "center" }); b2.click(); } else if (++tries < 20) setTimeout(go, 150); };
-        setTimeout(go, 200);
+        // not paid (only the demand JV, maybe a BPV still in approval): delete the demand and those vouchers outright
+        var shut = lv.find(function (j) { try { return typeof isLocked === "function" && isLocked(j); } catch (x) { return false; } });
+        if (shut) { toast(shut.ref + " is in a closed period (" + lockTxt(shut.entity) + "), so it cannot be deleted. Open the demand and use Reverse and delete."); return; }
+        if (dl.getAttribute("data-sure") !== "1") {
+          dl.setAttribute("data-sure", "1"); dl.textContent = "Confirm delete";
+          toast("Deletes " + (dr.demandNo || "the demand") + (lv.length ? " and " + lv.map(function (j) { return j.ref || "its voucher"; }).join(", ") : "") + ". Click Confirm delete.");
+          setTimeout(function () { if (dl.isConnected) { dl.removeAttribute("data-sure"); dl.textContent = "Delete"; } }, 6000);
+          return;
+        }
+        dl.disabled = true;
+        (async function () {
+          try {
+            for (var q = 0; q < lv.length; q++) await Store.remove("journals", lv[q].id);
+            await Store.remove(DEM, did);
+            toast((dr.demandNo || "Demand") + " deleted" + (lv.length ? " with " + lv.map(function (j) { return j.ref; }).join(", ") : "") + ".");
+          } catch (x) { dl.disabled = false; toast("Could not delete: " + ((x && x.message) || x)); }
+        })();
         return;
       }
       var p = e.target.closest && e.target.closest("[data-pdprint], #fsPdPrint");
