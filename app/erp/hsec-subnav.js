@@ -23,6 +23,10 @@
   }
   function sync() {
     var rail = document.getElementById("rail"), tb = bar(), nav = document.getElementById("fsSubNav"), main = rail && rail.nextElementSibling;
+    // The narrow menu opens wide over the page while the mouse is on it (hassan, 2026-11-23 video: the page names showed
+    // through the opened menu). While it is open that way nothing changes here; the column just hides (CSS below) and
+    // comes back when the mouse leaves.
+    if (rail && document.documentElement.classList.contains("fs-subnav-on") && rail.matches(":hover")) return;
     var r = rail ? rail.getBoundingClientRect() : null;
     var phone = window.innerWidth < 900, narrow = r && r.width > 0 && r.width < 140;
     var want = !!(tb && rail && !phone && narrow && !off());
@@ -78,6 +82,7 @@
     var css = document.createElement("style");
     css.textContent =
       "html.fs-subnav-on .tabs[role=tablist],html.fs-subnav-wide .tabs[role=tablist]{display:none!important}" +
+      "#fsSubNav,#fsSubOpen{transition:opacity .2s ease .3s}html:has(#rail:hover) #fsSubNav,html:has(#rail:hover) #fsSubOpen{opacity:0;pointer-events:none;transition:opacity .08s ease 0s}" +
       "#fsSubNav{position:fixed;z-index:30;overflow-y:auto;padding:12px 10px 20px;box-sizing:border-box;color:#e2e8f0;border-left:1px solid rgba(255,255,255,.08);box-shadow:4px 0 14px rgba(15,23,42,.12)}" +
       "#fsSubNav .fs-snhd{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 6px 10px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.12)}" +
       "#fsSubNav .fs-snhd b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1}" +
@@ -94,6 +99,7 @@
       "@media print{#fsSubNav,#fsSubOpen{display:none!important}}";
     document.head.appendChild(css);
     new MutationObserver(soon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    document.addEventListener("mouseleave", function (e) { if (e.target && e.target.id === "rail") setTimeout(soon, 400); }, true); // menu closed again
     window.addEventListener("resize", soon); window.addEventListener("scroll", soon, { passive: true });
     soon();
   }
