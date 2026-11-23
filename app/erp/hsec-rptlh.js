@@ -141,6 +141,12 @@
     if (!on && s) s.remove();
   };
 
+  var landCss = function (on) {
+    var s = document.getElementById("fsRlhLand");
+    if (on && !s) { s = document.createElement("style"); s.id = "fsRlhLand"; document.head.appendChild(s);
+      s.textContent = "@media print{@page{size:A4 landscape;margin:10mm}}.sheet.fs-rlh-wide{width:auto!important;max-width:min(1140px,96vw)!important}.sheet.fs-rlh-wide .fs-rlh-h img,.sheet.fs-rlh-wide .fs-rlh-f img{max-width:100%}"; }
+    if (!on && s) s.remove();
+  };
   function apply(sh) {
     var k = sh.getAttribute("data-fsrlh"), m = mode(k);
     if (m !== "tpl") [].slice.call(sh.querySelectorAll("table")).forEach(function (t) { t.style.zoom = ""; });
@@ -152,6 +158,22 @@
       // wide tables shrink to fit the landscape page (about 1040px across)
       [].slice.call(sh.querySelectorAll("table")).forEach(function (t) { t.style.zoom = ""; if (t.offsetWidth > 1040) t.style.zoom = String(Math.max(0.5, 1040 / t.offsetWidth)); });
     }
+    // Letterhead, pre-printed or plain paper: a table with many columns turns the page to landscape and shrinks to fit
+    // (hassan, 2026-11-23: "when I select letterhead not all columns are appearing ... make it landscape")
+    var wide = false;
+    sh.classList.remove("fs-rlh-wide");
+    if (m !== "tpl") {
+      var room = sh.clientWidth - 40;
+      [].slice.call(sh.querySelectorAll("table")).forEach(function (t) {
+        var cols = t.querySelector("tr") ? t.querySelector("tr").children.length : 0;
+        if (t.scrollWidth > room + 2 || t.offsetWidth > room + 2 || cols >= 9) wide = true;
+      });
+      if (wide) {
+        sh.classList.add("fs-rlh-wide");
+        [].slice.call(sh.querySelectorAll("table")).forEach(function (t) { t.style.zoom = ""; var w = t.scrollWidth; if (w > 1040) t.style.zoom = String(Math.max(0.45, 1040 / w)); });
+      }
+    }
+    landCss(wide);
     sh.classList.toggle("fs-rt", m === "tpl");
     sh.classList.toggle("fs-rlh-space", m === "space");
     sh.classList.toggle("fs-rlh-plain", m === "plain");
@@ -163,11 +185,11 @@
   function dress() {
     var pl = document.getElementById("printLayer"); if (!pl) return;
     var sh = pl.querySelector(".sheet");
-    if (!sh) { pageCss(false); return; }
+    if (!sh) { pageCss(false); landCss(false); return; }
     if (sh.getAttribute("data-fsrlh")) return;
     var k = kind(sh);
     sh.setAttribute("data-fsrlh", k);
-    if (k === "doc") { pageCss(false); return; }
+    if (k === "doc") { pageCss(false); landCss(false); return; }
     var bar = sh.querySelector(".bar"), L = lhOf();
     if (!bar) return;
     bar.insertAdjacentHTML("beforeend", "<label class=\"fs-rlh-pick\">Print on <select class=\"fs-rlh-sel\">" + (k === "rpt" ? "<option value=\"tpl\">Report template</option>" : "") +
