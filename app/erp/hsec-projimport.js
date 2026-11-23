@@ -76,37 +76,6 @@
     return { rows: out };
   }
 
-  // Summary above the list (hassan, 2026-11-23: "a summary in projects to see company wise how many projects and category
-  // wise as well and amount as well and if there are regions then region wise as well"). Counts and contract values (PKR,
-  // each project's booked value) of the projects of the company chosen at the top (all companies in the group view).
-  var sumOpen = (function () { try { return localStorage.getItem("fs-prjsum") !== "0"; } catch (e) { return true; } })();
-  function summary() {
-    var P = (typeof byEnt === "function" ? byEnt(Store.data.projects) : Store.data.projects) || [];
-    if (!P.length) return "";
-    var grp = function (key) {
-      var m = {}; P.forEach(function (p) { var k = key(p) || "—"; var g = m[k] = m[k] || { n: 0, v: 0, a: 0 }; g.n++; g.v += n(p.contractValue); if (p.status !== "Tendering" && p.status !== "Completed" && p.status !== "Cancelled") g.a++; });
-      return Object.keys(m).sort(function (a, b) { return m[b].v - m[a].v; }).map(function (k) { return [k, m[k]]; });
-    };
-    var tot = P.reduce(function (t, p) { return t + n(p.contractValue); }, 0);
-    var tbl = function (title, rows) {
-      return "<div class=\"fs-psum-b\"><h4>" + esc(title) + "</h4><table><thead><tr><th></th><th class=\"num\">Projects</th><th class=\"num\">Running</th><th class=\"num\">Contract value (PKR)</th></tr></thead><tbody>" +
-        rows.map(function (r) { return "<tr><td>" + esc(r[0]) + "</td><td class=\"num\">" + r[1].n + "</td><td class=\"num\">" + r[1].a + "</td><td class=\"num\">" + fmt(Math.round(r[1].v)) + "</td></tr>"; }).join("") +
-        "</tbody><tfoot><tr><td>Total</td><td class=\"num\">" + P.length + "</td><td class=\"num\">" + rows.reduce(function (t, r) { return t + r[1].a; }, 0) + "</td><td class=\"num\">" + fmt(Math.round(tot)) + "</td></tr></tfoot></table></div>";
-    };
-    var ents = grp(function (p) { return p.entity; }).map(function (r) { return [safe2(function () { return coName(r[0]); }, r[0]) || r[0], r[1]]; });
-    var regs = P.some(function (p) { return p.region; }) ? grp(function (p) { return p.region ? p.region + (V.ent === "All" ? " (" + p.entity + ")" : "") : "No region set"; }) : null;
-    return "<details class=\"panel fs-psum\"" + (sumOpen ? " open" : "") + " id=\"fsPSum\"><summary>Summary: " + P.length + " projects · PKR " + fmt(Math.round(tot)) + "</summary><div class=\"fs-psum-g\">" +
-      (V.ent === "All" ? tbl("By company", ents) : "") + tbl("By category", grp(function (p) { return p.type; })) + (regs ? tbl("By region", regs) : "") + "</div></details>";
-  }
-  var safe2 = function (f, d) { try { var v = f(); return v === undefined ? d : v; } catch (e) { return d; } };
-  document.addEventListener("toggle", function (e) { if (e.target && e.target.id === "fsPSum") { sumOpen = e.target.open; try { localStorage.setItem("fs-prjsum", sumOpen ? "1" : "0"); } catch (x) { /* private window */ } } }, true);
-  (function () {
-    var st = document.createElement("style");
-    st.textContent = ".fs-psum{margin:0 0 12px;padding:10px 14px}.fs-psum>summary{cursor:pointer;font-weight:700;color:#13304f}.fs-psum-g{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px}" +
-      ".fs-psum-b{flex:1 1 300px;min-width:0}.fs-psum-b h4{margin:0 0 6px;font-size:13px;color:#1F6FB8;text-transform:uppercase;letter-spacing:.04em}.fs-psum-b table{width:100%;border-collapse:collapse;font-size:13px}" +
-      ".fs-psum-b th,.fs-psum-b td{padding:5px 8px;border-bottom:1px solid #e7ebf0;text-align:left}.fs-psum-b .num{text-align:right;white-space:nowrap}.fs-psum-b tfoot td{font-weight:700;border-top:2px solid #cfd6de}@media print{.fs-psum{display:none}}";
-    (document.head || document.documentElement).appendChild(st);
-  })();
   // folded to one button until it is used (hassan, 2026-11-23: "remove the import text"); a file being previewed keeps it open
   var opened = false;
   function panel() {
@@ -195,8 +164,8 @@
     listView = function (c) { // eslint-disable-line no-global-assign
       var h = old(c);
       if (c !== "projects") return h;
-      var sm = ""; try { sm = summary(); } catch (x) { sm = ""; }
-      return sm + (window.FS_BRIDGE && FS_BRIDGE.edit !== false ? panel() : "") + h;
+      // the summary moved to Projects › Dashboard (hsec-pdash.js; hassan, 2026-11-23: "its look messy ... make a dashboard")
+      return (window.FS_BRIDGE && FS_BRIDGE.edit !== false ? panel() : "") + h;
     };
     document.addEventListener("change", async function (e) {
       if (e.target.id !== "fsPiFile" || !e.target.files[0]) return;
