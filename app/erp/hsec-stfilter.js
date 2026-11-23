@@ -61,20 +61,29 @@
     var by = {}; all.forEach(function (r) { by[r.id] = X.key(r); });
     return by;
   }
-  // projects: the type under each project's name, so every PO shows its category
+  // projects: a Category column after Project, so every PO shows its type (new installation, AMC ...)
   function tags(T) {
     if (T.c !== "projects" || !T.mon) return;
-    var ths = [].slice.call(T.tb.querySelectorAll("thead th")), col = ths.findIndex(function (th) { return /^project$/i.test(txt(th)); });
+    var hr = T.tb.querySelector("thead tr"); if (!hr) return;
+    var ths = [].slice.call(hr.children), col = ths.findIndex(function (th) { return /^project$/i.test(txt(th)); });
     if (col < 0) return;
-    T.rows.forEach(function (tr) {
-      var td = tr.children[col], ty = T.mon[tr.getAttribute("data-id")]; if (!td) return;
-      var tag = td.querySelector(".fs-tytag"), t = ty && ty !== "-" ? ty : "";
+    if (!hr.querySelector(".fs-catth")) {
+      var th = document.createElement("th"); th.className = "fs-catth"; th.textContent = "Category"; hr.insertBefore(th, ths[col + 1] || null);
+      [].slice.call(T.tb.querySelectorAll("tfoot tr")).forEach(function (fr) { var c = fr.children[col + 1], td = document.createElement("td"); td.className = "fs-cattd"; fr.insertBefore(td, c || null); });
+    }
+    T.tb.querySelectorAll("tbody tr").forEach(function (tr) {
+      var td = tr.querySelector(":scope > td.fs-cattd");
+      if (!td) { if (!tr.hasAttribute("data-edit")) return; td = document.createElement("td"); td.className = "fs-cattd"; tr.insertBefore(td, tr.children[col + 1] || null); }
+      var ty = T.mon[tr.getAttribute("data-id")], t = ty && ty !== "-" ? ty : "";
+      var tag = td.querySelector(".fs-tytag");
       if (!t) { if (tag) tag.remove(); return; }
       if (!tag) { tag = document.createElement("span"); tag.className = "fs-tytag"; td.appendChild(tag); }
       if (tag.textContent !== t) tag.textContent = t;
       var k = /AMC|maint/i.test(t) ? "amc" : /supply/i.test(t) ? "sup" : /service job/i.test(t) ? "svc" : /modern/i.test(t) ? "mod" : "new";
       if (tag.getAttribute("data-k") !== k) tag.setAttribute("data-k", k);
     });
+    // a "no rows" line spans one more column
+    T.tb.querySelectorAll("tbody td[colspan]").forEach(function (td) { if (!td.hasAttribute("data-fscs")) { td.setAttribute("data-fscs", "1"); td.colSpan = td.colSpan + 1; } });
   }
   var mOk = function (T, tr) { var w = T.mon && mpick[T.c]; return !w || T.mon[tr.getAttribute("data-id")] === w; };
   var special = function (v) { return v && (v.charAt(0) === "@" || v.charAt(0) === "!"); };
@@ -111,11 +120,11 @@
     if (sel.getAttribute("data-c") !== T.c || sel.getAttribute("data-o") !== opts) { sel.innerHTML = opts; sel.setAttribute("data-c", T.c); sel.setAttribute("data-o", opts); }
     var lw = sel.closest("label").firstChild; if (lw && lw.nodeType === 3 && lw.nodeValue !== X.word + " ") lw.nodeValue = X.word + " ";
     sel.classList.toggle("on", !!cur);
-    tags(T);
   }
   function run() {
     var T = table(); if (!T) { var ms = document.getElementById("fsMoF"); if (ms) ms.closest("label").remove(); return; }
     T.mon = months(T);
+    if (T.c === "projects" && T.mon) { tags(T); T = table(); if (!T) return; T.mon = months(T); } // column added first, then indexes read again
     if (T.col < 0) { monthSel(T); apply(T); return; }
     var counts = {}; T.rows.forEach(function (tr) { var s = stOf(T, tr); counts[s] = (counts[s] || 0) + 1; });
     var names = Object.keys(counts).sort();
@@ -167,7 +176,7 @@
   css.textContent = ".fs-stf{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#555}.fs-stf select{padding:6px 8px;border:1px solid #cfd6de;border-radius:8px;background:#fff;font:inherit;color:#222;max-width:220px}" +
     ".fs-tytag{display:inline-block;margin-top:4px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:18px;background:#e0ecf8;color:#1F6FB8;white-space:nowrap}" +
     ".fs-tytag[data-k=amc]{background:#dcfce7;color:#15803d}.fs-tytag[data-k=sup]{background:#fef3c7;color:#92400e}.fs-tytag[data-k=svc]{background:#ede9fe;color:#6d28d9}.fs-tytag[data-k=mod]{background:#e0f2fe;color:#0369a1}" +
-    "td>.fs-tytag{display:table;margin-top:4px}" +
+    ".fs-cattd .fs-tytag{margin-top:0;white-space:normal}" +
     ".fs-stf select.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18);font-weight:600}@media print{.fs-stf{display:none}}";
   (document.head || document.documentElement).appendChild(css);
 })();
