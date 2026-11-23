@@ -377,6 +377,104 @@ function erp_user(): ?array
     return $user;
 }
 
+// Picking up after the 10-minute sign-out (hassan, 2026-11-23: "system should save the progress of every user before
+// pushing them logout and once a person relogin it should be relogin as where he left the work"). Shortly before the
+// sign-out, idle.js sends the page the person is on and, on HSEC, the form or invoice they had open but not saved
+// (hsec-resume.js). The next sign-in within 24 hours goes back to that page (only if they can still open it) and the
+// page puts the unsaved form back. A sign-out by the person themselves saves nothing. Kept in erp.sqlite, one row per person.
+const ERP_RESUME_HOURS = 24;
+function erp_resume_db(): PDO
+{
+    $db = erp_db();
+    $db->exec('CREATE TABLE IF NOT EXISTS resume (user_id INTEGER PRIMARY KEY, url TEXT NOT NULL, draft TEXT, at INTEGER NOT NULL)');
+    return $db;
+}
+// The page saved for this person ('' when none, too old, or one they can no longer open); used once.
+function erp_resume_url(int $uid, callable $can): string
+{
+    try {
+        $db = erp_resume_db();
+        $st = $db->prepare('SELECT url, at FROM resume WHERE user_id = ?');
+        $st->execute([$uid]);
+        $r = $st->fetch();
+        if (!$r || $r['url'] === '') {
+            return '';
+        }
+        $db->prepare("UPDATE resume SET url = '' WHERE user_id = ?")->execute([$uid]);
+        if (time() - (int) $r['at'] > ERP_RESUME_HOURS * 3600) {
+            $db->prepare('DELETE FROM resume WHERE user_id = ?')->execute([$uid]);
+            return '';
+        }
+        $url = (string) $r['url'];
+        if (preg_match('#^/erp/m/([a-z_]+)#', $url, $m) && !$can($m[1])) {
+            return '';
+        }
+        return $url;
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+// A page address from the browser, made slot-free ('/erp/u/2/m/hsec#x' -> '/erp/m/hsec#x'); '' when it is not an ERP page
+// worth going back to.
+function erp_resume_clean(string $url): string
+{
+    $base = erp_slot_base();
+    if ($base !== '/erp' && ($url === $base || str_starts_with($url, $base . '/') || str_starts_with($url, $base . '?') || str_starts_with($url, $base . '#'))) {
+        $url = '/erp' . substr($url, strlen($base));
+    }
+    if (strlen($url) > 600 || !preg_match('~^/erp(/[A-Za-z0-9/_.\-]*)?(\?[^#\s]*)?(#\S*)?$~', $url)) {
+        return '';
+    }
+    if (preg_match('~^/erp/(login|logout|timeout|verify|forgot|reset|switch|setup|ping|resume|account)\b~', $url)) {
+        return '';
+    }
+    return $url;
+}
+function erp_resume_api(bool $post): void
+{
+    header('Cache-Control: no-store');
+    $me = erp_user();
+    if (!$me) {
+        taj_json(['ok' => false], 401);
+        return;
+    }
+    $uid = (int) $me['id'];
+    $db = erp_resume_db();
+    if ($post) {
+        $in = json_decode((string) file_get_contents('php://input'), true);
+        if (!empty($in['clear'])) { // they came back before the sign-out: nothing to go back to
+            $db->prepare("DELETE FROM resume WHERE user_id = ? AND url <> ''")->execute([$uid]);
+            taj_json(['ok' => true]);
+            return;
+        }
+        $url = erp_resume_clean((string) ($in['url'] ?? ''));
+        $draft = isset($in['draft']) && is_array($in['draft']) ? json_encode($in['draft'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+        if ($draft !== null && strlen($draft) > 400000) {
+            $draft = null; // too big to keep: the page is still remembered
+        }
+        if ($url === '') {
+            taj_json(['ok' => false]);
+            return;
+        }
+        $db->prepare('INSERT INTO resume (user_id, url, draft, at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET url = excluded.url, draft = excluded.draft, at = excluded.at')
+            ->execute([$uid, $url, $draft, time()]);
+        taj_json(['ok' => true]);
+        return;
+    }
+    // the page opened after signing in takes the unsaved form back (once)
+    $st = $db->prepare("SELECT draft, at FROM resume WHERE user_id = ? AND url = ''");
+    $st->execute([$uid]);
+    $r = $st->fetch();
+    $draft = null;
+    if ($r) {
+        $db->prepare('DELETE FROM resume WHERE user_id = ?')->execute([$uid]);
+        if ($r['draft'] !== null && time() - (int) $r['at'] <= ERP_RESUME_HOURS * 3600) {
+            $draft = json_decode((string) $r['draft'], true);
+        }
+    }
+    taj_json(['ok' => true, 'draft' => $draft]);
+}
+
 // Where someone lands after signing in: the system the admin set for them under Users ("Opens after
 // sign-in"), else the system of an old HSEC sign-in link, else the first system they can open.
 function erp_start_page(array $row): string
@@ -386,6 +484,9 @@ function erp_start_page(array $row): string
     }
     $access = erp_access_for((int) $row['id']);
     $can = fn(string $key): bool => !empty($row['is_admin']) || isset($access[$key]);
+    if (($back = erp_resume_url((int) $row['id'], $can)) !== '') {
+        return $back;
+    }
     $order = array_keys(ERP_SYSTEMS);
     $first = $row['home'] ?? '';
     if ($first === '' && ($_SESSION['system'] ?? '') === 'hsec') {
@@ -623,7 +724,7 @@ function erp_handle(string $path): void
     }
 
     $sub = substr($path, strlen('/erp')) ?: '/';
-    erp_start_session(!in_array($sub, ['/m/receivables/api/sync', '/m/hsec/api/sync', '/chat/api/poll', '/chat/api/sig', '/attendance/api/state'], true));
+    erp_start_session(!in_array($sub, ['/m/receivables/api/sync', '/m/hsec/api/sync', '/chat/api/poll', '/chat/api/sig', '/attendance/api/state', '/resume'], true));
     $post = $_SERVER['REQUEST_METHOD'] === 'POST';
     if ($post) {
         erp_check_csrf($sub);
@@ -645,6 +746,8 @@ function erp_handle(string $path): void
             http_response_code(401);
         }
         taj_json(['ok' => (bool) erp_user(), 'idle' => ERP_SESSION_IDLE]);
+    } elseif ($sub === '/resume') {
+        erp_resume_api($post);
     } elseif ($sub === '/timeout') {
         erp_remember_clear();
         $_SESSION = [];
