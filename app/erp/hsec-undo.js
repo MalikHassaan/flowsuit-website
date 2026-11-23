@@ -41,7 +41,7 @@
     if (t.rec.claim) { var cl = (Store.data.pcclaims || []).find(function (x) { return x.id === t.rec.claim; }); if (cl) return "replenishment claim " + (cl.claimNo || ""); }
     for (var c in Store.data) {
       if (c === "journals" || c === t.c || /audit|log|hist|notif|alert|task/i.test(c) || !Array.isArray(Store.data[c])) continue;
-      var hit = Store.data[c].find(function (r) { return r && Object.keys(r).some(function (k) { return k !== "id" && (r[k] === t.rec.id || (Array.isArray(r[k]) && r[k].indexOf(t.rec.id) >= 0)); }); });
+      var hit = Store.data[c].find(function (r) { return r && !(c === "advances" && r.demandId === t.rec.id) && Object.keys(r).some(function (k) { return k !== "id" && (r[k] === t.rec.id || (Array.isArray(r[k]) && r[k].indexOf(t.rec.id) >= 0)); }); });
       if (hit) return (DOCNAME[c] || c) + " " + (hit.billNo || hit.invoiceNo || hit.claimNo || hit.slipNo || hit.ref || hit.name || hit.no || "");
     }
     return "";

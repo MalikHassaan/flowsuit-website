@@ -222,7 +222,8 @@
         ["description", "For"], ["amount", "Amount", function (r) { return fmt(r.amount) + (r.kind === "advance" ? "<br><span class=\"muted\">" + (r.advPart === "Partial" && n(r.advTotal) ? "Partial advance of " + fmt(r.advTotal) : "Full advance") + "</span>" : ""); }, "num"],
         ["jv", "Demand JV", function (r) { return tag(state(r).jv); }], ["bp", "Bank payment", function (r) { var s = state(r); return s.k === "topay" ? "<button type=\"button\" class=\"btn sm pri\" data-pdpay=\"" + esc(r.id) + "\">Pay</button>" : s.k === "gm" && isGm() ? "<label class=\"fs-pdtick\"><input type=\"checkbox\" data-pdgm=\"" + esc(r.id) + "\"> Approve?</label>" : tag(s.bp); }],
         ["st", "Status", function (r) { var s = state(r); return pill(s.l, s.c) + gmTxt(r); }],
-        ["pr", "", function (r) { return state(r).jv ? "<button type=\"button\" class=\"btn sm\" data-pdprint=\"" + esc(r.id) + "\">Print</button>" : ""; }]],
+        ["pr", "", function (r) { return (state(r).jv ? "<button type=\"button\" class=\"btn sm\" data-pdprint=\"" + esc(r.id) + "\">Print</button>" : "") +
+          (window.FS_BRIDGE && window.FS_BRIDGE.owner ? " <button type=\"button\" class=\"btn sm danger\" data-pddel=\"" + esc(r.id) + "\" title=\"Admin: reverse its vouchers and delete the demand\">Delete</button>" : ""); }]],
       sort: function (a, b) { return String(b.date).localeCompare(String(a.date)) || String(b.demandNo).localeCompare(String(a.demandNo)); } };
 
     // "Paid by company" lists the group companies, read when the form is drawn
@@ -866,6 +867,22 @@
         }, 900);
         return;
       }
+      // Admin delete from the list (hassan, 2026-11-23: "as an admin user we should have delete rights of deleting the
+      // demands as well"): opens the demand at "Reverse and delete", which reverses its posted JV / BPV, removes any
+      // voucher still in approval and deletes the demand once Confirm is clicked.
+      var dl = e.target.closest && e.target.closest("[data-pddel]");
+      if (dl) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        var did = dl.getAttribute("data-pddel"), dr = byId(DEM, did); if (!dr) return;
+        if (!vouchersOf(did).some(function (j) { return j.status !== "Rejected" && !j.reversedBy && !j.reversalOf; })) {
+          Store.remove(DEM, did).then(function () { toast((dr.demandNo || "Demand") + " deleted."); }, function (x) { toast("Could not delete: " + ((x && x.message) || x)); });
+          return;
+        }
+        openForm(DEM, did);
+        var tries = 0, go = function () { var b2 = document.querySelector("[data-fsundo=\"del\"]"); if (b2) { b2.scrollIntoView({ block: "center" }); b2.click(); } else if (++tries < 20) setTimeout(go, 150); };
+        setTimeout(go, 200);
+        return;
+      }
       var p = e.target.closest && e.target.closest("[data-pdprint], #fsPdPrint");
       if (p) {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -941,6 +958,15 @@
       ".fs-pdpayhl{outline:3px solid #16a34a;outline-offset:4px;border-radius:6px;transition:outline-color 1s}";
     document.head.appendChild(css);
     safe0(advHooks);
+    // a deleted demand cancels the advance it put into Treasury › Advances (unless that advance was already settled)
+    Store.remove = (function (old) { return function (c, id) {
+      var pr = old.apply(this, arguments);
+      if (c === DEM && pr && pr.then) pr.then(function () {
+        var a = byId(ADV, "pd-" + id);
+        if (a && a.status !== "Settled" && a.status !== "Cancelled") Store.save(ADV, Object.assign({}, a, { status: "Cancelled", settleRemarks: "Payment demand " + (a.demandNo || "") + " was deleted and its vouchers reversed." })).catch(function () {});
+      }, function () {});
+      return pr;
+    }; })(Store.remove);
     setTimeout(syncAll, 4000); setInterval(syncAll, 20000); // demands booked before this link, and BPVs made later
     scheduleRender();
     return true;
