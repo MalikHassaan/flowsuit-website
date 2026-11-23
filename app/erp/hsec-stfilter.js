@@ -40,13 +40,28 @@
     if (want.charAt(0) === "!") return stOf(T, tr) !== want.slice(1);
     return stOf(T, tr) === want;
   };
+  // Month picker on Journals (hassan, 2026-11-23: "add month wise in vouchers, like in November how many vouchers are
+  // created, all vouchers under the months"): All months, or one month with its count, newest first. It works with the
+  // Status picker and the Office picker; the count and totals follow all of them. Months come from the voucher date.
+  var MKEY = "fs-mof", mpick = (function () { try { return JSON.parse(sessionStorage.getItem(MKEY)) || {}; } catch (e) { return {}; } })();
+  var mkeep = function () { try { sessionStorage.setItem(MKEY, JSON.stringify(mpick)); } catch (e) { /* private window */ } };
+  var MDATE = { journals: "date" };
+  var MN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var mLabel = function (m) { return m === "-" ? "No date" : MN[+m.slice(5, 7) - 1] + " " + m.slice(0, 4); };
+  function months(T) { // data-id -> "YYYY-MM"
+    if (!MDATE[T.c]) return null;
+    var all = (typeof Store !== "undefined" && Store.data && Store.data[T.c]) || null; if (!all) return null;
+    var by = {}; all.forEach(function (r) { var d = String(r[MDATE[T.c]] || ""); by[r.id] = /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : "-"; });
+    return by;
+  }
+  var mOk = function (T, tr) { var w = T.mon && mpick[T.c]; return !w || T.mon[tr.getAttribute("data-id")] === w; };
   var special = function (v) { return v && (v.charAt(0) === "@" || v.charAt(0) === "!"); };
 
   function apply(T) {
-    var want = T.col < 0 ? "" : pick[T.c] || "", shown = 0, part = !!want || T.out > 0;
-    T.rows.forEach(function (tr) { var hide = !keepRow(T, tr, want); if (tr.hidden !== hide) tr.hidden = hide; if (!hide) shown++; });
+    var want = T.col < 0 ? "" : pick[T.c] || "", shown = 0, mw = !!(T.mon && mpick[T.c]), part = !!want || mw || T.out > 0;
+    T.rows.forEach(function (tr) { var hide = !keepRow(T, tr, want) || !mOk(T, tr); if (tr.hidden !== hide) tr.hidden = hide; if (!hide) shown++; });
     var cnt = [].slice.call(T.bar.querySelectorAll(".muted")).find(function (s) { return /^\d[\d,]* records?( of \d[\d,]*)?$/.test(txt(s)); });
-    if (cnt) { var t = want ? shown + " record" + (shown === 1 ? "" : "s") + " of " + T.rows.length : T.rows.length + " record" + (T.rows.length === 1 ? "" : "s"); if (txt(cnt) !== t) cnt.textContent = t; }
+    if (cnt) { var t = want || mw ? shown + " record" + (shown === 1 ? "" : "s") + " of " + T.rows.length : T.rows.length + " record" + (T.rows.length === 1 ? "" : "s"); if (txt(cnt) !== t) cnt.textContent = t; }
     var ft = T.tb.querySelector("tfoot tr");
     if (ft) [].slice.call(ft.children).forEach(function (td, i) {
       if (!td.classList.contains("num")) return;
@@ -56,9 +71,26 @@
     });
   }
 
+  function monthSel(T) {
+    var sel = document.getElementById("fsMoF");
+    if (!T.mon) { if (sel) sel.closest("label").remove(); return; }
+    var want = T.col < 0 ? "" : pick[T.c] || "", counts = {};
+    T.rows.forEach(function (tr) { if (!keepRow(T, tr, want)) return; var m = T.mon[tr.getAttribute("data-id")] || "-"; counts[m] = (counts[m] || 0) + 1; });
+    var ms = Object.keys(counts).sort().reverse(), cur = mpick[T.c] || "", tot = ms.reduce(function (a, m) { return a + counts[m]; }, 0);
+    if (cur && !counts[cur]) ms.unshift(cur);
+    var opts = "<option value=\"\">All months (" + tot + ")</option>" + ms.map(function (m) { return "<option value=\"" + m + "\"" + (m === cur ? " selected" : "") + ">" + mLabel(m) + " (" + (counts[m] || 0) + ")</option>"; }).join("");
+    if (!sel) {
+      var anchor = document.getElementById("fsStF"); anchor = anchor ? anchor.closest("label") : document.getElementById("q");
+      var lab = document.createElement("label"); lab.className = "fs-stf"; lab.innerHTML = "Month <select id=\"fsMoF\" aria-label=\"Filter by month\"></select>";
+      anchor.insertAdjacentElement("afterend", lab); sel = lab.querySelector("select");
+    }
+    if (sel.getAttribute("data-c") !== T.c || sel.getAttribute("data-o") !== opts) { sel.innerHTML = opts; sel.setAttribute("data-c", T.c); sel.setAttribute("data-o", opts); }
+    sel.classList.toggle("on", !!cur);
+  }
   function run() {
-    var T = table(); if (!T) return;
-    if (T.col < 0) { apply(T); return; }
+    var T = table(); if (!T) { var ms = document.getElementById("fsMoF"); if (ms) ms.closest("label").remove(); return; }
+    T.mon = months(T);
+    if (T.col < 0) { monthSel(T); apply(T); return; }
     var counts = {}; T.rows.forEach(function (tr) { var s = stOf(T, tr); counts[s] = (counts[s] || 0) + 1; });
     var names = Object.keys(counts).sort();
     var cur = pick[T.c] || "";
@@ -76,6 +108,7 @@
     }
     if (sel.getAttribute("data-c") !== T.c || sel.getAttribute("data-o") !== opts) { sel.innerHTML = opts; sel.setAttribute("data-c", T.c); sel.setAttribute("data-o", opts); }
     sel.classList.toggle("on", !!pick[T.c]);
+    monthSel(T);
     apply(T);
   }
 
@@ -90,6 +123,7 @@
     get: function (c) { return pick[c] || ""; }
   };
   document.addEventListener("change", function (e) {
+    if (e.target && e.target.id === "fsMoF") { var M = table(); if (!M) return; if (e.target.value) mpick[M.c] = e.target.value; else delete mpick[M.c]; mkeep(); run(); return; }
     if (!e.target || e.target.id !== "fsStF") return;
     var T = table(); if (!T) return;
     if (e.target.value) pick[T.c] = e.target.value; else delete pick[T.c];
