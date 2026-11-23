@@ -67,6 +67,13 @@
     var hr = T.tb.querySelector("thead tr"); if (!hr) return;
     var ths = [].slice.call(hr.children), col = ths.findIndex(function (th) { return /^project$/i.test(txt(th)); });
     if (col < 0) return;
+    // columns left off the screen (hassan, 2026-11-23: "remove contract PKR, contract USD, contract asset, cash position from
+    // here but the system should save it"): the figures are still worked out, saved and exported; only the cells are hidden
+    ths.forEach(function (th, i) {
+      if (!/^(contract pkr|contract usd|contract asset.*|cash position)$/i.test(txt(th)) || th.classList.contains("fs-colhide")) return;
+      th.classList.add("fs-colhide");
+      [].slice.call(T.tb.querySelectorAll("tbody tr, tfoot tr")).forEach(function (tr) { var td = tr.children[i]; if (td && !td.hasAttribute("colspan")) td.classList.add("fs-colhide"); });
+    });
     if (!hr.querySelector(".fs-catth")) {
       var th = document.createElement("th"); th.className = "fs-catth"; th.textContent = "Category"; hr.insertBefore(th, ths[col + 1] || null);
       [].slice.call(T.tb.querySelectorAll("tfoot tr")).forEach(function (fr) { var c = fr.children[col + 1], td = document.createElement("td"); td.className = "fs-cattd"; fr.insertBefore(td, c || null); });
@@ -164,6 +171,36 @@
     if (e.target.value) pick[T.c] = e.target.value; else delete pick[T.c];
     keep(); run();
   });
+  // Projects › Export CSV asks what to export: all projects or one category (new installation, AMC ...). The file has every
+  // saved field of each project, whatever the screen shows.
+  function exportAsk(old) {
+    var all = (typeof byEnt === "function" ? byEnt(Store.data.projects) : Store.data.projects) || [], cnt = {};
+    all.forEach(function (p) { var t = String(p.type || "").trim() || "-"; cnt[t] = (cnt[t] || 0) + 1; });
+    var q = function (v) { return String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); };
+    var ov = document.createElement("div"); ov.className = "fs-exov";
+    ov.innerHTML = "<div class=\"fs-exbox\" role=\"dialog\" aria-label=\"Export projects\"><h3>Export projects</h3><p>Which projects should the file have?</p>" +
+      "<button type=\"button\" class=\"fs-exo\" data-ext=\"\"><b>All projects</b><span>" + all.length + "</span></button>" +
+      Object.keys(cnt).sort().map(function (t) { return "<button type=\"button\" class=\"fs-exo\" data-ext=\"" + q(t) + "\"><b>" + q(t === "-" ? "No type set" : t) + "</b><span>" + cnt[t] + "</span></button>"; }).join("") +
+      "<button type=\"button\" class=\"fs-exx\">Cancel</button></div>";
+    document.body.appendChild(ov);
+    ov.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b && e.target !== ov) return;
+      ov.remove(); if (!b || !b.hasAttribute("data-ext")) return;
+      var t = b.getAttribute("data-ext"), keepAll = Store.data.projects;
+      if (t) Store.data.projects = keepAll.filter(function (p) { return (String(p.type || "").trim() || "-") === t; });
+      try { old("projects"); } finally { Store.data.projects = keepAll; } // the rows are read before its first await
+    });
+  }
+  (function wrapExport(n) {
+    var ok = false;
+    try { if (typeof exportCsv === "function" && typeof Store !== "undefined" && Store.data) {
+      var old = exportCsv;
+      exportCsv = function (c) { if (c === "projects") { exportAsk(old); return Promise.resolve(); } return old.apply(this, arguments); }; // eslint-disable-line no-global-assign
+      ok = true;
+    } } catch (e) { ok = false; }
+    if (!ok && n < 200) setTimeout(function () { wrapExport(n + 1); }, 300);
+  })(0);
+
   var busy = false;
   (function watch() {
     if (!document.body) return setTimeout(watch, 300);
@@ -176,6 +213,10 @@
   css.textContent = ".fs-stf{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#555}.fs-stf select{padding:6px 8px;border:1px solid #cfd6de;border-radius:8px;background:#fff;font:inherit;color:#222;max-width:220px}" +
     ".fs-tytag{display:inline-block;margin-top:4px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600;line-height:18px;background:#e0ecf8;color:#1F6FB8;white-space:nowrap}" +
     ".fs-tytag[data-k=amc]{background:#dcfce7;color:#15803d}.fs-tytag[data-k=sup]{background:#fef3c7;color:#92400e}.fs-tytag[data-k=svc]{background:#ede9fe;color:#6d28d9}.fs-tytag[data-k=mod]{background:#e0f2fe;color:#0369a1}" +
+    ".fs-colhide{display:none!important}" +
+    ".fs-exov{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:rgba(15,23,42,.45)}.fs-exbox{background:#fff;color:#1f2328;border-radius:14px;padding:20px 22px;width:min(420px,92vw);box-shadow:0 30px 70px rgba(2,6,23,.35);font:14px/1.45 Inter,system-ui,sans-serif}" +
+    ".fs-exbox h3{margin:0 0 4px;font-size:17px}.fs-exbox p{margin:0 0 12px;color:#64748b}.fs-exbox button.fs-exo{display:flex;justify-content:space-between;width:100%;margin:0 0 6px;padding:10px 12px;border:1px solid #d7dde4;border-radius:9px;background:#fff;font:inherit;cursor:pointer;text-align:left}" +
+    ".fs-exbox button.fs-exo:hover{border-color:#1F6FB8;background:#eef5fc}.fs-exbox button.fs-exo b{font-weight:600}.fs-exbox .fs-exx{margin-top:6px;border:0;background:none;color:#64748b;cursor:pointer;font:inherit}" +
     ".fs-cattd .fs-tytag{margin-top:0;white-space:normal}" +
     ".fs-stf select.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18);font-weight:600}@media print{.fs-stf{display:none}}";
   (document.head || document.documentElement).appendChild(css);
