@@ -19,16 +19,21 @@
   var money = function (v) { return safe(function () { return fmt(Math.round(v)); }, String(Math.round(v))); };
   var fd = function (d) { return d ? safe(function () { return fdate(d); }, d) : ""; };
   var AMC = "Maintenance contract (AMC)";
-  var ST = { r: "matrix", from: "", to: "", client: "" };
+  var ST = { r: "matrix", from: "", to: "", client: "", rg: "" };
+  // region / office of a contract (hsec-regions.js): "" all, "-" none set (hassan, 2026-11-23: "all or region wise")
+  var rgOk = function (p, r) { return !ST.rg || (ST.rg === "-" ? !((p && p.region) || (r && r.region)) : ((p && p.region) || (r && r.region)) === ST.rg); };
   var addM = function (m, k) { var d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + k, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
   var mName = function (m) { return safe(function () { return new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, 1).toLocaleString("en-GB", { month: "short", year: "2-digit" }); }, m); };
   function fyDefault() { var t = todayStr(), y = +t.slice(0, 4), mo = +t.slice(5, 7); var s = mo >= 7 ? y : y - 1; return [s + "-07", (s + 1) + "-06"]; }
 
-  function projs() { return safe(function () { return byEnt(Store.data.projects).filter(function (p) { return p.type === AMC; }); }, []); }
+  function allProjs() { return safe(function () { return byEnt(Store.data.projects).filter(function (p) { return p.type === AMC; }); }, []); }
+  function projs() { return allProjs().filter(function (p) { return rgOk(p); }); }
   var clientOf = function (p) { return String((p && (p.customer || p.name)) || "").trim() || "(no client)"; };
   function invs() {
-    var P = projs(), byId = {}; P.forEach(function (p) { byId[p.id] = p; });
-    return safe(function () { return byEnt(Store.data.receivables); }, []).filter(function (r) { return r.status !== "Void" && (r.amcKey || byId[r.projectId]); }).map(function (r) {
+    var P = allProjs(), byId = {}; P.forEach(function (p) { byId[p.id] = p; });
+    return safe(function () { return byEnt(Store.data.receivables); }, []).filter(function (r) {
+      return r.status !== "Void" && (r.amcKey || byId[r.projectId]) && rgOk(byId[r.projectId] || byId[String(r.amcKey || "").split("|")[0]], r);
+    }).map(function (r) {
       var p = byId[r.projectId] || byId[String(r.amcKey || "").split("|")[0]] || null;
       var m = r.amcKey ? String(r.amcKey).split("|")[1] : String(r.invoiceDate || "").slice(0, 7);
       var k = r.amcDef ? r.amcDef.months : p ? safe(function () { return AMC_STEP[p.amcFreq]; }, 1) || 1 : 1;
@@ -47,9 +52,16 @@
     var b = function (k, l) { return "<button type=\"button\" class=\"btn" + (ST.r === k ? " pri" : "") + "\" data-amcr=\"" + k + "\">" + h(l) + "</button>"; };
     return "<div class=\"fs-amcr-bar\">" + b("matrix", "By client and month") + b("rec", "Receipts") + b("ledger", "Customer ledger") + b("age", "Aging") + b("tot", "Total receipts") + "</div>" +
       "<div class=\"ctls fs-amcr-ctl\">" + (ST.r === "age" ? "" : "<label>From <input type=\"month\" id=\"amcrFrom\" value=\"" + h(rg[0]) + "\"></label><label>To <input type=\"month\" id=\"amcrTo\" value=\"" + h(rg[1]) + "\"></label>") +
-      "<label>Client <select id=\"amcrCl\"><option value=\"\">" + (ST.r === "ledger" ? "Choose a client" : "All clients") + "</option>" + clients.map(function (c) { return "<option" + (c === ST.client ? " selected" : "") + ">" + h(c) + "</option>"; }).join("") + "</select></label>" +
+      rgSel("amcrRg") + "<label>Client <select id=\"amcrCl\"><option value=\"\">" + (ST.r === "ledger" ? "Choose a client" : "All clients") + "</option>" + clients.map(function (c) { return "<option" + (c === ST.client ? " selected" : "") + ">" + h(c) + "</option>"; }).join("") + "</select></label>" +
       "<span style=\"flex:1\"></span><button type=\"button\" class=\"btn\" id=\"amcrPrint\">Print</button><button type=\"button\" class=\"btn\" id=\"amcrCsv\">Download CSV</button></div>";
   }
+  function rgSel(id) { // Region: all, each office used on a contract, or none set
+    var L = allProjs().map(function (p) { return p.region || ""; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort();
+    if (!L.length && !ST.rg) return "";
+    return "<label>Region <select id=\"" + id + "\"><option value=\"\">All regions</option>" + L.map(function (x) { return "<option" + (x === ST.rg ? " selected" : "") + ">" + h(x) + "</option>"; }).join("") +
+      "<option value=\"-\"" + (ST.rg === "-" ? " selected" : "") + ">No region set</option></select></label>";
+  }
+  window.FS_AMCRG = { ST: ST, sel: rgSel, ok: rgOk };
   var flt = function (I) { return ST.client ? I.filter(function (x) { return x.client === ST.client; }) : I; };
 
   function matrix(I) {
@@ -149,7 +161,7 @@
     return ctls(I) + "<h3 style=\"margin:8px 0 2px\">" + h(R.title) + "</h3><p class=\"muted\" style=\"margin:0 0 8px\">" + h(R.sub) + "</p><div class=\"panel tw fs-amcr\">" + R.html + "</div>";
   }
   function printIt() {
-    var R = report(), co = safe(function () { return V.ent && V.ent !== "All" ? V.ent : "HSEC"; }, "");
+    var R = report(), co = safe(function () { return V.ent && V.ent !== "All" ? V.ent : "HSEC"; }, "") + (ST.rg ? " · Region: " + (ST.rg === "-" ? "not set" : ST.rg) : " · All regions");
     safe(function () { sheetOpen("<div class=\"sheetwrap\"><div class=\"sheet fs-amcr-sheet\"><div class=\"bar\"><button class=\"btn pri\" id=\"printSheet\">Print</button><button class=\"btn\" id=\"closeSheet\">Close</button></div><h2>" + h(R.title) + "</h2><p class=\"muted\">" + h(co) + " · Generated on " + h(new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })) + "</p><p>" + h(R.sub) + "</p><div class=\"fs-amcr\">" + R.html + "</div></div></div>"); }, null);
   }
   function csvIt() {
@@ -164,7 +176,8 @@
     ST.r = t.getAttribute("data-amcr"); safe(function () { render(); }, null);
   });
   document.addEventListener("change", function (e) {
-    var id = e.target && e.target.id; if (["amcrFrom", "amcrTo", "amcrCl"].indexOf(id) < 0) return;
+    var id = e.target && e.target.id; if (["amcrFrom", "amcrTo", "amcrCl", "amcrRg", "fsAcRg"].indexOf(id) < 0) return;
+    if (id === "amcrRg" || id === "fsAcRg") { ST.rg = e.target.value; ST.client = ""; }
     if (id === "amcrFrom") ST.from = e.target.value; if (id === "amcrTo") ST.to = e.target.value; if (id === "amcrCl") ST.client = e.target.value;
     safe(function () { render(); }, null);
   });
@@ -211,11 +224,11 @@
   // (their values are kept). Choosing another type shows the full form again. An AMC's contract value is worked out
   // from the monthly fee and the AMC dates until it is typed by hand.
   var PF_KEEP = {
-    "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcPhase", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "amcFreeN", "amcHandover", "amcFree", "contractValue", "pm", "status"],
-    "Supply only": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"],
+    "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "region", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcPhase", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "amcFreeN", "amcHandover", "amcFree", "contractValue", "pm", "status"],
+    "Supply only": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "entity", "region", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"],
     // one-off lift jobs on a PO (hassan, 2026-11-23: "some po we get for installation of a temporary lift or dismantling
     // the lift"): billed once or in parts, taxed as a provincial service, its own income account (hsec-svcjob.js)
-    "Service job (installation / dismantling / repair)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcTaxPct", "contractValue", "budgetCost", "paymentTerms", "start", "end", "pm", "status"]
+    "Service job (installation / dismantling / repair)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "region", "type", "province", "amcTaxPct", "contractValue", "budgetCost", "paymentTerms", "start", "end", "pm", "status"]
   };
   var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"], "Service job (installation / dismantling / repair)": ["fsGtBox"] };
   var PF_LBL = {

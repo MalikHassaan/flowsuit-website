@@ -49,7 +49,7 @@
   }
   function invs(p) { return safe(function () { return Store.data.receivables.filter(function (r) { return r.status !== "Void" && (String(r.amcKey || "").split("|")[0] === p.id || r.projectId === p.id); }); }, []); }
   function got(r) { return (r.receipts || []).reduce(function (s, x) { return s + num(x.amount); }, 0) || (r.status === "Paid" ? num(r.amount) : 0); }
-  function contracts() { return safe(function () { return byEnt(Store.data.projects).filter(function (p) { return p.type === AMC; }); }, []); }
+  function contracts() { return safe(function () { return byEnt(Store.data.projects).filter(function (p) { return p.type === AMC && (!window.FS_AMCRG || window.FS_AMCRG.ok(p)); }); }, []); }
   var badge = function (s) { return "<span class=\"fs-ac-pill " + (s.tone || "") + "\">" + h(s.k) + "</span>"; };
 
   // units billed in steps (hsec-amcunits.js): this month's charge
@@ -65,7 +65,7 @@
       if (ST.f === "active" && x.s.k !== "Active") return false;
       if (ST.f === "due" && x.s.k !== "Renewal due") return false;
       if (ST.f === "exp" && x.s.k !== "Expired") return false;
-      return !q || [x.p.code, x.p.name, x.p.customer, x.p.pm].join(" ").toLowerCase().indexOf(q) >= 0;
+      return !q || [x.p.code, x.p.name, x.p.customer, x.p.pm, x.p.region].join(" ").toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) { return String(b.p.code || "").localeCompare(String(a.p.code || "")); });
     var card = function (k, l, v, sub) { return "<button type=\"button\" class=\"fs-ac-card" + (ST.f === k ? " on" : "") + "\" data-acf=\"" + k + "\"><small>" + h(l) + "</small><b>" + v + "</b><span>" + h(sub || "") + "</span></button>"; };
     return "<div class=\"fs-ac\"><div class=\"fs-ac-cards\">" +
@@ -74,12 +74,12 @@
       "<div class=\"fs-ac-card m\"><small>Total monthly charge</small><b>Rs " + money(mrr) + "</b><span>Rs " + money(mrrT) + " with sales tax</span></div>" +
       card("due", "Renewal due (60 days)", due.length, due.length ? "contact these customers" : "none") +
       card("exp", "Expired", exp.length, exp.length ? "renew or close" : "none") + "</div>" +
-      "<div class=\"fs-ac-bar\"><button class=\"btn pri\" data-acnew=\"1\">+ New AMC contract</button><input id=\"fsAcQ\" placeholder=\"Search contract, customer or engineer\" value=\"" + h(ST.q) + "\"><span class=\"muted\">" + rows.length + " contract" + (rows.length === 1 ? "" : "s") + "</span></div>" +
+      "<div class=\"fs-ac-bar\"><button class=\"btn pri\" data-acnew=\"1\">+ New AMC contract</button><input id=\"fsAcQ\" placeholder=\"Search contract, customer or engineer\" value=\"" + h(ST.q) + "\">" + safe(function () { return window.FS_AMCRG.sel("fsAcRg"); }, "") + "<span class=\"muted\">" + rows.length + " contract" + (rows.length === 1 ? "" : "s") + "</span></div>" +
       "<div class=\"tw\"><table class=\"fs-ac-t\"><thead><tr><th class=\"num\">S No.</th><th>Contract</th><th>Site / project</th><th>Customer</th><th class=\"num\">Floors</th><th class=\"num\">Units</th><th class=\"num\">Rate / month</th><th class=\"num\">Monthly charge</th><th>Period</th><th>Time left</th><th>Status</th><th></th></tr></thead><tbody>" +
       (rows.map(function (x, i) {
         var p = x.p, s = x.s, r = rate(p);
         return "<tr><td class=\"num\">" + (i + 1) + "</td><td><b class=\"mono\">" + h(p.code || "") + "</b><br><small class=\"muted\">" + h(p.amcFreq || "Monthly") + " billing</small></td>" +
-          "<td><b>" + h(p.name || "") + "</b>" + (p.pm ? "<br><small class=\"muted\">Engineer: " + h(p.pm) + "</small>" : "") + "</td>" +
+          "<td><b>" + h(p.name || "") + "</b>" + (p.region ? "<br><small class=\"muted\">Region: " + h(p.region) + "</small>" : "") + (p.pm ? "<br><small class=\"muted\">Engineer: " + h(p.pm) + "</small>" : "") + "</td>" +
           "<td>" + h(p.customer || "") + (p.province ? "<br><small class=\"muted\">" + h(p.province) + "</small>" : "") + "</td>" +
           "<td class=\"num\">" + h(p.amcFloors || "–") + "</td><td class=\"num\">" + h(p.amcUnits || "–") + (window.FS_AMCU && window.FS_AMCU.phased(p) ? "<br><small class=\"muted\">" + window.FS_AMCU.unitsAt(p, thisM()) + " billed now" + (num(p.amcUnits) > window.FS_AMCU.unitsAt(p, thisM()) ? "<br><b style=\"color:#9a5b00\">" + (num(p.amcUnits) - window.FS_AMCU.unitsAt(p, thisM())) + " still to invoice</b>" : "") + "</small>" : "") + "</td><td class=\"num\">" + (rateNow(p) ? money(rateNow(p)) : "–") + "</td>" +
           "<td class=\"num\">Rs " + money(feeNow(p)) + "<br><small class=\"muted\">+ " + r + "% tax = " + money(feeNow(p) * (1 + r / 100)) + "</small></td>" +
