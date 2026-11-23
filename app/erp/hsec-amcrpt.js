@@ -185,7 +185,7 @@
       // a new contract from this area is a maintenance contract
       // An AMC-only person (AMC area, without Project financial management or Business cycle) works only on maintenance
       // contracts and spare parts supply (the server enforces it too: hsec_amc_scope): other project types are not offered.
-      var AMC_T = ["Maintenance contract (AMC)", "Supply only"];
+      var AMC_T = ["Maintenance contract (AMC)", "Supply only", "Service job (installation / dismantling / repair)"];
       var amcOnly = function () { var m = window.FS_MODS; return !!(m && m.indexOf("amcm") >= 0 && m.indexOf("proj") < 0 && m.indexOf("pw") < 0); };
       safe(function () {
         var oF = openForm;
@@ -212,12 +212,17 @@
   // from the monthly fee and the AMC dates until it is typed by hand.
   var PF_KEEP = {
     "Maintenance contract (AMC)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcFloors", "amcUnits", "amcRate", "amcFee", "amcPhase", "amcFreq", "amcTaxPct", "amcStart", "amcEnd", "amcFreeN", "amcHandover", "amcFree", "contractValue", "pm", "status"],
-    "Supply only": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"]
+    "Supply only": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "entity", "type", "currency", "contractFc", "fxRate", "contractValue", "paymentTerms", "start", "end", "pm", "status"],
+    // one-off lift jobs on a PO (hassan, 2026-11-23: "some po we get for installation of a temporary lift or dismantling
+    // the lift"): billed once or in parts, taxed as a provincial service, its own income account (hsec-svcjob.js)
+    "Service job (installation / dismantling / repair)": ["code", "name", "customer", "custAddress", "custEmail", "custNtn", "custStrn", "poNo", "amcTaxMode", "amcTaxNote", "entity", "type", "province", "amcTaxPct", "contractValue", "budgetCost", "paymentTerms", "start", "end", "pm", "status"]
   };
-  var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"] };
+  var PF_BOX = { "Maintenance contract (AMC)": ["fsMsBox", "fsGtBox", "calcBox"], "Supply only": ["fsGtBox"], "Service job (installation / dismantling / repair)": ["fsGtBox"] };
   var PF_LBL = {
     "Maintenance contract (AMC)": { contractValue: "Contract value for the whole AMC period (PKR)", pm: "Service engineer / account manager" },
-    "Supply only": { start: "Order date", end: "Delivery date", pm: "Sales / supply person", contractValue: "Order value (PKR)" }
+    "Supply only": { start: "Order date", end: "Delivery date", pm: "Sales / supply person", contractValue: "Order value (PKR)" },
+    "Service job (installation / dismantling / repair)": { start: "Job start date", end: "Completion date", pm: "Site engineer", contractValue: "PO value (PKR)", budgetCost: "Expected cost of the job (PKR)",
+      amcTaxPct: "Sales tax on services % (provincial)", amcTaxMode: "Sales tax", province: "Site province (decides the services tax)" }
   };
   function pfLabel(w, txt) {
     var lab = w.querySelector("label") || w.firstElementChild; if (!lab) return;
@@ -243,7 +248,7 @@
   // follows the contract value, unless someone typed a different figure before.
   function budgetSync() {
     var s = document.getElementById("f_type"), cv = document.getElementById("f_contractValue"), bc = document.getElementById("f_budgetCost");
-    if (!s || !cv || !bc || !PF_KEEP[s.value]) return;
+    if (!s || !cv || !bc || !PF_KEEP[s.value] || PF_KEEP[s.value].indexOf("budgetCost") >= 0) return; // asked on the form (service jobs)
     if (bc.value && num(bc.getAttribute("data-fs-auto")) !== num(bc.value)) return;
     bc.value = cv.value; bc.setAttribute("data-fs-auto", bc.value);
     bc.dispatchEvent(new Event("input", { bubbles: true }));
