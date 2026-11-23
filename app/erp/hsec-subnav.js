@@ -75,7 +75,11 @@
       "#fsSubNav .fs-snhd b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1}" +
       "#fsSubNav .fs-snx{border:0;background:rgba(255,255,255,.08);color:#e2e8f0;width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:16px;line-height:1}#fsSubNav .fs-snx:hover{background:rgba(255,255,255,.18)}" +
       "#fsSubNav .fs-sni{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;border:0;background:none;color:#cbd5e1;font:inherit;font-size:13.5px;font-weight:500;padding:9px 10px 9px 12px;margin:1px 0;border-radius:8px;cursor:pointer;border-left:3px solid transparent}" +
-      "#fsSubNav .fs-sni:hover{background:rgba(255,255,255,.08);color:#fff}" +
+      "#fsSubNav .fs-sni:hover{background:rgba(255,255,255,.18);color:#fff;box-shadow:inset 3px 0 0 #38bdf8}" +
+      // the pages under each area in the wide side menu: a clear highlight under the mouse (hassan, 2026-11-23: "while
+      // scrolling the mouse it shows blank it should be highlighted"); the app's own hover was a faint box on navy
+      "html body #rail .ntabs a.ntab:not(.on):hover{background:rgba(255,255,255,.18)!important;color:#fff!important;box-shadow:inset 3px 0 0 #38bdf8!important}" +
+      "html body #rail .ntabs a.ntab:not(.on):hover::before{opacity:1}" +
       "#fsSubNav .fs-sni.on{background:#fff;color:#13304f;font-weight:700;border-left-color:#22c55e;box-shadow:0 2px 8px rgba(0,0,0,.18)}" +
       "#fsSubNav .tcount{display:inline-block;margin-left:6px;min-width:18px;padding:1px 6px;border-radius:9px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;line-height:16px;text-align:center}" +
       "#fsSubOpen{position:fixed;z-index:30;width:20px;height:44px;border:0;border-radius:0 8px 8px 0;background:#1B3A5C;color:#fff;font-size:16px;cursor:pointer;box-shadow:2px 0 8px rgba(15,23,42,.2)}" +
