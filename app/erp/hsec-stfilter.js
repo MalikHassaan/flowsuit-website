@@ -8,9 +8,13 @@
   var pick = (function () { try { return JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch (e) { return {}; } })();
   var keep = function () { try { sessionStorage.setItem(KEY, JSON.stringify(pick)); } catch (e) { /* private window */ } };
   var txt = function (el) { return String((el && el.textContent) || "").replace(/\s+/g, " ").trim(); };
-  var num = function (s) { s = String(s).replace(/,/g, "").trim(); var neg = /^\(.*\)$/.test(s); var v = parseFloat(neg ? s.slice(1, -1) : s); return isNaN(v) ? 0 : neg ? -v : v; };
+  // "PKR 432,000" / "(1,200)" / "12.5%": the figure only
+  var num = function (s) { s = String(s).replace(/[^0-9.()\-]/g, "").trim(); var neg = /^\(.*\)$/.test(s); var v = parseFloat(neg ? s.slice(1, -1) : s); return isNaN(v) ? 0 : neg ? -v : v; };
   var fmt = function (v) { var r = Math.round(v), s = Math.abs(r).toLocaleString("en-US"); return r < 0 ? "(" + s + ")" : s; };
 
+  // the cell of a row that sits under visual column v (a "Total" cell can span several columns)
+  function cellAt(tr, v) { var x = 0, k = [].slice.call(tr.children); for (var i = 0; i < k.length; i++) { var sp = k[i].colSpan || 1; if (v < x + sp) return k[i]; x += sp; } return null; }
+  function startOf(tr, td) { var x = 0, k = [].slice.call(tr.children); for (var i = 0; i < k.length && k[i] !== td; i++) x += k[i].colSpan || 1; return x; }
   function table() {
     var q = document.getElementById("q"), bar = q && q.closest(".bar"); if (!bar) return null;
     var tb = null, el = bar.nextElementSibling;
@@ -72,11 +76,14 @@
     ths.forEach(function (th, i) {
       if (!/^(contract pkr|contract usd|contract asset.*|cash position)$/i.test(txt(th)) || th.classList.contains("fs-colhide")) return;
       th.classList.add("fs-colhide");
-      [].slice.call(T.tb.querySelectorAll("tbody tr, tfoot tr")).forEach(function (tr) { var td = tr.children[i]; if (td && !td.hasAttribute("colspan")) td.classList.add("fs-colhide"); });
+      [].slice.call(T.tb.querySelectorAll("tbody tr, tfoot tr")).forEach(function (tr) { var td = cellAt(tr, i); if (td && (td.colSpan || 1) === 1) td.classList.add("fs-colhide"); });
     });
     if (!hr.querySelector(".fs-catth")) {
       var th = document.createElement("th"); th.className = "fs-catth"; th.textContent = "Category"; hr.insertBefore(th, ths[col + 1] || null);
-      [].slice.call(T.tb.querySelectorAll("tfoot tr")).forEach(function (fr) { var c = fr.children[col + 1], td = document.createElement("td"); td.className = "fs-cattd"; fr.insertBefore(td, c || null); });
+      [].slice.call(T.tb.querySelectorAll("tfoot tr")).forEach(function (fr) {
+        var at = cellAt(fr, col); if (at && (at.colSpan || 1) > 1 && startOf(fr, at) + at.colSpan - 1 > col) { at.colSpan = at.colSpan + 1; return; } // a "Total" cell running past Project
+        var td = document.createElement("td"); td.className = "fs-cattd"; fr.insertBefore(td, at ? at.nextSibling : null);
+      });
     }
     T.tb.querySelectorAll("tbody tr").forEach(function (tr) {
       var td = tr.querySelector(":scope > td.fs-cattd");
@@ -101,8 +108,13 @@
     var cnt = [].slice.call(T.bar.querySelectorAll(".muted")).find(function (s) { return /^\d[\d,]* records?( of \d[\d,]*)?$/.test(txt(s)); });
     if (cnt) { var t = want || mw ? shown + " record" + (shown === 1 ? "" : "s") + " of " + T.rows.length : T.rows.length + " record" + (T.rows.length === 1 ? "" : "s"); if (txt(cnt) !== t) cnt.textContent = t; }
     var ft = T.tb.querySelector("tfoot tr");
-    if (ft) [].slice.call(ft.children).forEach(function (td, i) {
-      if (!td.classList.contains("num")) return;
+    // projects: the totals are always worked out here (the list's own total read "PKR 432,000" as 0)
+    if (T.c === "projects") part = true;
+    if (ft) [].slice.call(ft.children).forEach(function (td) {
+      if (!td.classList.contains("num") && !(T.c === "projects" && !txt(td) && (td.colSpan || 1) === 1 && !td.classList.contains("fs-cattd"))) return;
+      var i = startOf(ft, td), any = T.rows.some(function (tr) { return /\d/.test(txt(tr.children[i])) && !/%/.test(txt(tr.children[i])) && (tr.children[i] || {}).classList && tr.children[i].classList.contains("num"); });
+      if (!td.classList.contains("num")) { if (!any) return; td.classList.add("num"); }
+      if (/%/.test(txt(T.rows[0] && T.rows[0].children[i]))) return; // a % column has no total
       if (!td.hasAttribute("data-stf0")) td.setAttribute("data-stf0", td.textContent);
       var v = part ? fmt(T.rows.reduce(function (s, tr) { return tr.hidden ? s : s + num(txt(tr.children[i])); }, 0)) : td.getAttribute("data-stf0");
       if (td.textContent !== v) td.textContent = v;
