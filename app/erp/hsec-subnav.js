@@ -40,10 +40,18 @@
       bs.map(function (b) { var on = b.classList.contains("on"); return "<button type=\"button\" class=\"fs-sni" + (on ? " on" : "") + "\" data-fssn=\"" + esc(b.getAttribute("data-tab")) + "\"" + (on ? " aria-current=\"page\"" : "") + ">" + b.innerHTML + "</button>"; }).join("");
     if (!nav) { nav = document.createElement("nav"); nav.id = "fsSubNav"; nav.setAttribute("aria-label", "Pages"); document.body.appendChild(nav); }
     var top = Math.max(0, r.top), h = window.innerHeight - top;
-    var pos = "left:" + Math.round(r.right) + "px;top:" + Math.round(top) + "px;height:" + Math.round(h) + "px;width:" + W + "px;background:" + getComputedStyle(rail).backgroundColor;
+    var pos = "left:" + Math.round(r.right) + "px;top:" + Math.round(top) + "px;height:" + Math.round(h) + "px;width:" + W + "px;background:" + railBg(rail);
     if (nav.getAttribute("data-pos") !== pos) { nav.style.cssText = pos; nav.setAttribute("data-pos", pos); }
     if (last !== html) { nav.innerHTML = html; last = html; var o = nav.querySelector(".on"); if (o && o.scrollIntoView) o.scrollIntoView({ block: "nearest" }); }
     if (main && main.style.marginLeft !== W + "px") { main.style.marginLeft = W + "px"; main.setAttribute("data-fssub", "1"); }
+  }
+  // the column takes the side menu's own navy (its gradient when it has one). A light or see-through menu colour would
+  // leave the pale page names unreadable (hassan, 2026-11-23, screenshot: white text on a light column), so navy then.
+  function railBg(rail) {
+    var cs = getComputedStyle(rail), img = cs.backgroundImage, col = cs.backgroundColor, m = String(col).match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/);
+    var dark = m && (m[4] === undefined || +m[4] > 0.5) && (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) < 110;
+    if (img && img !== "none" && /gradient/.test(img)) return (dark ? col : "#1B3A5C") + " " + img;
+    return dark ? col : "#1B3A5C";
   }
   function showOpen(on) { // a small "›" tab to bring the column back after it was folded away
     var b = document.getElementById("fsSubOpen"), rail = document.getElementById("rail");
@@ -75,10 +83,10 @@
       "#fsSubNav .fs-snhd b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1}" +
       "#fsSubNav .fs-snx{border:0;background:rgba(255,255,255,.08);color:#e2e8f0;width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:16px;line-height:1}#fsSubNav .fs-snx:hover{background:rgba(255,255,255,.18)}" +
       "#fsSubNav .fs-sni{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;border:0;background:none;color:#cbd5e1;font:inherit;font-size:13.5px;font-weight:500;padding:9px 10px 9px 12px;margin:1px 0;border-radius:8px;cursor:pointer;border-left:3px solid transparent}" +
-      "#fsSubNav .fs-sni:hover{background:rgba(255,255,255,.18);color:#fff;box-shadow:inset 3px 0 0 #38bdf8}" +
+      "#fsSubNav .fs-sni:not(.on):hover{background:#1F6FB8;color:#fff;box-shadow:inset 3px 0 0 #38bdf8}" +
       // the pages under each area in the wide side menu: a clear highlight under the mouse (hassan, 2026-11-23: "while
       // scrolling the mouse it shows blank it should be highlighted"); the app's own hover was a faint box on navy
-      "html body #rail .ntabs a.ntab:not(.on):hover{background:rgba(255,255,255,.18)!important;color:#fff!important;box-shadow:inset 3px 0 0 #38bdf8!important}" +
+      "html body #rail .ntabs a.ntab:not(.on):hover{background:#1F6FB8!important;color:#fff!important;box-shadow:inset 3px 0 0 #38bdf8!important}" +
       "html body #rail .ntabs a.ntab:not(.on):hover::before{opacity:1}" +
       "#fsSubNav .fs-sni.on{background:#fff;color:#13304f;font-weight:700;border-left-color:#22c55e;box-shadow:0 2px 8px rgba(0,0,0,.18)}" +
       "#fsSubNav .tcount{display:inline-block;margin-left:6px;min-width:18px;padding:1px 6px;border-radius:9px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;line-height:16px;text-align:center}" +
