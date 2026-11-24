@@ -50,7 +50,7 @@
   function ctls(I) {
     var rg = range(), clients = I.map(function (x) { return x.client; }).filter(function (c, i, a) { return a.indexOf(c) === i; }).sort();
     var b = function (k, l) { return "<button type=\"button\" class=\"btn" + (ST.r === k ? " pri" : "") + "\" data-amcr=\"" + k + "\">" + h(l) + "</button>"; };
-    return "<div class=\"fs-amcr-bar\">" + b("matrix", "By client and month") + b("rec", "Receipts") + b("ledger", "Customer ledger") + b("age", "Aging") + b("tot", "Total receipts") + "</div>" +
+    return "<div class=\"fs-amcr-bar\">" + b("rgn", "Region report") + b("matrix", "By client and month") + b("rec", "Receipts") + b("ledger", "Customer ledger") + b("age", "Aging") + b("tot", "Total receipts") + "</div>" +
       "<div class=\"ctls fs-amcr-ctl\">" + (ST.r === "age" ? "" : "<label>From <input type=\"month\" id=\"amcrFrom\" value=\"" + h(rg[0]) + "\"></label><label>To <input type=\"month\" id=\"amcrTo\" value=\"" + h(rg[1]) + "\"></label>") +
       rgSel("amcrRg") + "<label>Client <select id=\"amcrCl\"><option value=\"\">" + (ST.r === "ledger" ? "Choose a client" : "All clients") + "</option>" + clients.map(function (c) { return "<option" + (c === ST.client ? " selected" : "") + ">" + h(c) + "</option>"; }).join("") + "</select></label>" +
       "<span style=\"flex:1\"></span><button type=\"button\" class=\"btn\" id=\"amcrPrint\">Print</button><button type=\"button\" class=\"btn\" id=\"amcrCsv\">Download CSV</button></div>";
@@ -167,7 +167,61 @@
         "</tbody><tfoot><tr><td>Total</td>" + M.map(function (m) { return "<td class=\"num\">" + money(T[m] || 0) + "</td>"; }).join("") + "<td class=\"num\">" + money(sum(T)) + "</td></tr></tfoot></table>" };
   }
 
-  function report() { var I = invs(); return ({ matrix: matrix, rec: recList, ledger: ledger, age: aging, tot: totals }[ST.r] || matrix)(I); }
+
+  // Region report for management and for each office (hassan, 2026-11-24: "each region number of clients, number of
+  // lifts each client and what we are charging, how much invoice is charged each month, how much is received and how
+  // much is pending, in a proper professional way to present to management and send to each region"):
+  //  * a summary, one row per region: clients, lifts, monthly charge, pending brought forward, invoiced, received, pending;
+  //  * then each region on its own page: its clients with lifts, rate per lift, monthly charge and the amount invoiced in
+  //    each month, then brought forward, invoiced, received and pending; region rows for received by month and the total.
+  // Pending b/f = invoices dated before the period less what was received on them before it; pending = b/f + invoiced
+  // - received, so every row adds up. Pick one region to send that office its own report.
+  function regions(I) {
+    var rg = range(), M = months(rg[0], rg[1]), cm = todayStr().slice(0, 7), mNow = cm < rg[1] ? cm : rg[1];
+    var rgN = function (p, r) { return String((p && p.region) || (r && r.region) || "").trim() || "No region set"; };
+    var cl = {}, get = function (n, g) { var k = g + "\u0001" + n; return cl[k] = cl[k] || { n: n, g: g, lifts: 0, fee: 0, inv: {}, rec: {}, bf: 0, ti: 0, tr: 0 }; };
+    projs().forEach(function (p) {
+      if (ST.client && clientOf(p) !== ST.client) return;
+      var c = get(clientOf(p), rgN(p));
+      c.lifts += num(p.amcUnits);
+      c.fee += safe(function () { return window.FS_AMCU.feeAt(p, mNow); }, null) || num(p.amcFee);
+    });
+    flt(I).forEach(function (x) {
+      var c = get(x.client, rgN(x.p, x.r)), net = num(x.r.amount) - num(x.r.retention) - num(x.r.advAdjust) - x.cn;
+      if (x.m < rg[0]) { c.bf += net - num(x.r.received); }
+      else if (x.m <= rg[1]) { c.inv[x.m] = (c.inv[x.m] || 0) + net; c.ti += net; if (num(x.r.received)) { c.rec[x.m] = (c.rec[x.m] || 0) + num(x.r.received); c.tr += num(x.r.received); } }
+      x.rc.forEach(function (q) { if (!q.posted) return; var mm = String(q.date || "").slice(0, 7) || x.m; if (mm < rg[0]) c.bf -= q.amount; else if (mm <= rg[1]) { c.rec[mm] = (c.rec[mm] || 0) + q.amount; c.tr += q.amount; } });
+    });
+    var L = Object.keys(cl).map(function (k) { var c = cl[k]; c.pend = c.bf + c.ti - c.tr; return c; }).filter(function (c) { return c.lifts || c.ti || c.tr || Math.abs(c.bf) >= 1; });
+    var add = function (A) { var S = { lifts: 0, fee: 0, inv: {}, rec: {}, bf: 0, ti: 0, tr: 0, pend: 0, n: 0 }; A.forEach(function (c) { S.n++; S.lifts += c.lifts; S.fee += c.fee; S.bf += c.bf; S.ti += c.ti; S.tr += c.tr; S.pend += c.pend; M.forEach(function (m) { S.inv[m] = (S.inv[m] || 0) + (c.inv[m] || 0); S.rec[m] = (S.rec[m] || 0) + (c.rec[m] || 0); }); }); return S; };
+    var T = add(L), M1 = M.filter(function (m) { return T.inv[m] || T.rec[m]; }); if (M1.length) M = M1;
+    var G = {}; L.forEach(function (c) { (G[c.g] = G[c.g] || []).push(c); });
+    var RG = Object.keys(G).map(function (g) { return { g: g, L: G[g].sort(function (a, b) { return b.pend - a.pend || a.n.localeCompare(b.n); }), S: add(G[g]) }; })
+      .sort(function (a, b) { return a.g === "No region set" ? 1 : b.g === "No region set" ? -1 : b.S.pend - a.S.pend || a.g.localeCompare(b.g); });
+    var mo = function (v) { return Math.abs(v) >= 0.5 ? money(v) : "–"; }, pct = function (S) { var due = S.bf + S.ti; return due > 0 ? Math.round(S.tr / due * 100) + "%" : "–"; };
+    var hd = "margin:16px 0 6px;padding:7px 10px;border-radius:4px;font-size:14px;background:#13304f!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact";
+    var sumRow = function (label, S, b) { var t = "td"; return "<tr" + (b ? " class=\"fs-amcr-sub\"" : "") + "><" + t + ">" + h(label) + "</" + t + "><td class=\"num\">" + S.n + "</td><td class=\"num\">" + S.lifts + "</td><td class=\"num\">" + mo(S.fee) + "</td><td class=\"num\">" + mo(S.bf) + "</td><td class=\"num\">" + mo(S.ti) + "</td><td class=\"num\">" + mo(S.tr) + "</td><td class=\"num\"><b>" + mo(S.pend) + "</b></td><td class=\"num\">" + pct(S) + "</td></tr>"; };
+    var html = "";
+    if (RG.length > 1) html += "<h3 class=\"fs-amcr-h\" style=\"" + hd + "\">Summary by region</h3><table class=\"fs-amcr-t\"><thead><tr><th>Region</th><th class=\"num\">Clients</th><th class=\"num\">Lifts</th><th class=\"num\">Monthly charge</th><th class=\"num\">Pending b/f</th><th class=\"num\">Invoiced</th><th class=\"num\">Received</th><th class=\"num\">Pending</th><th class=\"num\">Collected</th></tr></thead><tbody>" +
+      RG.map(function (R) { return sumRow(R.g, R.S); }).join("") + "</tbody><tfoot>" + sumRow("Total", T, true) + "</tfoot></table>";
+    var cols = 5 + M.length + 4;
+    RG.forEach(function (R, i) {
+      var S = R.S;
+      html += "<div class=\"fs-amcr-rgpage\"" + (i || RG.length > 1 ? " style=\"page-break-before:always;break-before:page\"" : "") + "><h3 class=\"fs-amcr-h\" style=\"" + hd + "\">" + h(R.g === "No region set" ? "No region set" : R.g + " region") + ": " + S.n + " client" + (S.n === 1 ? "" : "s") + ", " + S.lifts + " lift" + (S.lifts === 1 ? "" : "s") + ", Rs " + mo(S.fee) + " a month</h3>" +
+        "<table class=\"fs-amcr-t\"><thead><tr><th>#</th><th>Client</th><th class=\"num\">Lifts</th><th class=\"num\">Rate per lift</th><th class=\"num\">Monthly charge</th><th class=\"num\">Pending b/f</th>" + M.map(function (m) { return "<th class=\"num\">" + h(mName(m)) + "</th>"; }).join("") +
+        "<th class=\"num\">Invoiced</th><th class=\"num\">Received</th><th class=\"num\">Pending</th></tr></thead><tbody>" +
+        R.L.map(function (c, k) { return "<tr><td>" + (k + 1) + "</td><td>" + h(c.n) + "</td><td class=\"num\">" + (c.lifts || "–") + "</td><td class=\"num\">" + (c.lifts ? mo(c.fee / c.lifts) : "–") + "</td><td class=\"num\">" + mo(c.fee) + "</td><td class=\"num\">" + mo(c.bf) + "</td>" + M.map(function (m) { return "<td class=\"num\">" + (c.inv[m] ? money(c.inv[m]) : "") + "</td>"; }).join("") +
+          "<td class=\"num\">" + mo(c.ti) + "</td><td class=\"num\">" + mo(c.tr) + "</td><td class=\"num\"><b>" + mo(c.pend) + "</b></td></tr>"; }).join("") +
+        "</tbody><tfoot><tr><td></td><td>Region total (invoiced)</td><td class=\"num\">" + S.lifts + "</td><td></td><td class=\"num\">" + mo(S.fee) + "</td><td class=\"num\">" + mo(S.bf) + "</td>" + M.map(function (m) { return "<td class=\"num\">" + mo(S.inv[m] || 0) + "</td>"; }).join("") + "<td class=\"num\">" + mo(S.ti) + "</td><td class=\"num\">" + mo(S.tr) + "</td><td class=\"num\">" + mo(S.pend) + "</td></tr>" +
+        "<tr><td></td><td>Received in the month</td><td colspan=\"4\"></td>" + M.map(function (m) { return "<td class=\"num\">" + mo(S.rec[m] || 0) + "</td>"; }).join("") + "<td colspan=\"3\" class=\"num\">Collected " + pct(S) + "</td></tr></tfoot></table></div>";
+    });
+    if (!RG.length) html = "<p class=\"muted\">No AMC contracts.</p>";
+    var csv = [["Region", "Client", "Lifts", "Rate per lift", "Monthly charge", "Pending b/f"].concat(M.map(function (m) { return mName(m) + " invoiced"; })).concat(M.map(function (m) { return mName(m) + " received"; })).concat(["Invoiced", "Received", "Pending"])];
+    RG.forEach(function (R) { R.L.forEach(function (c) { csv.push([R.g, c.n, c.lifts, c.lifts ? Math.round(c.fee / c.lifts) : "", Math.round(c.fee), Math.round(c.bf)].concat(M.map(function (m) { return Math.round(c.inv[m] || 0); })).concat(M.map(function (m) { return Math.round(c.rec[m] || 0); })).concat([Math.round(c.ti), Math.round(c.tr), Math.round(c.pend)])); }); });
+    var who = ST.rg ? (ST.rg === "-" ? "No region set" : ST.rg) + " region" : "All regions";
+    return { title: who + ": AMC clients, billing and collection, " + mName(rg[0]) + " to " + mName(rg[1]), sub: "", csv: csv, html: html };
+  }
+  function report() { var I = invs(); return ({ matrix: matrix, rgn: regions, rec: recList, ledger: ledger, age: aging, tot: totals }[ST.r] || matrix)(I); }
   function view() {
     var I = invs(), R = report();
     return ctls(I) + "<h3 style=\"margin:8px 0 2px\">" + h(R.title) + "</h3>" + (R.sub ? "<p class=\"muted\" style=\"margin:0 0 8px\">" + h(R.sub) + "</p>" : "<div style=\"height:8px\"></div>") + "<div class=\"panel tw fs-amcr\">" + R.html + "</div>";
