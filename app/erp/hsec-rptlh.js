@@ -41,9 +41,9 @@
   };
   // a report can name its company on the sheet (data-fsco), e.g. an office's report in the group view
   var entNow = function () { var e = safe(function () { var x = document.querySelector("#printLayer [data-fsco]"); return x && x.getAttribute("data-fsco"); }, ""); return e || safe(function () { return V.ent; }, "") || ""; };
-  function lhOf() {
+  function lhOf(e0) {
     if (typeof IV_LH === "undefined") return null;
-    var e = entNow();
+    var e = e0 || entNow();
     if (!e || e === "All") e = "HSEC";   // a company without a letterhead prints none
     var L = IV_LH[e];
     if (!L || typeof L.head !== "function") return null;
@@ -182,7 +182,30 @@
     pageCss(m === "tpl");
     var pb = sh.querySelector(".fs-rtpdf"); if (pb) pb.hidden = m !== "tpl";
     var s = sh.querySelector(".fs-rlh-sel"); if (s) s.value = m;
+    var cp = sh.querySelector(".fs-rlh-copick"); if (cp) cp.hidden = m === "plain";
   }
+  // which company's letterhead (hassan, 2026-11-24: "while downloading a report on letterhead it should ask which
+  // letterhead template should be used"): every company with a letterhead; the report's own company first chosen
+  function lhCos() { return safe(function () { return Object.keys(IV_LH).filter(function (e) { return IV_LH[e] && typeof IV_LH[e].head === "function"; }); }, []) || []; }
+  function coPick() {
+    var L = lhCos(); if (L.length < 2) return "";
+    var cur = entNow(); if (!cur || cur === "All" || L.indexOf(cur) < 0) cur = L.indexOf("HSEC") >= 0 ? "HSEC" : L[0];
+    var nm = function (e) { return safe(function () { return legal(e); }, "") || safe(function () { return coName(e); }, "") || e; }; // eslint-disable-line no-undef
+    return "<label class=\"fs-rlh-pick fs-rlh-copick\">Letterhead of <select class=\"fs-rlh-co\">" + L.map(function (e) { return "<option value=\"" + e$(e) + "\"" + (e === cur ? " selected" : "") + ">" + e$(nm(e)) + "</option>"; }).join("") + "</select></label>";
+  }
+  function setCo(sh, e) {
+    sh.setAttribute("data-fsco", e);
+    var L = lhOf(e), hd = sh.querySelector(".fs-rlh-h"), ft = sh.querySelector(".fs-rlh-f");
+    if (L && hd) hd.innerHTML = L.head;
+    if (L && L.foot) { if (ft) ft.innerHTML = L.foot; else sh.insertAdjacentHTML("beforeend", "<div class=\"fs-rlh-f\">" + L.foot + "</div>"); } else if (ft) ft.remove();
+    [].slice.call(sh.querySelectorAll(".fs-rt-x")).forEach(function (x) { x.remove(); }); // the template's band names the company: draw it again
+    [].slice.call(sh.querySelectorAll(".fs-rt-orig")).forEach(function (x) { x.classList.remove("fs-rt-orig"); });
+    apply(sh);
+  }
+  document.addEventListener("change", function (e) {
+    if (!e.target || !e.target.classList || !e.target.classList.contains("fs-rlh-co")) return;
+    var sh = e.target.closest(".sheet"); if (sh) setCo(sh, e.target.value);
+  });
   function dress() {
     var pl = document.getElementById("printLayer"); if (!pl) return;
     var sh = pl.querySelector(".sheet");
@@ -195,7 +218,7 @@
     if (!bar) return;
     bar.insertAdjacentHTML("beforeend", "<label class=\"fs-rlh-pick\">Print on <select class=\"fs-rlh-sel\">" + (k === "rpt" ? "<option value=\"tpl\">Report template</option>" : "") +
       (L && L.head ? "<option value=\"lh\">Letterhead</option><option value=\"space\">Pre-printed paper (space left)</option>" : "") + "<option value=\"plain\">Plain paper</option></select></label>" +
-      (k === "rpt" ? "<button type=\"button\" class=\"btn fs-rtpdf\">Download PDF</button>" : ""));
+      coPick() + (k === "rpt" ? "<button type=\"button\" class=\"btn fs-rtpdf\">Download PDF</button>" : ""));
     if (L && L.head) {
       bar.insertAdjacentHTML("afterend", "<div class=\"fs-rlh-h\">" + L.head + "</div>");
       if (L.foot) sh.insertAdjacentHTML("beforeend", "<div class=\"fs-rlh-f\">" + L.foot + "</div>");
