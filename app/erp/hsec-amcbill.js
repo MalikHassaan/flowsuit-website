@@ -379,15 +379,22 @@
     }
     if (id === "fsAbCli") { ST.cli = e.target.value; safe(render, null); }
     else if (id === "fsAbFrom" || id === "fsAbTo") {
-      if (!e.target.value) return;
+      if (!/^(19|20)\d\d-\d\d$/.test(e.target.value)) return; // typed by hand: wait for a whole month and year
       ST[id === "fsAbFrom" ? "from" : "to"] = e.target.value;
       if (ST.to < ST.from) { if (id === "fsAbFrom") ST.to = ST.from; else ST.from = ST.to; }
-      safe(function () { V.amcM = ST.to; }, null); safe(render, null);
+      whenDone(e.target, function () { safe(function () { V.amcM = ST.to; }, null); safe(render, null); });
     }
     else if (id === "fsAbMode") { ST.mode = e.target.value; safe(render, null); }
     else if (id === "fsAbAll") { document.querySelectorAll(".fsAbCk").forEach(function (c) { c.checked = e.target.checked; ST.sel[c.value] = c.checked; }); count(); }
     else if (e.target.classList && e.target.classList.contains("fsAbCk")) { ST.sel[e.target.value] = e.target.checked; count(); }
   });
+  // re-draw once the person has finished with the box (clicked away or pressed Enter), not on every digit typed
+  function whenDone(el, go) {
+    if (el.getAttribute("data-fswait")) return;
+    var fire = function () { el.removeEventListener("blur", fire); el.removeEventListener("keydown", key); go(); }, key = function (k) { if (k.key === "Enter") { k.preventDefault(); fire(); } };
+    if (document.activeElement !== el) return go();
+    el.setAttribute("data-fswait", "1"); el.addEventListener("blur", fire); el.addEventListener("keydown", key);
+  }
   function count() { var n = document.querySelectorAll(".fsAbCk:checked").length, s = document.getElementById("fsAbN"); if (s) s.textContent = n ? n + " ticked" : "Tick the invoices to print together"; }
   // Delete an AMC invoice (hassan, 2026-11-04: "there is no delete option of the invoices once the invoices are
   // created"). A lump-sum invoice is deleted with all its contracts' records. Allowed while nothing is received and its
