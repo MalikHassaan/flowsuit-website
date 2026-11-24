@@ -191,9 +191,22 @@
   document.addEventListener("change", function (e) {
     var id = e.target && e.target.id; if (["amcrFrom", "amcrTo", "amcrCl", "amcrRg", "fsAcRg"].indexOf(id) < 0) return;
     if (id === "amcrRg" || id === "fsAcRg") { ST.rg = e.target.value; ST.client = ""; }
-    if (id === "amcrFrom") ST.from = e.target.value; if (id === "amcrTo") ST.to = e.target.value; if (id === "amcrCl") ST.client = e.target.value;
+    if (id === "amcrFrom" || id === "amcrTo") { // typed by hand: wait for a whole month and year (hassan, 2026-11-24: "manually month is not getting changed")
+      var v = e.target.value; if (!/^(19|20)\d\d-\d\d$/.test(v)) return;
+      if (id === "amcrFrom") ST.from = v; else ST.to = v;
+      whenDone(e.target, function () { safe(function () { render(); }, null); });
+      return;
+    }
+    if (id === "amcrCl") ST.client = e.target.value;
     safe(function () { render(); }, null);
   });
+  // re-draw once the person has finished with the box (clicked away or pressed Enter), not on every digit typed
+  function whenDone(el, go) {
+    if (el.getAttribute("data-fswait")) return;
+    var fire = function () { el.removeEventListener("blur", fire); el.removeEventListener("keydown", key); go(); }, key = function (k) { if (k.key === "Enter") { k.preventDefault(); fire(); } };
+    if (document.activeElement !== el) return go();
+    el.setAttribute("data-fswait", "1"); el.addEventListener("blur", fire); el.addEventListener("keydown", key);
+  }
 
   var hooked = false;
   function hook() {
