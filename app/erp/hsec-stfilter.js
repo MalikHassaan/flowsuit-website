@@ -99,12 +99,38 @@
     // a "no rows" line spans one more column
     T.tb.querySelectorAll("tbody td[colspan]").forEach(function (td) { if (!td.hasAttribute("data-fscs")) { td.setAttribute("data-fscs", "1"); td.colSpan = td.colSpan + 1; } });
   }
+  // From / To dates on Journals (hassan, 2026-11-24: "in journal there should be date filtration"): any day range, with or
+  // without the Month picker; the count and totals follow it
+  var DKEY = "fs-dtf", dpick = (function () { try { return JSON.parse(sessionStorage.getItem(DKEY)) || {}; } catch (e) { return {}; } })();
+  var dkeep = function () { try { sessionStorage.setItem(DKEY, JSON.stringify(dpick)); } catch (e) { /* private window */ } };
+  function dates(T) {
+    if (T.c !== "journals") return null;
+    var all = (typeof Store !== "undefined" && Store.data && Store.data.journals) || null; if (!all) return null;
+    var by = {}; all.forEach(function (r) { by[r.id] = String(r.date || "").slice(0, 10); }); return by;
+  }
+  var dOk = function (T, tr) { var r = T.dt && dpick[T.c]; if (!r || (!r.f && !r.t)) return true; var d = T.dt[tr.getAttribute("data-id")] || ""; return !!d && (!r.f || d >= r.f) && (!r.t || d <= r.t); };
+  function dateSel(T) {
+    var box = document.getElementById("fsDtF");
+    if (!T.dt) { if (box) box.remove(); return; }
+    var r = dpick[T.c] || {};
+    if (!box) {
+      var anchor = document.getElementById("fsMoF") || document.getElementById("fsStF"); anchor = anchor ? anchor.closest("label") : document.getElementById("q");
+      box = document.createElement("span"); box.id = "fsDtF"; box.className = "fs-dtf";
+      box.innerHTML = "<label class=\"fs-stf\">From <input type=\"date\" id=\"fsDfFrom\"></label><label class=\"fs-stf\">To <input type=\"date\" id=\"fsDfTo\"></label><button type=\"button\" class=\"btn sm\" id=\"fsDfX\" title=\"Show all dates\">Clear dates</button>";
+      anchor.insertAdjacentElement("afterend", box);
+    }
+    var f = document.getElementById("fsDfFrom"), t = document.getElementById("fsDfTo");
+    if (document.activeElement !== f && f.value !== (r.f || "")) f.value = r.f || "";
+    if (document.activeElement !== t && t.value !== (r.t || "")) t.value = r.t || "";
+    f.classList.toggle("on", !!r.f); t.classList.toggle("on", !!r.t);
+    document.getElementById("fsDfX").hidden = !r.f && !r.t;
+  }
   var mOk = function (T, tr) { var w = T.mon && mpick[T.c]; return !w || T.mon[tr.getAttribute("data-id")] === w; };
   var special = function (v) { return v && (v.charAt(0) === "@" || v.charAt(0) === "!"); };
 
   function apply(T) {
-    var want = T.col < 0 ? "" : pick[T.c] || "", shown = 0, mw = !!(T.mon && mpick[T.c]), part = !!want || mw || T.out > 0;
-    T.rows.forEach(function (tr) { var hide = !keepRow(T, tr, want) || !mOk(T, tr); if (tr.hidden !== hide) tr.hidden = hide; if (!hide) shown++; });
+    var want = T.col < 0 ? "" : pick[T.c] || "", shown = 0, dr = T.dt && dpick[T.c], mw = !!(T.mon && mpick[T.c]) || !!(dr && (dr.f || dr.t)), part = !!want || mw || T.out > 0;
+    T.rows.forEach(function (tr) { var hide = !keepRow(T, tr, want) || !mOk(T, tr) || !dOk(T, tr); if (tr.hidden !== hide) tr.hidden = hide; if (!hide) shown++; });
     var cnt = [].slice.call(T.bar.querySelectorAll(".muted")).find(function (s) { return /^\d[\d,]* records?( of \d[\d,]*)?$/.test(txt(s)); });
     if (cnt) { var t = want || mw ? shown + " record" + (shown === 1 ? "" : "s") + " of " + T.rows.length : T.rows.length + " record" + (T.rows.length === 1 ? "" : "s"); if (txt(cnt) !== t) cnt.textContent = t; }
     var ft = T.tb.querySelector("tfoot tr");
@@ -142,9 +168,9 @@
   }
   function run() {
     var T = table(); if (!T) { var ms = document.getElementById("fsMoF"); if (ms) ms.closest("label").remove(); return; }
-    T.mon = months(T);
+    T.mon = months(T); T.dt = dates(T);
     if (T.c === "projects" && T.mon) { tags(T); T = table(); if (!T) return; T.mon = months(T); } // column added first, then indexes read again
-    if (T.col < 0) { monthSel(T); apply(T); return; }
+    if (T.col < 0) { monthSel(T); dateSel(T); apply(T); return; }
     var counts = {}; T.rows.forEach(function (tr) { var s = stOf(T, tr); counts[s] = (counts[s] || 0) + 1; });
     var names = Object.keys(counts).sort();
     var cur = pick[T.c] || "";
@@ -163,6 +189,7 @@
     if (sel.getAttribute("data-c") !== T.c || sel.getAttribute("data-o") !== opts) { sel.innerHTML = opts; sel.setAttribute("data-c", T.c); sel.setAttribute("data-o", opts); }
     sel.classList.toggle("on", !!pick[T.c]);
     monthSel(T);
+    dateSel(T);
     apply(T);
   }
 
@@ -176,7 +203,9 @@
     },
     get: function (c) { return pick[c] || ""; }
   };
+  document.addEventListener("click", function (e) { if (!e.target || e.target.id !== "fsDfX") return; var D = table(); if (!D) return; delete dpick[D.c]; dkeep(); run(); });
   document.addEventListener("change", function (e) {
+    if (e.target && (e.target.id === "fsDfFrom" || e.target.id === "fsDfTo")) { var D = table(); if (!D) return; var v = e.target.value; if (v && !/^(19|20)\d\d-\d\d-\d\d$/.test(v)) return; var o = dpick[D.c] = dpick[D.c] || {}; o[e.target.id === "fsDfFrom" ? "f" : "t"] = v; if (!o.f && !o.t) delete dpick[D.c]; dkeep(); run(); return; }
     if (e.target && e.target.id === "fsMoF") { var M = table(); if (!M) return; if (e.target.value) mpick[M.c] = e.target.value; else delete mpick[M.c]; mkeep(); run(); return; }
     if (!e.target || e.target.id !== "fsStF") return;
     var T = table(); if (!T) return;
@@ -230,6 +259,6 @@
     ".fs-exbox h3{margin:0 0 4px;font-size:17px}.fs-exbox p{margin:0 0 12px;color:#64748b}.fs-exbox button.fs-exo{display:flex;justify-content:space-between;width:100%;margin:0 0 6px;padding:10px 12px;border:1px solid #d7dde4;border-radius:9px;background:#fff;font:inherit;cursor:pointer;text-align:left}" +
     ".fs-exbox button.fs-exo:hover{border-color:#1F6FB8;background:#eef5fc}.fs-exbox button.fs-exo b{font-weight:600}.fs-exbox .fs-exx{margin-top:6px;border:0;background:none;color:#64748b;cursor:pointer;font:inherit}" +
     ".fs-cattd .fs-tytag{margin-top:0;white-space:normal}" +
-    ".fs-stf select.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18);font-weight:600}@media print{.fs-stf{display:none}}";
+    ".fs-stf select.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18);font-weight:600}.fs-dtf{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}.fs-stf input[type=date]{padding:5px 8px;border:1px solid #cfd6de;border-radius:8px;font:inherit;color:#222}.fs-stf input.on{border-color:#1F6FB8;box-shadow:0 0 0 2px rgba(31,111,184,.18);font-weight:600}@media print{.fs-stf,.fs-dtf{display:none}}";
   (document.head || document.documentElement).appendChild(css);
 })();

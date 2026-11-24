@@ -1,4 +1,4 @@
-// Voucher list order (hassan, 2026-11-18: "when an entry is being saved it is not shown on the maker screen ... sort by
+// Voucher list order, newest date first (2026-11-24; before that unposted vouchers came first) (hassan, 2026-11-18: "when an entry is being saved it is not shown on the maker screen ... sort by
 // the date and on top all vouchers which are being prepared should be sorted by the date"). Vouchers still being
 // prepared (Draft, Pending approval, Approved, Rejected: anything not yet Posted) come first, newest date first; posted
 // vouchers follow, newest date first. Same date: the most recently saved first. A voucher just saved also clears a
@@ -7,8 +7,8 @@
   /* global S, Store */
   var open = function (r) { return String((r && r.status) || "") !== "Posted"; };
   function order(a, b) {
-    var oa = open(a), ob = open(b);
-    if (oa !== ob) return oa ? -1 : 1;
+    // newest date first, whatever the status (hassan, 2026-11-24: "sorting by date from current date to lowest");
+    // vouchers still being prepared are found with the Status picker
     return String(b.date || "").localeCompare(String(a.date || "")) ||
       String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")) ||
       String(b.ref || "").localeCompare(String(a.ref || ""));
