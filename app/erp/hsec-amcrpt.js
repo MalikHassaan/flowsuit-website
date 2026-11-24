@@ -73,7 +73,7 @@
       x.rc.forEach(function (q) { var mm = String(q.date || "").slice(0, 7); if (q.posted && mm >= rg[0] && mm <= rg[1]) { c.rec[mm] = (c.rec[mm] || 0) + q.amount; c.tr += q.amount; } });
       c.bal += x.bal;
     });
-    var names = Object.keys(cl).sort(), T = { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 };
+    var names = Object.keys(cl).sort(function (a, b) { return cl[b].bal - cl[a].bal || a.localeCompare(b); }), T = { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 }; // largest balance first (hassan, 2026-11-24)
     names.forEach(function (n) { var c = cl[n]; M.forEach(function (m) { T.inv[m] = (T.inv[m] || 0) + (c.inv[m] || 0); T.rec[m] = (T.rec[m] || 0) + (c.rec[m] || 0); }); T.ti += c.ti; T.tr += c.tr; T.bal += c.bal; });
     // only the months of the chosen period that have an invoice or a receipt (hassan, 2026-11-24: "only show columns as per the selection")
     var M1 = M.filter(function (m) { return T.inv[m] || T.rec[m]; }); if (M1.length) M = M1;
@@ -86,14 +86,15 @@
     var row = function (label, c, cls) { return "<tr" + (cls ? " class=\"" + cls + "\"" : "") + "><td>" + h(label) + "</td>" + M.map(function (m) { return cell(c, m); }).join("") + "<td class=\"num\"><b>" + money(c.ti) + "</b></td><td class=\"num\"><b>" + money(c.tr) + "</b></td><td class=\"num\"><b>" + money(c.bal) + "</b></td></tr>"; };
     // all regions: the clients under their region, each region with its total (hassan, 2026-11-24)
     var rgOf = function (n) { return cl[n].rg || "No region set"; }, byRg = !ST.rg && names.some(function (n) { return cl[n].rg; });
-    var RG = []; names.forEach(function (n) { if (RG.indexOf(rgOf(n)) < 0) RG.push(rgOf(n)); }); RG.sort(function (a, b) { return a === "No region set" ? 1 : b === "No region set" ? -1 : a.localeCompare(b); });
-    var subOf = function (L) { var S = { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 }; L.forEach(function (n) { var c = cl[n]; M.forEach(function (m) { S.inv[m] = (S.inv[m] || 0) + (c.inv[m] || 0); S.rec[m] = (S.rec[m] || 0) + (c.rec[m] || 0); }); S.ti += c.ti; S.tr += c.tr; S.bal += c.bal; }); return S; };
+    var RG = []; names.forEach(function (n) { if (RG.indexOf(rgOf(n)) < 0) RG.push(rgOf(n)); }); var subOf = function (L) { var S = { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 }; L.forEach(function (n) { var c = cl[n]; M.forEach(function (m) { S.inv[m] = (S.inv[m] || 0) + (c.inv[m] || 0); S.rec[m] = (S.rec[m] || 0) + (c.rec[m] || 0); }); S.ti += c.ti; S.tr += c.tr; S.bal += c.bal; }); return S; };
+    var rgBal = {}; names.forEach(function (n) { rgBal[rgOf(n)] = (rgBal[rgOf(n)] || 0) + cl[n].bal; });
+    RG.sort(function (a, b) { return a === "No region set" ? 1 : b === "No region set" ? -1 : rgBal[b] - rgBal[a] || a.localeCompare(b); });
     var body = !byRg ? names.map(function (n) { return row(n, cl[n]); }).join("") : RG.map(function (g) {
       var L = names.filter(function (n) { return rgOf(n) === g; });
       return "<tr class=\"fs-amcr-rg\"><td colspan=\"" + (M.length * 2 + 4) + "\" style=\"background:#13304f!important;color:#fff!important;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact\">" + h(g) + " (" + L.length + " client" + (L.length === 1 ? "" : "s") + ")</td></tr>" + L.map(function (n) { return row(n, cl[n]); }).join("") + row(g + " subtotal", subOf(L), "fs-amcr-sub");
     }).join("");
     var csv = [(byRg ? ["Region"] : []).concat(["Client"]).concat(M.map(function (m) { return [m + " invoiced", m + " received"]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat(["Invoiced", "Received", "Balance"])]
-      .concat(names.slice().sort(function (a, b) { return byRg ? RG.indexOf(rgOf(a)) - RG.indexOf(rgOf(b)) || a.localeCompare(b) : 0; }).map(function (n) { var c = cl[n]; return (byRg ? [rgOf(n)] : []).concat([n]).concat(M.map(function (m) { return [Math.round(c.inv[m] || 0), Math.round(c.rec[m] || 0)]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat([Math.round(c.ti), Math.round(c.tr), Math.round(c.bal)]); }));
+      .concat(names.slice().sort(function (a, b) { return byRg ? RG.indexOf(rgOf(a)) - RG.indexOf(rgOf(b)) || names.indexOf(a) - names.indexOf(b) : names.indexOf(a) - names.indexOf(b); }).map(function (n) { var c = cl[n]; return (byRg ? [rgOf(n)] : []).concat([n]).concat(M.map(function (m) { return [Math.round(c.inv[m] || 0), Math.round(c.rec[m] || 0)]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat([Math.round(c.ti), Math.round(c.tr), Math.round(c.bal)]); }));
     return { title: (ST.rg && ST.rg !== "-" ? ST.rg + " region: " : "") + "AMC invoiced vs received, " + mName(rg[0]) + " to " + mName(rg[1]), sub: "", csv: csv,
       html: "<table class=\"fs-amcr-t\"><thead>" + head + "</thead><tbody>" + (body || "<tr><td colspan=\"" + (M.length * 2 + 4) + "\" class=\"muted\">No AMC invoices.</td></tr>") + "</tbody><tfoot><tr><td>Total</td>" + M.map(function (m) { return cell(T, m); }).join("") + "<td class=\"num\">" + money(T.ti) + "</td><td class=\"num\">" + money(T.tr) + "</td><td class=\"num\">" + money(T.bal) + "</td></tr></tfoot></table>" };
   }
@@ -158,7 +159,7 @@
   function totals(I) {
     var rg = range(), M = months(rg[0], rg[1]), cl = {}, T = {};
     flt(I).forEach(function (x) { x.rc.forEach(function (q) { var mm = String(q.date || "").slice(0, 7); if (!q.posted || mm < rg[0] || mm > rg[1]) return; var c = cl[x.client] = cl[x.client] || {}; c[mm] = (c[mm] || 0) + q.amount; T[mm] = (T[mm] || 0) + q.amount; }); });
-    var names = Object.keys(cl).sort(), sum = function (o) { return M.reduce(function (s, m) { return s + (o[m] || 0); }, 0); };
+    var sum = function (o) { return M.reduce(function (s, m) { return s + (o[m] || 0); }, 0); }, names = Object.keys(cl).sort(function (a, b) { return sum(cl[b]) - sum(cl[a]) || a.localeCompare(b); });
     return { title: "AMC total receipts", sub: "Posted AMC receipts by month, " + mName(rg[0]) + " to " + mName(rg[1]) + ".",
       csv: [["Client"].concat(M).concat(["Total"])].concat(names.map(function (n) { return [n].concat(M.map(function (m) { return Math.round(cl[n][m] || 0); })).concat([Math.round(sum(cl[n]))]); })).concat([["Total"].concat(M.map(function (m) { return Math.round(T[m] || 0); })).concat([Math.round(sum(T))])]),
       html: "<table class=\"fs-amcr-t\"><thead><tr><th>Client</th>" + M.map(function (m) { return "<th class=\"num\">" + h(mName(m)) + "</th>"; }).join("") + "<th class=\"num\">Total</th></tr></thead><tbody>" +
