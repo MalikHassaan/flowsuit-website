@@ -180,7 +180,7 @@
     sh.classList.toggle("fs-rlh-plain", m === "plain");
     sh.classList.toggle("fs-rlh-off", m === "tpl");
     pageCss(m === "tpl");
-    var pb = sh.querySelector(".fs-rtpdf"); if (pb) pb.hidden = m !== "tpl";
+    var pb = sh.querySelector(".fs-rtpdf"); if (pb) pb.hidden = false; // every mode: the print window turns landscape pages sideways on some printers (hassan, 2026-11-24)
     var s = sh.querySelector(".fs-rlh-sel"); if (s) s.value = m;
     var cp = sh.querySelector(".fs-rlh-copick"); if (cp) cp.hidden = m === "plain";
   }
@@ -218,7 +218,7 @@
     if (!bar) return;
     bar.insertAdjacentHTML("beforeend", "<label class=\"fs-rlh-pick\">Print on <select class=\"fs-rlh-sel\">" + (k === "rpt" ? "<option value=\"tpl\">Report template</option>" : "") +
       (L && L.head ? "<option value=\"lh\">Letterhead</option><option value=\"space\">Pre-printed paper (space left)</option>" : "") + "<option value=\"plain\">Plain paper</option></select></label>" +
-      coPick() + (k === "rpt" ? "<button type=\"button\" class=\"btn fs-rtpdf\">Download PDF</button>" : ""));
+      coPick() + "<button type=\"button\" class=\"btn fs-rtpdf\">Download PDF</button>");
     if (L && L.head) {
       bar.insertAdjacentHTML("afterend", "<div class=\"fs-rlh-h\">" + L.head + "</div>");
       if (L.foot) sh.insertAdjacentHTML("beforeend", "<div class=\"fs-rlh-f\">" + L.foot + "</div>");
@@ -306,30 +306,45 @@
     var done = [], W = sh.clientWidth || 1030;
     [].slice.call(sh.querySelectorAll("table")).forEach(function (t) {
       if (t.closest(".fs-rt-x") || t.classList.contains("sig")) return;
-      t.classList.add("fs-rt-fit"); done.push([t, t.style.fontSize]);
+      t.classList.add("fs-rt-fit"); done.push([t, t.style.fontSize, t.style.zoom]); t.style.zoom = "";
       for (var f = 12; f >= 6 && t.scrollWidth > W; f -= 0.5) t.style.fontSize = f + "px";
     });
-    return function () { done.forEach(function (d) { d[0].classList.remove("fs-rt-fit"); d[0].style.fontSize = d[1]; }); };
+    return function () { done.forEach(function (d) { d[0].classList.remove("fs-rt-fit"); d[0].style.fontSize = d[1]; d[0].style.zoom = d[2] || ""; }); };
+  }
+  // a letterhead's header or footer as a picture, to stamp on every page (null when the mode shows none)
+  function lhPart(lib, el) {
+    if (!el || !el.offsetHeight) return Promise.resolve(null);
+    return lib().set({ jsPDF: { unit: "mm", format: "a4", orientation: "landscape" }, html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" } }).from(el).toCanvas().get("canvas");
   }
   function savePdf(btn) {
     var sh = btn.closest(".sheet"); if (!sh) return;
-    var title = txt(sh.querySelector(".fs-rt-title")) || "Report", name = (title.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "Report") + "_" + new Date().toISOString().slice(0, 10) + ".pdf";
+    var m = sh.classList.contains("fs-rt") ? "tpl" : sh.classList.contains("fs-rlh-plain") || sh.classList.contains("fs-rlh-none") ? "plain" : sh.classList.contains("fs-rlh-space") ? "space" : "lh";
+    var title = txt(sh.querySelector(".fs-rt-title")) || txt(sh.querySelector("h2, h1")) || "Report", name = (title.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "Report") + "_" + new Date().toISOString().slice(0, 10) + ".pdf";
     var was = btn.textContent; btn.disabled = true; btn.textContent = "Making PDF…";
     sh.classList.add("fs-rt-pdf");
     var undo = fitTables(sh);
     var done = function () { undo(); sh.classList.remove("fs-rt-pdf"); btn.disabled = false; btn.textContent = was; };
+    var lib0, HD = null, FT = null, pw = 277; // A4 landscape less 10 mm each side
+    var fitImg = function (cv, maxH) { if (!cv || !cv.width) return null; var w = pw, hh = w * cv.height / cv.width; if (hh > maxH) { hh = maxH; w = hh * cv.width / cv.height; } return { d: cv.toDataURL("image/jpeg", 0.95), w: w, h: hh }; };
     h2p().then(function (lib) {
-      return lib().set({
-        margin: [10, 10, 14, 10], filename: name, image: { type: "jpeg", quality: 0.96 },
+      lib0 = lib; if (m === "tpl" || m === "plain") return null;
+      return lhPart(lib, sh.querySelector(".fs-rlh-h")).then(function (c) { HD = fitImg(c, 40); return lhPart(lib, sh.querySelector(".fs-rlh-f")); }).then(function (c) { FT = fitImg(c, 25); });
+    }).then(function () {
+      var top = HD ? 8 + HD.h + 4 : 10, bot = FT ? 8 + FT.h + 4 : 14;
+      return lib0().set({
+        margin: [top, 10, bot, 10], filename: name, image: { type: "jpeg", quality: 0.96 },
         html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0, backgroundColor: "#ffffff", ignoreElements: function (el) { return !!(el.classList && (el.classList.contains("bar") || el.classList.contains("fs-rt-foot") || el.classList.contains("fs-rlh-h") || el.classList.contains("fs-rlh-f"))); } },
         jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
         pagebreak: { mode: ["css", "legacy"], avoid: ["tr", ".fs-rt-kpis", ".fs-rt-sign", ".fs-rt-band", "h3"] }
       }).from(sh).toPdf().get("pdf").then(function (pdf) {
         var n = pdf.internal.getNumberOfPages(), W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight();
         for (var i = 1; i <= n; i++) {
-          pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(110);
-          pdf.text("System-generated report  |  Confidential - for management use only", 10, H - 6);
-          pdf.text("Page " + i + " of " + n, W - 10, H - 6, { align: "right" });
+          pdf.setPage(i);
+          if (m === "lh" && HD) pdf.addImage(HD.d, "JPEG", (W - HD.w) / 2, 8, HD.w, HD.h);
+          if (m === "lh" && FT) pdf.addImage(FT.d, "JPEG", (W - FT.w) / 2, H - 8 - FT.h, FT.w, FT.h);
+          pdf.setFontSize(8); pdf.setTextColor(110);
+          if (m === "tpl") pdf.text("System-generated report  |  Confidential - for management use only", 10, H - 6);
+          pdf.text("Page " + i + " of " + n, W - 10, H - (FT ? 3 : 6), { align: "right" });
         }
       }).save();
     }).then(done, function (e) { done(); alert0((e && e.message) || "Could not make the PDF."); });
@@ -371,7 +386,7 @@
     ".sheet.fs-rt table.sig,.sheet.fs-rt table.sig td{border:0;background:none!important}.sheet.fs-rt a{color:inherit;text-decoration:none}" +
     ".fs-rt-sign{display:flex;justify-content:space-around;gap:40px;margin:56px 0 24px;font-size:11px;text-align:center;break-inside:avoid}.fs-rt-sign>div{flex:1;max-width:300px}.fs-rt-sign i{display:block;border-top:1px solid #333;margin:44px 0 6px}" +
     ".fs-rt-foot{display:flex;justify-content:space-between;font-size:9.5px;color:#666;border-top:1px solid #ccc;padding-top:6px;margin-top:20px}" +
-    ".fs-rtpdf{margin-left:8px}.fs-rtpdf[hidden]{display:none}.sheet.fs-rt.fs-rt-pdf{max-width:none;width:1030px;padding:0!important;box-shadow:none!important}.sheet.fs-rt.fs-rt-pdf .fs-rt-band{margin:0 0 14px}" +
+    ".fs-rtpdf{margin-left:8px}.fs-rtpdf[hidden]{display:none}.sheet.fs-rt.fs-rt-pdf{max-width:none;width:1030px;padding:0!important;box-shadow:none!important}.sheet.fs-rt-pdf:not(.fs-rt){max-width:none!important;width:1030px!important;padding:0!important;box-shadow:none!important;margin:0!important}.sheet.fs-rt.fs-rt-pdf .fs-rt-band{margin:0 0 14px}" +
     "@media print{.fs-rtpdf{display:none!important}.sheet.fs-rt{max-width:none!important;width:auto!important;margin:0!important}.fs-rlh-pick,.fs-rtp{display:none!important}.fs-rt-band{margin:0 0 14px}.fs-rt-foot{display:none!important}}";
   (document.head || document.documentElement).appendChild(css);
   start();
