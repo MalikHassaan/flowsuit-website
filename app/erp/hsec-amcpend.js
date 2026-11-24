@@ -8,10 +8,11 @@
 //    becomes an AMC invoice for that contract and month (dated the 1st, due 30 days later), so it shows as outstanding in
 //    AMC billing, AMC reports, receipts and the projects dashboard, and the month is not billed again.
 //  * A month the contract already has an invoice for is skipped.
-//  * These invoices are opening balances: they were raised before the ERP, so no JV is made for them (amcOpening).
-//    Recording a receipt against one makes the bank receipt voucher as usual.
+//  * Each invoice gets its JV like any AMC invoice (Dr receivable, Cr AMC income), dated the 1st of its month (hassan,
+//    2026-11-24: "it was never booked anywhere"). A month in a locked period keeps its invoice without a JV and is
+//    listed, so it can be posted from the invoice once the period is open or dated later.
 (function () {
-  /* global Store, V, byEnt, tbLib, ivNextNo, idc, toast, esc, fmt, todayStr, scheduleRender, render, coName */
+  /* global Store, V, byEnt, tbLib, ivNextNo, idc, toast, esc, fmt, todayStr, scheduleRender, render, coName, makeAutoJv, approverName */
   var AMC = "Maintenance contract (AMC)";
   var MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
   var MN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -108,7 +109,7 @@
     return "<div class=\"fs-ap-bg\" id=\"fsApBg\"><div class=\"fs-ap\"><h3 style=\"margin-top:0\">Import AMC pending amounts</h3>" +
       (plan.err ? "" : "<p class=\"muted\" style=\"margin-top:0\">Every amount written in red is an unpaid month. Each becomes an AMC invoice for that month of <label>year <select id=\"fsApYr\">" +
         [0, 1, 2].map(function (k) { var y = +String(safe(todayStr, "") || new Date().toISOString()).slice(0, 4) - k; return "<option" + (y === plan.year ? " selected" : "") + ">" + y + "</option>"; }).join("") + "</select></label>, " +
-        "kept as an opening balance (no JV, because it was invoiced before the ERP). " + (bad ? "<b class=\"bad\">" + bad + " row(s) don't add up and are left out.</b>" : "Every row's red months add up to its Pending column.") + "</p>") + body +
+        "with its JV (Dr receivable, Cr AMC income) dated the 1st of that month. " + (bad ? "<b class=\"bad\">" + bad + " row(s) don't add up and are left out.</b>" : "Every row's red months add up to its Pending column.") + "</p>") + body +
       "<div class=\"actions\" style=\"margin-top:10px\">" + (!plan.err && go ? "<button class=\"btn pri\" type=\"button\" id=\"fsApGo\">Create " + go + " invoices (Rs " + money(amt) + ")</button>" : "") +
       "<button class=\"btn line\" type=\"button\" id=\"fsApX\">Close</button></div></div></div>";
   }
@@ -116,14 +117,14 @@
 
   async function create() {
     var b = document.getElementById("fsApGo"); if (b) { b.disabled = true; b.textContent = "Saving..."; }
-    var k = 0, sum = 0, fail = "";
+    var k = 0, sum = 0, fail = "", nojv = [], who = safe(function () { return approverName(); }, "") || "Accounts";
     for (var i = 0; i < plan.rows.length; i++) {
       var x = plan.rows[i], T = todo(x), p = (Store.data.projects || []).find(function (q) { return q.id === x.pid; }); if (!p) continue;
       for (var j = 0; j < T.length; j++) {
         var it = T[j], m = plan.year + "-" + String(it.k + 1).padStart(2, "0"), due = new Date(Date.UTC(plan.year, it.k, 1) + 30 * 864e5).toISOString().slice(0, 10);
         var rec = { entity: p.entity, projectId: p.id, customer: String(p.customer || p.name || "").trim(), project: p.code || "", invoiceNo: safe(function () { return ivNextNo(p.entity); }, ""),
-          invoiceDate: m + "-01", dueDate: due, amount: it.amt, outputTax: 0, revAccount: safe(function () { return idc("410201"); }, ""), status: "Open", amcKey: p.id + "|" + m, amcOpening: true,
-          notes: "Pending for " + MN[it.k] + " " + plan.year + " from the maintenance recovery sheet (" + x.office + ": " + x.name + "). Invoiced before the ERP; kept as an opening balance, no JV.",
+          invoiceDate: m + "-01", dueDate: due, amount: it.amt, outputTax: 0, revAccount: safe(function () { return idc("410201"); }, ""), status: "Open", amcKey: p.id + "|" + m,
+          notes: "Pending for " + MN[it.k] + " " + plan.year + " from the maintenance recovery sheet (" + x.office + ": " + x.name + "). Never booked before; posted on import.",
           doc: Object.assign({ layout: "standard", title: "INVOICE", to: { name: String(p.customer || p.name || "").trim(), address: "", attn: "" }, poRef: p.code || "", taxPct: 0, taxLabel: "Sales tax on services", notes: "" },
             safe(function () { return window.FS_AMCINV ? window.FS_AMCINV.docFor(p, 0) : {}; }, {}),
             { taxPct: 0, lines: [{ name: "Monthly maintenance and trouble shooting of elevators – " + (p.name || ""), period: MN[it.k] + ", " + plan.year, specs: "Pending amount brought forward", qty: 1, unit: it.amt }] }) };
@@ -131,10 +132,14 @@
           var id = await Store.save("receivables", rec);
           if (!(Store.data.receivables || []).some(function (r) { return r.id === id; })) Store.data.receivables.push(Object.assign({ id: id }, rec));
           k++; sum += it.amt;
-        } catch (e) { fail = (e && e.message) || String(e); }
+        } catch (e) { fail = (e && e.message) || String(e); continue; }
+        try {
+          rec.id = id; var jv = typeof makeAutoJv === "function" ? await makeAutoJv("receivables", rec, "invoice", null, who) : null;
+          if (jv) { rec.jvId = jv.id; await Store.save("receivables", rec); } else nojv.push(rec.invoiceNo + " (" + MN[it.k] + ")");
+        } catch (e2) { nojv.push(rec.invoiceNo + " (" + MN[it.k] + ": " + ((e2 && e2.message) || e2) + ")"); }
       }
     }
-    safe(function () { toast(k + " AMC invoice" + (k === 1 ? "" : "s") + " made for Rs " + money(sum) + " pending" + (fail ? "; some could not be saved: " + fail : "") + "."); }, null);
+    safe(function () { toast(k + " AMC invoice" + (k === 1 ? "" : "s") + " made for Rs " + money(sum) + " pending" + (fail ? "; some could not be saved: " + fail : "") + (nojv.length ? ". " + nojv.length + " have no JV yet: " + nojv.slice(0, 5).join("; ") + (nojv.length > 5 ? " …" : "") + ". Open them and use Post invoice to ledger." : ", each with its JV") + "."); }, null);
     show(); var g = document.getElementById("fsApGo"); if (g) g.remove();
     safe(scheduleRender, null);
   }
