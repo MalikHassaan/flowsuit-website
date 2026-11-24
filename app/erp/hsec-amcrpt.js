@@ -74,6 +74,8 @@
     });
     var names = Object.keys(cl).sort(), T = { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 };
     names.forEach(function (n) { var c = cl[n]; M.forEach(function (m) { T.inv[m] = (T.inv[m] || 0) + (c.inv[m] || 0); T.rec[m] = (T.rec[m] || 0) + (c.rec[m] || 0); }); T.ti += c.ti; T.tr += c.tr; T.bal += c.bal; });
+    // only the months of the chosen period that have an invoice or a receipt (hassan, 2026-11-24: "only show columns as per the selection")
+    var M1 = M.filter(function (m) { return T.inv[m] || T.rec[m]; }); if (M1.length) M = M1;
     // a month free for every contract of the client (hassan, 2026-11-04: free maintenance months "same in reporting")
     var freeP = {}; projs().forEach(function (p) { var n = clientOf(p); (freeP[n] = freeP[n] || []).push(p); });
     var free = function (c, m) { var P = c.name && freeP[c.name]; return !!(P && P.length && P.every(function (p) { return safe(function () { return window.FS_AMCFREE.is(p, m); }, false); })); };
@@ -83,7 +85,7 @@
     var body = names.map(function (n) { var c = cl[n]; return "<tr><td>" + h(n) + "</td>" + M.map(function (m) { return cell(c, m); }).join("") + "<td class=\"num\"><b>" + money(c.ti) + "</b></td><td class=\"num\"><b>" + money(c.tr) + "</b></td><td class=\"num\"><b>" + money(c.bal) + "</b></td></tr>"; }).join("");
     var csv = [["Client"].concat(M.map(function (m) { return [m + " invoiced", m + " received"]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat(["Invoiced", "Received", "Balance"])]
       .concat(names.map(function (n) { var c = cl[n]; return [n].concat(M.map(function (m) { return [Math.round(c.inv[m] || 0), Math.round(c.rec[m] || 0)]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat([Math.round(c.ti), Math.round(c.tr), Math.round(c.bal)]); }));
-    return { title: "AMC by client and month", sub: "Invoiced by the month the AMC period starts; received by the date the money came in (posted receipts). " + mName(rg[0]) + " to " + mName(rg[1]) + ".", csv: csv,
+    return { title: (ST.rg && ST.rg !== "-" ? ST.rg + " region: " : "") + "AMC invoiced vs received, " + mName(rg[0]) + " to " + mName(rg[1]), sub: "", csv: csv,
       html: "<table class=\"fs-amcr-t\"><thead>" + head + "</thead><tbody>" + (body || "<tr><td colspan=\"" + (M.length * 2 + 4) + "\" class=\"muted\">No AMC invoices.</td></tr>") + "</tbody><tfoot><tr><td>Total</td>" + M.map(function (m) { return cell(T, m); }).join("") + "<td class=\"num\">" + money(T.ti) + "</td><td class=\"num\">" + money(T.tr) + "</td><td class=\"num\">" + money(T.bal) + "</td></tr></tfoot></table>" };
   }
 
@@ -158,11 +160,13 @@
   function report() { var I = invs(); return ({ matrix: matrix, rec: recList, ledger: ledger, age: aging, tot: totals }[ST.r] || matrix)(I); }
   function view() {
     var I = invs(), R = report();
-    return ctls(I) + "<h3 style=\"margin:8px 0 2px\">" + h(R.title) + "</h3><p class=\"muted\" style=\"margin:0 0 8px\">" + h(R.sub) + "</p><div class=\"panel tw fs-amcr\">" + R.html + "</div>";
+    return ctls(I) + "<h3 style=\"margin:8px 0 2px\">" + h(R.title) + "</h3>" + (R.sub ? "<p class=\"muted\" style=\"margin:0 0 8px\">" + h(R.sub) + "</p>" : "<div style=\"height:8px\"></div>") + "<div class=\"panel tw fs-amcr\">" + R.html + "</div>";
   }
   function printIt() {
-    var R = report(), co = safe(function () { return V.ent && V.ent !== "All" ? V.ent : "HSEC"; }, "") + (ST.rg ? " · Region: " + (ST.rg === "-" ? "not set" : ST.rg) : " · All regions");
-    safe(function () { sheetOpen("<div class=\"sheetwrap\"><div class=\"sheet fs-amcr-sheet\"><div class=\"bar\"><button class=\"btn pri\" id=\"printSheet\">Print</button><button class=\"btn\" id=\"closeSheet\">Close</button></div><h2>" + h(R.title) + "</h2><p class=\"muted\">" + h(co) + " · Generated on " + h(new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })) + "</p><p>" + h(R.sub) + "</p><div class=\"fs-amcr\">" + R.html + "</div></div></div>"); }, null);
+    var ents = []; if (ST.rg && ST.rg !== "-") projs().forEach(function (p) { if (p.entity && ents.indexOf(p.entity) < 0) ents.push(p.entity); });
+    var own = safe(function () { return V.ent && V.ent !== "All" ? V.ent : ents.length === 1 ? ents[0] : ""; }, ""); // an office's report prints for its company
+    var R = report(), co = (own || "HSEC Group") + (ST.rg ? " · Region: " + (ST.rg === "-" ? "not set" : ST.rg) : " · All regions");
+    safe(function () { sheetOpen("<div class=\"sheetwrap\"><div class=\"sheet fs-amcr-sheet\"" + (own ? " data-fsco=\"" + h(own) + "\"" : "") + "><div class=\"bar\"><button class=\"btn pri\" id=\"printSheet\">Print</button><button class=\"btn\" id=\"closeSheet\">Close</button></div><h2>" + h(R.title) + "</h2><p class=\"muted\">" + h(co) + " · Generated on " + h(new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })) + "</p>" + (R.sub ? "<p>" + h(R.sub) + "</p>" : "") + "<div class=\"fs-amcr\">" + R.html + "</div></div></div>"); }, null);
   }
   function csvIt() {
     var R = report(); if (!R.csv || !R.csv.length) return;

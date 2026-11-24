@@ -39,7 +39,8 @@
     if (k === "rpt") return m === "lh" || m === "space" || m === "plain" ? m : "tpl";
     return m === "space" || m === "plain" ? m : "lh";
   };
-  var entNow = function () { return safe(function () { return V.ent; }, "") || ""; };
+  // a report can name its company on the sheet (data-fsco), e.g. an office's report in the group view
+  var entNow = function () { var e = safe(function () { var x = document.querySelector("#printLayer [data-fsco]"); return x && x.getAttribute("data-fsco"); }, ""); return e || safe(function () { return V.ent; }, "") || ""; };
   function lhOf() {
     if (typeof IV_LH === "undefined") return null;
     var e = entNow();
