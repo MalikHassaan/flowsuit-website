@@ -277,12 +277,24 @@
       document.head.appendChild(sc);
     });
   };
+  // a table wider than the page: one line per cell and a smaller font until it fits (hassan, 2026-11-24: the AMC
+  // matrix PDF had names written over each other and the last columns cut off)
+  function fitTables(sh) {
+    var done = [], W = sh.clientWidth || 1030;
+    [].slice.call(sh.querySelectorAll("table")).forEach(function (t) {
+      if (t.closest(".fs-rt-x") || t.classList.contains("sig")) return;
+      t.classList.add("fs-rt-fit"); done.push([t, t.style.fontSize]);
+      for (var f = 12; f >= 6 && t.scrollWidth > W; f -= 0.5) t.style.fontSize = f + "px";
+    });
+    return function () { done.forEach(function (d) { d[0].classList.remove("fs-rt-fit"); d[0].style.fontSize = d[1]; }); };
+  }
   function savePdf(btn) {
     var sh = btn.closest(".sheet"); if (!sh) return;
     var title = txt(sh.querySelector(".fs-rt-title")) || "Report", name = (title.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "Report") + "_" + new Date().toISOString().slice(0, 10) + ".pdf";
     var was = btn.textContent; btn.disabled = true; btn.textContent = "Making PDF…";
     sh.classList.add("fs-rt-pdf");
-    var done = function () { sh.classList.remove("fs-rt-pdf"); btn.disabled = false; btn.textContent = was; };
+    var undo = fitTables(sh);
+    var done = function () { undo(); sh.classList.remove("fs-rt-pdf"); btn.disabled = false; btn.textContent = was; };
     h2p().then(function (lib) {
       return lib().set({
         margin: [10, 10, 14, 10], filename: name, image: { type: "jpeg", quality: 0.96 },
@@ -316,6 +328,7 @@
   var N = "#1f3a5f", L2 = "#e9eef5";
   var css = document.createElement("style");
   css.textContent = ".fs-rlh-pick{display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-size:13px}.fs-rlh-pick select{padding:3px 6px}" +
+    ".fs-rt-fit{width:100%!important;min-width:0!important;table-layout:auto!important}.fs-rt-fit th,.fs-rt-fit td{white-space:nowrap!important;padding:3px 5px!important;font-size:inherit!important;letter-spacing:0!important}" +
     ".fs-rlh-h{margin:0 0 12px}.fs-rlh-f{margin-top:18px}.fs-rlh-h img,.fs-rlh-f img{max-width:100%}" +
     ".sheet.fs-rlh-space .fs-rlh-h,.sheet.fs-rlh-space .fs-rlh-f{visibility:hidden}.sheet.fs-rlh-plain .fs-rlh-h,.sheet.fs-rlh-plain .fs-rlh-f,.sheet.fs-rlh-off .fs-rlh-h,.sheet.fs-rlh-off .fs-rlh-f{display:none}" +
     ".fs-rtp-bar{display:flex;justify-content:flex-end;margin:0 0 8px}" +
