@@ -5,7 +5,7 @@
 // for a receipt). The matching voucher follows the payer's: it posts when the payer posts, is updated while neither
 // is posted, and is reversed when the payer is reversed. General ledger > Intercompany then nets to zero.
 (function () {
-  /* global S, F, Store, esc, coLabel, fdate, fmt, jvSheet, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
+  /* global S, F, V, Store, esc, coLabel, fdate, fmt, jvSheet, ENTS, coLabel, coName, isPost, readLines, redrawLines, nextVoucherNo, isLocked, lockTxt, toast, approverName, n, DOCNAME */
   var busy = {};
 
   function accs() { return Store.data.accounts.filter(function (a) { return a.ic === "Yes" && isPost(a); }); }
@@ -158,11 +158,12 @@
       ? [{ account: r.icCharge, debit: amt, credit: 0, desc: accName(r.icCharge) + (r.payee ? " – " + r.payee : "") }, { account: back.id, debit: 0, credit: amt, desc: "Payable to " + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "") }]
       : [{ account: back.id, debit: amt, credit: 0, desc: "Receivable from " + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "") }, { account: r.icCharge, debit: 0, credit: amt, desc: accName(r.icCharge) + (r.payee ? " – " + r.payee : "") }];
     var j = Object.assign({}, m || {}, {
-      entity: r.icFor, dept: r.dept, opening: "No", vtype: "Journal voucher", date: r.date, payee: coName(r.entity),
-      narration: (net > 0 ? "Paid on our behalf by " : "Received on our behalf by ") + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "")
+      entity: r.icFor, dept: r.dept, opening: "No", vtype: r.icRcpay ? "Bank receipt voucher" : "Journal voucher", date: r.date, payee: coName(r.entity),
+      narration: r.icRcpay ? "Received in our bank for " + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "") + (r.payee ? " from " + r.payee : "") + (r.chequeNo ? ", cheque / TT " + r.chequeNo : "") + (r.date ? ", " + fdate(r.date) : "") : (net > 0 ? "Paid on our behalf by " : "Received on our behalf by ") + coLabel(r.entity) + (r.ref ? " vide " + r.ref : "")
         + (r.payee ? (net > 0 ? " to " : " from ") + r.payee : "") + " for " + accName(r.icCharge) + (r.chequeNo ? ", cheque / TT " + r.chequeNo : "") + (r.date ? ", " + fdate(r.date) : ""),
       status: r.status === "Posted" ? "Posted" : "Draft", icOf: r.id, source: { c: "journals", id: r.id, ev: "ic", key: "ic" }, lines: lines
     });
+    if (r.icRcpay) { j.bankAcc = r.icCharge; j.chequeNo = r.chequeNo || ""; }
     if (!m) { j.maker = { name: name, at: now }; j.approvals = []; }
     if (j.status === "Posted") { j.postedBy = { name: name, at: now, auto: true }; if (!j.ref) j.ref = nextVoucherNo(j); }
     if (isLocked(j)) { toast(j.entity + " " + lockTxt(j.entity) + ": enter its side of " + (r.ref || "this voucher") + " by hand."); return; }
@@ -184,7 +185,33 @@
     }
   }
 
-  window.FS_IC = { icAcc: function (prefix, other, own, loan) { try { return icAcc(prefix, other, own, loan); } catch (e) { return null; } } };
+  // Receive payments into another group company's bank (hassan, 2026-11-24: "how can we post it in here": a JSPL
+  // customer paid into JPL's bank). The receipt stays in the customer's company, but its bank line becomes "Due from
+  // <bank's company>", On behalf of = the bank's company, charged to that bank; the matching voucher there is
+  // Dr its bank, Cr Due to the customer's company. The bank's company comes from the account's Company, else its name.
+  function bankCo(accId, ent) {
+    var a = Store.data.accounts.find(function (x) { return x.id === accId; }); if (!a) return "";
+    var E = []; try { E = ENTS(); } catch (e) { return ""; }
+    if (a.entity) return a.entity !== ent && E.indexOf(a.entity) >= 0 ? a.entity : "";
+    var t = " " + String(a.name || "").toLowerCase() + " ";
+    var hit = E.filter(function (e) { return e !== ent; }).filter(function (e) {
+      var nm = String(coName(e) || "").toLowerCase();
+      return new RegExp("[^a-z0-9]" + String(e).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[^a-z0-9]").test(t) || (nm && nm !== String(e).toLowerCase() && nm.length > 4 && t.indexOf(nm) >= 0);
+    }).sort(function (x, y) { return String(y).length - String(x).length; });
+    return hit[0] || "";
+  }
+  function rcOther(rec) {
+    if (!rec || rec.id || rec.icFor || rec.reversalOf || !rec.source || rec.source.auto !== "rcpay") return;
+    var bankId = rec.bankAcc || ((rec.lines || [])[0] || {}).account, co = bankCo(bankId, rec.entity); if (!co) return;
+    var due = icAcc("1207", co, rec.entity), back = icAcc("2204", rec.entity, co);
+    if (!due) throw new Error("The money went into " + coName(co) + "'s bank. Add a \"Due from " + coName(co) + "\" account in " + coName(rec.entity) + "'s books (under 1207, marked Intercompany) and save again.");
+    if (!back) throw new Error("The money went into " + coName(co) + "'s bank. Add a \"Due to " + coName(rec.entity) + "\" account in " + coName(co) + "'s books (under 2204, marked Intercompany) and save again.");
+    var bk = Store.data.accounts.find(function (x) { return x.id === bankId; }) || {};
+    rec.lines = rec.lines.map(function (l) { return l.account === bankId && n(l.debit) > 0 ? Object.assign({}, l, { account: due.id, desc: "Received into " + coName(co) + "'s bank " + (bk.name || "") + (l.ref ? ", " + l.ref : "") }) : l; });
+    rec.icFor = co; rec.icCharge = bankId; rec.icRcpay = true; delete rec.bankAcc;
+    rec.narration = String((rec.narration || "") + "; received into " + coName(co) + "'s bank " + (bk.name || "")).slice(0, 300);
+  }
+  window.FS_IC = { bankCo: function (a, e) { try { return bankCo(a, e); } catch (x) { return ""; } }, icAcc: function (prefix, other, own, loan) { try { return icAcc(prefix, other, own, loan); } catch (e) { return null; } } };
   function hook() {
     if (typeof S === "undefined" || !S.journals || typeof submitForm !== "function" || !Store || !Store.save) return false; // eslint-disable-line no-undef
     addFields();
@@ -210,9 +237,10 @@
     })(jvSheet); // eslint-disable-line no-undef
     var save = Store.save;
     Store.save = async function (c, rec) {
+      if (c === "journals") rcOther(rec); // a receipt into another company's bank: its line moves to Due from that company
       var id = await save.apply(this, arguments);
       // a payment demand paid from another company's bank (hsec-demand.js) gets its matching voucher the same way
-      var fromDoc = rec && rec.source && rec.source.c !== "paydemands";
+      var fromDoc = rec && rec.source && rec.source.c !== "paydemands" && rec.source.auto !== "rcpay";
       if (c === "journals" && rec && !rec.icOf && !fromDoc && (rec.icFor || mirrorOf(id))) {
         var self = this, r = Object.assign({}, rec, { id: id });
         busy[id] = (busy[id] || Promise.resolve()).then(function () { return sync(function (cc, x) { return save.call(self, cc, x); }, r); })
@@ -233,6 +261,16 @@
     });
     var waits = 0, nm = setInterval(function () { if (named || ++waits > 30) { clearInterval(nm); return; } nameIcAccounts(); }, 2000);
     new MutationObserver(trim).observe(document.body, { childList: true, subtree: true });
+    // Receive payments: say what happens when the money went into another company's bank
+    new MutationObserver(function () {
+      var sel = document.getElementById("rcBank"); if (!sel) return;
+      var ent = typeof V !== "undefined" ? V.ent : "", co = ent && ent !== "All" ? bankCo(sel.value, ent) : "", box = document.getElementById("fsRcIc");
+      var t = co ? "This bank belongs to " + coName(co) + ". The receipt is booked in " + coName(ent) + " against \u201cDue from " + coName(co) + "\u201d, and " + coName(co) + " gets its own bank receipt (Dr this bank, Cr Due to " + coName(ent) + ") automatically." : "";
+      if (!t) { if (box) box.remove(); return; }
+      if (!box) { box = document.createElement("div"); box.id = "fsRcIc"; box.style.cssText = "margin:6px 0 0;padding:8px 10px;border-radius:8px;background:#eef5fc;border:1px solid #bcd6ef;color:#13304f;font-size:13px"; (sel.closest(".f") || sel.parentNode).appendChild(box); }
+      if (box.textContent !== t) box.textContent = t;
+    }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-fsrc"] });
+    document.addEventListener("change", function (e) { if (e.target && e.target.id === "rcBank") { var b = document.getElementById("fsRcIc"); if (b) b.remove(); document.body.setAttribute("data-fsrc", Date.now()); } });
     return true;
   }
   var tries = 0;
