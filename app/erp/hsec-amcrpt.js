@@ -67,7 +67,8 @@
   function matrix(I) {
     var rg = range(), M = months(rg[0], rg[1]), cl = {};
     flt(I).forEach(function (x) {
-      var c = cl[x.client] = cl[x.client] || { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 };
+      var c = cl[x.client] = cl[x.client] || { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0, rg: "" };
+      if (!c.rg) c.rg = String((x.p && x.p.region) || (x.r && x.r.region) || "").trim();
       if (x.m >= rg[0] && x.m <= rg[1]) { c.inv[x.m] = (c.inv[x.m] || 0) + num(x.r.amount); c.ti += num(x.r.amount); }
       x.rc.forEach(function (q) { var mm = String(q.date || "").slice(0, 7); if (q.posted && mm >= rg[0] && mm <= rg[1]) { c.rec[mm] = (c.rec[mm] || 0) + q.amount; c.tr += q.amount; } });
       c.bal += x.bal;
@@ -82,9 +83,17 @@
     names.forEach(function (n) { cl[n].name = n; });
     var cell = function (c, m) { var a = c.inv[m] || 0, b = c.rec[m] || 0; if (!a && !b && free(c, m)) return "<td class=\"free\" colspan=\"2\">Free</td>"; return "<td class=\"num\">" + (a ? money(a) : "") + "</td><td class=\"num rc\">" + (b ? money(b) : "") + "</td>"; };
     var head = "<tr><th rowspan=\"2\">Client</th>" + M.map(function (m) { return "<th colspan=\"2\" class=\"c\">" + h(mName(m)) + "</th>"; }).join("") + "<th rowspan=\"2\" class=\"num\">Invoiced</th><th rowspan=\"2\" class=\"num\">Received</th><th rowspan=\"2\" class=\"num\">Balance (all time)</th></tr><tr>" + M.map(function () { return "<th class=\"num\">Inv.</th><th class=\"num rc\">Rec.</th>"; }).join("") + "</tr>";
-    var body = names.map(function (n) { var c = cl[n]; return "<tr><td>" + h(n) + "</td>" + M.map(function (m) { return cell(c, m); }).join("") + "<td class=\"num\"><b>" + money(c.ti) + "</b></td><td class=\"num\"><b>" + money(c.tr) + "</b></td><td class=\"num\"><b>" + money(c.bal) + "</b></td></tr>"; }).join("");
-    var csv = [["Client"].concat(M.map(function (m) { return [m + " invoiced", m + " received"]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat(["Invoiced", "Received", "Balance"])]
-      .concat(names.map(function (n) { var c = cl[n]; return [n].concat(M.map(function (m) { return [Math.round(c.inv[m] || 0), Math.round(c.rec[m] || 0)]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat([Math.round(c.ti), Math.round(c.tr), Math.round(c.bal)]); }));
+    var row = function (label, c, cls) { return "<tr" + (cls ? " class=\"" + cls + "\"" : "") + "><td>" + h(label) + "</td>" + M.map(function (m) { return cell(c, m); }).join("") + "<td class=\"num\"><b>" + money(c.ti) + "</b></td><td class=\"num\"><b>" + money(c.tr) + "</b></td><td class=\"num\"><b>" + money(c.bal) + "</b></td></tr>"; };
+    // all regions: the clients under their region, each region with its total (hassan, 2026-11-24)
+    var rgOf = function (n) { return cl[n].rg || "No region set"; }, byRg = !ST.rg && names.some(function (n) { return cl[n].rg; });
+    var RG = []; names.forEach(function (n) { if (RG.indexOf(rgOf(n)) < 0) RG.push(rgOf(n)); }); RG.sort(function (a, b) { return a === "No region set" ? 1 : b === "No region set" ? -1 : a.localeCompare(b); });
+    var subOf = function (L) { var S = { inv: {}, rec: {}, ti: 0, tr: 0, bal: 0 }; L.forEach(function (n) { var c = cl[n]; M.forEach(function (m) { S.inv[m] = (S.inv[m] || 0) + (c.inv[m] || 0); S.rec[m] = (S.rec[m] || 0) + (c.rec[m] || 0); }); S.ti += c.ti; S.tr += c.tr; S.bal += c.bal; }); return S; };
+    var body = !byRg ? names.map(function (n) { return row(n, cl[n]); }).join("") : RG.map(function (g) {
+      var L = names.filter(function (n) { return rgOf(n) === g; });
+      return "<tr class=\"fs-amcr-rg\"><td colspan=\"" + (M.length * 2 + 4) + "\">" + h(g) + " (" + L.length + " client" + (L.length === 1 ? "" : "s") + ")</td></tr>" + L.map(function (n) { return row(n, cl[n]); }).join("") + row(g + " subtotal", subOf(L), "fs-amcr-sub");
+    }).join("");
+    var csv = [(byRg ? ["Region"] : []).concat(["Client"]).concat(M.map(function (m) { return [m + " invoiced", m + " received"]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat(["Invoiced", "Received", "Balance"])]
+      .concat(names.slice().sort(function (a, b) { return byRg ? RG.indexOf(rgOf(a)) - RG.indexOf(rgOf(b)) || a.localeCompare(b) : 0; }).map(function (n) { var c = cl[n]; return (byRg ? [rgOf(n)] : []).concat([n]).concat(M.map(function (m) { return [Math.round(c.inv[m] || 0), Math.round(c.rec[m] || 0)]; }).reduce(function (a, b) { return a.concat(b); }, [])).concat([Math.round(c.ti), Math.round(c.tr), Math.round(c.bal)]); }));
     return { title: (ST.rg && ST.rg !== "-" ? ST.rg + " region: " : "") + "AMC invoiced vs received, " + mName(rg[0]) + " to " + mName(rg[1]), sub: "", csv: csv,
       html: "<table class=\"fs-amcr-t\"><thead>" + head + "</thead><tbody>" + (body || "<tr><td colspan=\"" + (M.length * 2 + 4) + "\" class=\"muted\">No AMC invoices.</td></tr>") + "</tbody><tfoot><tr><td>Total</td>" + M.map(function (m) { return cell(T, m); }).join("") + "<td class=\"num\">" + money(T.ti) + "</td><td class=\"num\">" + money(T.tr) + "</td><td class=\"num\">" + money(T.bal) + "</td></tr></tfoot></table>" };
   }
@@ -338,7 +347,7 @@
   var css = document.createElement("style");
   css.textContent = ".fs-pf-hide{display:none!important}.fs-cv-n{display:block;font-size:12px;color:#2e6b3a;margin-top:3px}input.fs-cv-lock{background:#f3f6f9}.fs-amcr-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.fs-amcr-ctl{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.fs-amcr-ctl label{display:flex;flex-direction:column;font-size:12px;gap:3px}" +
     ".fs-amcr{overflow:auto}.fs-amcr-t{border-collapse:collapse;width:100%;font-size:12.5px}.fs-amcr-t th,.fs-amcr-t td{border:1px solid #d5dbe2;padding:4px 6px;text-align:left;white-space:nowrap}.fs-amcr-t th{background:#eef1f5}.fs-amcr-t .num{text-align:right}.fs-amcr-t .c{text-align:center}" +
-    ".fs-amcr-t td.rc,.fs-amcr-t th.rc{background:#f2faf4}.fs-amcr-t tfoot td{font-weight:700;background:#f6f8fa}.fs-amcr-t td.bad{color:#b0412e;font-weight:600}.fs-amcr-t .warn{color:#9a5b00}" +
+    ".fs-amcr-t tr.fs-amcr-rg td{background:#13304f;color:#fff;font-weight:700}.fs-amcr-t tr.fs-amcr-sub td{background:#e8eef6;font-weight:700}.fs-amcr-t td.rc,.fs-amcr-t th.rc{background:#f2faf4}.fs-amcr-t tfoot td{font-weight:700;background:#f6f8fa}.fs-amcr-t td.bad{color:#b0412e;font-weight:600}.fs-amcr-t .warn{color:#9a5b00}" +
     ".fs-amcr-info{border:1px solid #c9d1da;padding:8px 12px;margin:0 0 10px}.fs-amcr-g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.fs-amcr-g div{display:flex;flex-direction:column}.fs-amcr-g small{color:#556;font-weight:600}" +
     ".fs-amcr h4{margin:10px 0 4px}.fs-amcr-sheet{max-width:1100px}@media print{.fs-amcr-t th,.fs-amcr-t td{font-size:9.5px;padding:3px 4px}}@media (max-width:760px){.fs-amcr-g{grid-template-columns:1fr 1fr}}";
   (document.head || document.documentElement).appendChild(css);
