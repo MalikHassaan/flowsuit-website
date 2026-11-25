@@ -11,13 +11,17 @@
   // (Reached on date), "after" = some months after another milestone of the same project (hassan, 2026-11-13: the 12
   // parameters new-installation invoices are raised on; each project uses some of them with its own %)
   var PRESET = [["Advance", 1], ["On BG", 2], ["After LC opening", 5], ["Pre-shipment", "hand"], ["Shipping docs / BL", 6],
-    ["Arrival at port", 7], ["Delivery at site", 9], ["Installation", "hand"], ["Testing & commissioning", "hand"],
-    ["Handover", 13], ["Third-party inspection", "hand"], ["3 months after T&C", "after"]];
+    ["Arrival at port", 7], ["Delivery at site", 9], ["Payment on delivery at site", 9], ["Payment during works at site", "hand"], ["Installation", "hand"], ["Testing & commissioning", "hand"],
+    ["Handover", 13], ["Payment 30 days after handover", "after"], ["Third-party inspection", "hand"], ["3 months after T&C", "after"]];
+  // hassan, 2026-11-25: "payment on delivery at site, payment during works performed at site, payment after 30 days of
+  // handover". Days count as months for the wait (30 days = 1 month), rounded up.
+  var AFTER_RE = /(\d+)\s*(months?|days?)\s*(after|from|post|of)\b/i;
   var STEPS = function () { try { return pwSteps(); } catch (e) { return []; } };
   function guess(m) {
     var s = String(m || "").toLowerCase(), p = PRESET.find(function (x) { return x[0].toLowerCase() === s; });
     if (p) return p[1];
-    if (/\d+\s*months?\s*(after|from|post)\b/.test(s)) return "after";
+    if (AFTER_RE.test(s)) return "after";
+    if (/during|in progress|progress|works?\s*perform|work done|running bill|\bipc\b/.test(s)) return "hand";
     if (/pre[\s-]*shipment|third[\s-]*party|\btpi\b|inspection/.test(s)) return "hand";
     if (/testing|commission|t\s*&\s*c|install/.test(s)) return "hand";
     if (/\bbg\b|guarantee/.test(s)) return 2;
@@ -31,15 +35,15 @@
     return "";
   }
   var evOf = function (r) { return r.ev === undefined || r.ev === null ? guess(r.m) : r.ev; };
-  var waitOf = function (r) { if (r.wait !== undefined && r.wait !== null && r.wait !== "") return n(r.wait); var x = /(\d+)\s*months?\s*(after|from|post)\b/i.exec(r.m || ""); return x ? +x[1] : 0; };
+  var waitOf = function (r) { if (r.wait !== undefined && r.wait !== null && r.wait !== "") return n(r.wait); var x = AFTER_RE.exec(r.m || ""); return !x ? 0 : /^d/i.test(x[2]) ? Math.max(1, Math.ceil(+x[1] / 30)) : +x[1]; };
   // the milestone an "after" row waits for: the one picked, else the one its name points at (T&C, installation, handover...)
   function target(rows, r) {
     var ev = String(evOf(r)), id = ev.indexOf("ms:") === 0 ? ev.slice(3) : "", L = (rows || []).filter(function (x) { return x !== r && (!r.id || x.id !== r.id); });
     if (id) return L.find(function (x) { return x.id === id; }) || null;
     if (ev !== "after") return null;
-    var t = String(r.m || "").toLowerCase().replace(/^.*?\d+\s*months?\s*(after|from|post)\s*/, "");
+    var t = String(r.m || "").toLowerCase().replace(/^.*?\d+\s*(months?|days?)\s*(after|from|post|of)\s*/, "");
     var re = /t\s*&\s*c|testing|commission/.test(t) ? /t\s*&\s*c|testing|commission/i : /install/.test(t) ? /install/i : /hand\s*over/.test(t) ? /hand\s*over/i : /inspection|tpi/.test(t) ? /inspection|tpi/i : /deliver|site/.test(t) ? /deliver|site/i : null;
-    return re ? L.find(function (x) { return re.test(x.m || "") && !/\d+\s*months?\s*(after|from|post)/i.test(x.m || ""); }) || null : null;
+    return re ? L.find(function (x) { return re.test(x.m || "") && !AFTER_RE.test(x.m || ""); }) || null : null;
   }
   var stepName = function (k) { var s = STEPS()[k]; return s ? s.t : ""; };
   function names() {
@@ -155,10 +159,11 @@
       if (String(ev) === "after" || String(ev).indexOf("ms:") === 0) {
         var tg = target(p.billing || [], row), w = waitOf(row);
         if (!tg && !depth) { // no such milestone on this project: count from the installation and commissioning step
-          var st0; try { st0 = cached(p)[10]; } catch (e) { st0 = null; }
+          var nm = String(row.m || "").toLowerCase(), k0 = /hand\s*over/.test(nm) ? 13 : /deliver|arriv.*site/.test(nm) ? 9 : 10; // the business-cycle step its name points at
+          var st0; try { st0 = cached(p)[k0]; } catch (e) { st0 = null; }
           if (!st0) return { ok: false, what: "the milestone it follows (pick it under Ready when on the project)" };
           if (st0.state !== "ok") return { ok: false, what: st0.t + (w ? " (then " + w + " month" + (w === 1 ? "" : "s") + ")" : "") };
-          var d0 = (p.pw && p.pw.done && p.pw.done[10]) || "";
+          var d0 = (p.pw && p.pw.done && p.pw.done[k0]) || "";
           return { ok: true, date: d0 ? addMo(d0, w) : "", what: (w ? w + " month" + (w === 1 ? "" : "s") + " after " : "") + st0.t, wait: w, base: d0 };
         }
         if (!tg || depth > 4) return { ok: false, what: "the milestone it follows (pick it under Ready when on the project)" };
