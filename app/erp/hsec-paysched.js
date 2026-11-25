@@ -10,8 +10,8 @@
   // [name, what makes it ready]: a business-cycle step index (pwSteps), "hand" = confirmed by hand on the project form
   // (Reached on date), "after" = some months after another milestone of the same project (hassan, 2026-11-13: the 12
   // parameters new-installation invoices are raised on; each project uses some of them with its own %)
-  var PRESET = [["Advance", 1], ["On BG", 2], ["After LC opening", 5], ["Pre-shipment", "hand"], ["Shipping docs / BL", 6],
-    ["Arrival at port", 7], ["Delivery at site", 9], ["Payment on delivery at site", 9], ["Payment during works at site", "hand"], ["Installation", "hand"], ["Testing & commissioning", "hand"],
+  var PRESET = [["Advance", 1], ["On BG", 2], ["After LC opening", 5], ["LC opening", 5], ["Pre-shipment", "hand"], ["Shipping docs / BL", 6], ["Shipping documents", 6],
+    ["Arrival at port", 7], ["Delivery at site", 9], ["Arrival at site", 9], ["Payment on delivery at site", 9], ["Payment during works at site", "hand"], ["Installation", "hand"], ["Testing & commissioning", "hand"],
     ["Handover", 13], ["Payment 30 days after handover", "after"], ["Third-party inspection", "hand"], ["3 months after T&C", "after"]];
   // hassan, 2026-11-25: "payment on delivery at site, payment during works performed at site, payment after 30 days of
   // handover". Days count as months for the wait (30 days = 1 month), rounded up.
