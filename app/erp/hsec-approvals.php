@@ -442,74 +442,148 @@ function hsec_access_inject(array $me): string
         // whenever it is used, for the app's "your name" boxes.
         . '(function(){var n=' . json_encode($me['name'], $flags) . ',w=function(){try{localStorage.setItem("hsec-erp-name",n);}catch(e){}};w();'
         . 'addEventListener("focus",w);addEventListener("pointerdown",w,true);addEventListener("keydown",w,true);})();</script>'
-        . '<style>' . file_get_contents(__DIR__ . '/hsec-sign.css') . '</style><script>' . file_get_contents(__DIR__ . '/hsec-sign.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-projpl.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-bgsec.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-ux.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-ic.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-terms.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-paysched.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-pwfix.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-projimport.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-pdash.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-bankimp.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-subnav.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-svcjob.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-resume.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-advbg.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-qbproj.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-regions.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-basis.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-ifrs15.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-signoff.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-vlink.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-home.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-petty.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-accpick.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-accco.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-acctnew.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-att.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-undo.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-demand.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-salpay.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-fuel.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-hraauto.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-pdimport.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-advrpt.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-chq.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-billsimple.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-company.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-brec.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-jvsort.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-rvcust.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-booking.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-mgmt.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-homegate.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-currency.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-quote.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-qtpl.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-colh.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-jvguide.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-prgrid.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-compare.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-caps.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-podetail.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-grnbill.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcdef.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcrpt.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amccon.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcpend.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcinv.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcfree.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcunits.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcrenew.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-stfilter.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcbill.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-amcmail.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-rptlh.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-recsug.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-rectype.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-deptopt.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-gantt.js') . '</script>'
-        . '<script>' . file_get_contents(__DIR__ . '/hsec-homecp.js') . '</script>';
+        . '<style>' . file_get_contents(__DIR__ . '/hsec-sign.css') . '</style>'
+        // the add-on scripts come from one cached file (hsec_addons_send), not inside the page
+        . '<script src="/erp/addons/hsec.js?v=' . hsec_addons_ver() . '"></script>';
+}
+
+
+// The add-on scripts, in the order they run. They used to be written into every page (1.3 MB, 365 KB compressed), so the
+// whole page changed, and was downloaded again, whenever any of them changed. Now they are one file the browser keeps
+// for a year under a name that changes with its contents (hassan, 2026-11-26: "optimise the ERP as it is working slow").
+const HSEC_ADDONS = [
+    'hsec-sign.js',
+    'hsec-projpl.js',
+    'hsec-bgsec.js',
+    'hsec-ux.js',
+    'hsec-ic.js',
+    'hsec-terms.js',
+    'hsec-paysched.js',
+    'hsec-pwfix.js',
+    'hsec-projimport.js',
+    'hsec-pdash.js',
+    'hsec-bankimp.js',
+    'hsec-subnav.js',
+    'hsec-svcjob.js',
+    'hsec-resume.js',
+    'hsec-advbg.js',
+    'hsec-qbproj.js',
+    'hsec-regions.js',
+    'hsec-basis.js',
+    'hsec-ifrs15.js',
+    'hsec-signoff.js',
+    'hsec-vlink.js',
+    'hsec-home.js',
+    'hsec-petty.js',
+    'hsec-accpick.js',
+    'hsec-accco.js',
+    'hsec-acctnew.js',
+    'hsec-att.js',
+    'hsec-undo.js',
+    'hsec-demand.js',
+    'hsec-salpay.js',
+    'hsec-fuel.js',
+    'hsec-hraauto.js',
+    'hsec-pdimport.js',
+    'hsec-advrpt.js',
+    'hsec-chq.js',
+    'hsec-billsimple.js',
+    'hsec-company.js',
+    'hsec-brec.js',
+    'hsec-jvsort.js',
+    'hsec-rvcust.js',
+    'hsec-booking.js',
+    'hsec-mgmt.js',
+    'hsec-homegate.js',
+    'hsec-currency.js',
+    'hsec-quote.js',
+    'hsec-qtpl.js',
+    'hsec-colh.js',
+    'hsec-jvguide.js',
+    'hsec-prgrid.js',
+    'hsec-compare.js',
+    'hsec-caps.js',
+    'hsec-podetail.js',
+    'hsec-grnbill.js',
+    'hsec-amcdef.js',
+    'hsec-amcrpt.js',
+    'hsec-amccon.js',
+    'hsec-amcpend.js',
+    'hsec-amcinv.js',
+    'hsec-amcfree.js',
+    'hsec-amcunits.js',
+    'hsec-amcrenew.js',
+    'hsec-stfilter.js',
+    'hsec-amcbill.js',
+    'hsec-amcmail.js',
+    'hsec-rptlh.js',
+    'hsec-recsug.js',
+    'hsec-rectype.js',
+    'hsec-deptopt.js',
+    'hsec-gantt.js',
+    'hsec-homecp.js',
+];
+
+function hsec_addons_ver(): string
+{
+    static $v = null;
+    if ($v === null) {
+        $k = '';
+        foreach (HSEC_ADDONS as $f) {
+            $k .= $f . '|' . @filemtime(__DIR__ . '/' . $f) . '|' . @filesize(__DIR__ . '/' . $f) . ';';
+        }
+        $v = substr(md5($k), 0, 12);
+    }
+    return $v;
+}
+
+// /erp/addons/hsec.js: every add-on, each in its own try so one that fails does not stop the others (each is a
+// self-contained function), with the addresses of an account tab or the test copy, compressed, cached on the server.
+function hsec_addons_send(): void
+{
+    $ver = hsec_addons_ver();
+    $base = erp_slot_base();
+    $tag = '"' . $ver . '-' . md5($base) . '"';
+    header('Content-Type: application/javascript; charset=utf-8');
+    header('X-Content-Type-Options: nosniff');
+    header_remove('Pragma');
+    header_remove('Expires');
+    header('Vary: Accept-Encoding');
+    header('ETag: ' . $tag);
+    header(($_GET['v'] ?? '') === $ver ? 'Cache-Control: public, max-age=31536000, immutable' : 'Cache-Control: no-cache');
+    if (trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $tag) {
+        http_response_code(304);
+        return;
+    }
+    $dir = erp_data_dir() . '/page-cache';
+    $file = $dir . '/addons-' . trim($tag, '"') . '.js';
+    $js = is_file($file) ? (string) file_get_contents($file) : '';
+    if ($js === '') {
+        foreach (HSEC_ADDONS as $f) {
+            $js .= "/* " . $f . " */\ntry {\n" . file_get_contents(__DIR__ . '/' . $f) . "\n} catch (e) { setTimeout(function () { throw e; }); }\n";
+        }
+        $js = erp_slot_rewrite($js);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0700, true);
+        }
+        foreach (glob($dir . '/addons-*') ?: [] as $old) {
+            if (strpos($old, '/addons-' . $ver . '-') === false) {
+                @unlink($old);   // an older version
+            }
+        }
+        @file_put_contents($file, $js, LOCK_EX);
+    }
+    if (function_exists('gzencode') && stripos($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip') !== false) {
+        ini_set('zlib.output_compression', '0');
+        $gzf = $file . '.gz';
+        $gz = is_file($gzf) ? (string) file_get_contents($gzf) : '';
+        if ($gz === '') {
+            $gz = gzencode($js, 9);
+            @file_put_contents($gzf, $gz, LOCK_EX);
+        }
+        $js = $gz;
+        header('Content-Encoding: gzip');
+    }
+    header('Content-Length: ' . strlen($js));
+    echo $js;
 }
