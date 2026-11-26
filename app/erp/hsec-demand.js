@@ -81,6 +81,10 @@
   var whtOf = function (r) { return r && r.whtSec && r.whtSec !== "none" && !isEmpAdv(r) ? Math.round(n(r.wht)) : 0; };
   var lineTot = function (it) { return Math.round((it || []).reduce(function (s, l) { return s + n(l.amount); }, 0) * 100) / 100; };
 
+  var pdDef0 = false, pdDef = function (v) { // the Pending default was applied in this browser tab
+    if (v) { pdDef0 = true; try { sessionStorage.setItem("fs-pd-def", "1"); } catch (e) { /* private window */ } return true; }
+    if (pdDef0) return true; try { return sessionStorage.getItem("fs-pd-def") === "1"; } catch (e) { return false; }
+  };
   // where a demand stands
   function state(r) {
     var jv = r.id && live(r.id, "accrue"), bp = r.id && live(r.id, "pay");
@@ -939,6 +943,9 @@
     var sumLast = "";
     new MutationObserver(function () {
       if (!/\/paydemands$/.test(location.hash)) return;
+      // the list opens on Pending: a paid demand is done and shows under Paid (hassan, 2026-11-26: "once the demand is
+      // paid it should show in the approved window, not in pending"). Once a box is clicked, that choice stays for the tab.
+      if (window.FS_STF && !pdDef()) { if (window.FS_STF.get(DEM) || window.FS_STF.set("!Paid", "Pending")) { pdDef(true); var sm0 = document.querySelector(".fs-pdsum"); if (sm0) sm0.remove(); } }
       if (typeof listView !== "function") document.querySelectorAll("tr[data-edit=\"paydemands\"][data-id]").forEach(function (tr) {
         var r = byId(DEM, tr.getAttribute("data-id")), hide = !!(r && !inRange(r)); if (tr.hidden !== hide) tr.hidden = hide;
       });
@@ -971,6 +978,7 @@
       }
       if (!(e.target.closest && e.target.closest("#fsPdExp"))) { var om = document.getElementById("fsPdExp"); if (om) om.remove(); }
       var cd = e.target.closest && e.target.closest("[data-pdcard]");
+      if (cd) pdDef(true);
       if (cd && window.FS_STF) {
         e.preventDefault(); e.stopImmediatePropagation();
         var v = cd.getAttribute("data-pdcard"), lab = cd.getAttribute("data-pdcl");
