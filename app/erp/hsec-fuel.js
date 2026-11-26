@@ -122,7 +122,8 @@
         var h = oldS.apply(this, arguments);
         return safe(function () {
           return String(h).replace(/<table class="sig">[\s\S]*?<\/table>/, "")
-            .replace(/Computer-generated payslip\./, "This is a computer-generated payslip and does not require a signature.");
+            .replace(/Computer-generated payslip\./, "This is a computer-generated payslip and does not require a signature.")
+            .replace(/\s*Employer contributions not deducted from pay:[^<]*/, ""); // hassan, 2026-11-26: remove the employer contribution line
         }, h);
       };
       payslipHtml.fsNoSig = 1; // eslint-disable-line no-undef
