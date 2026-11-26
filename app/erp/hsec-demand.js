@@ -540,12 +540,49 @@
     syncing = true;
     try { for (var i = 0; i < Store.data[DEM].length; i++) { var d = Store.data[DEM][i]; if (d.kind === "advance" || byId(ADV, advId(d))) await syncAdv(d); } }
     catch (e) { /* no access to advances: nothing to do */ }
+    try { await billAdj(); } catch (e) { /* no access to bills or advances */ }
     finally { syncing = false; }
+  }
+  // Supplier advances are cleared on the supplier's bill only (hassan, 2026-11-26, "yes" to: "one rule, enforced by the
+  // system: Settle in Treasury › Advances is blocked for a supplier advance; when a bill adjusts the advance, the
+  // Treasury record closes by itself and shows the bill number; staff advances keep settling in Treasury"). Each
+  // supplier's posted bills with "Less: advance already paid" (bills against a PO with its own vendor advances are left
+  // to that PO) are applied to the supplier's open Treasury advances, oldest first. A fully covered advance becomes
+  // Settled with the bill numbers; a partly covered one stays open and shows how much is adjusted so far.
+  var isSupRec = function (a) { return a && a.payeeType === "Supplier"; };
+  var advAmt = function (a) { return Math.round(n(a.advanceAmount) || n(a.amount)); };
+  async function billAdj() {
+    var A = Store.data[ADV], B = Store.data.payables; if (!Array.isArray(A) || !Array.isArray(B)) return;
+    var VA = Store.data.vadvances || [], J = Store.data.journals || [];
+    var posted = function (b) { return J.some(function (j) { return j.source && j.source.c === "payables" && j.source.id === b.id && j.status === "Posted"; }); };
+    var vname = function (x) { var v = (Store.data.vendors || []).find(function (y) { return y.id === x; }); return vkey(v ? v.name : x); };
+    var adv = A.filter(function (a) { return isSupRec(a) && (a.status === "Advance issued" || (a.status === "Settled" && a.fsBillAdj)); })
+      .sort(function (a, b) { return String(a.issueDate || a.date).localeCompare(String(b.issueDate || b.date)) || String(a.reqNo).localeCompare(String(b.reqNo)); });
+    if (!adv.length) return;
+    var bills = B.filter(function (b) { return n(b.advAdjust) > 0 && b.status !== "Void" && !(b.po && VA.some(function (v) { return v.po === b.po; })) && posted(b); })
+      .sort(function (a, b) { return String(a.invoiceDate).localeCompare(String(b.invoiceDate)) || String(a.billNo).localeCompare(String(b.billNo)); });
+    var keyOf = function (a) { return (a.entity || "") + "|" + (a.vendor ? vname(a.vendor) : vkey(a.payee)); };
+    var pool = {}; // what each supplier's bills adjusted, oldest first
+    bills.forEach(function (b) { var k = (b.entity || "") + "|" + vname(b.vendor); (pool[k] = pool[k] || []).push({ no: b.billNo || b.invoiceNo || "bill", date: b.invoiceDate || "", left: Math.round(n(b.advAdjust)) }); });
+    for (var i = 0; i < adv.length; i++) {
+      var a = adv[i], need = advAmt(a), got = 0, used = [], last = "", P = pool[keyOf(a)] || [];
+      for (var j = 0; j < P.length && got < need; j++) { if (P[j].left <= 0) continue; var t = Math.min(P[j].left, need - got); P[j].left -= t; got += t; used.push(P[j].no); last = P[j].date; }
+      var full = got >= need && need > 0, st = full ? "Settled" : "Advance issued";
+      var rem = got ? "Adjusted on supplier bill" + (used.length > 1 ? "s " : " ") + used.join(", ") + ": " + fmt(got) + " of " + fmt(need) + (full ? "." : "; " + fmt(need - got) + " still to adjust.") : "";
+      if (a.status === st && Math.round(n(a.fsBillAdj)) === got && (a.settleRemarks || "") === (rem || a.settleRemarks || "")) continue;
+      if (!got && !a.fsBillAdj) continue;
+      var nr = Object.assign({}, a, { status: st, fsBillAdj: got || "", fsBills: used.join(", "), settleRemarks: rem || "" });
+      if (full) { nr.settleDate = last || todayStr(); nr.actualSpent = need; } else { nr.settleDate = ""; nr.actualSpent = ""; }
+      await Store.save(ADV, nr);
+    }
   }
   function advHooks() {
     var P = POSTERS[ADV]; if (!P || P.__fsDem) return;
     P.__fsDem = true;
     if (P.issue) P.issue.ready = (function (old) { return function (r) { return r && r.demandId ? "not needed, the cash went out through payment demand " + (r.demandNo || "") + (r.voucherNo ? " (" + r.voucherNo + ")" : "") : old.apply(this, arguments); }; })(P.issue.ready);
+    if (P.settle) P.settle.ready = (function (old) { return function (r) {
+      if (isSupRec(r)) return r.fsBillAdj ? "not needed, adjusted on supplier bill " + (r.fsBills || "") : "not used for supplier advances: adjust it on the supplier's bill (GRNs & bills, \"Less: advance already paid to this vendor\"); this record then closes by itself";
+      return old.apply(this, arguments); }; })(P.settle.ready);
     if (P.settle) P.settle.build = (function (old) { return function (r) {
       var j = old.apply(this, arguments); if (!j || !r || !r.advAcc) return j;
       var A = accByCode(), std = (A[r.payeeType === "Supplier" ? "120401" : "120403"] || {}).id;
@@ -752,6 +789,13 @@
     // saving makes the demand JV, and the BPV once a bank is chosen; both go to approval
     submitForm = (function (old) { // eslint-disable-line no-global-assign
       return async function () {
+        if (F && F.c === ADV) {
+          readForm(); var ar = F.rec, aw = ar && ar.id && byId(ADV, ar.id);
+          if (isSupRec(ar) && ar.status === "Settled" && !(aw && aw.status === "Settled")) {
+            ar.status = (aw && aw.status) || "Advance issued";
+            return err("A supplier advance is not settled here. Enter the supplier's bill under GRNs & bills and put the advance in \"Less: advance already paid to this vendor\". This record then closes by itself with the bill number.");
+          }
+        }
         if (!F || F.c !== DEM) return old.apply(this, arguments);
         readForm(); if (check() !== true) return false;
         var save = Store.save, saved = null, why = null;
