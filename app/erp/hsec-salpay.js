@@ -68,6 +68,7 @@
         B.map(function (a) { return "<option value=\"" + e(a.id) + "\">" + e(a.code + " " + a.name) + "</option>"; }).join("") + "</select></label>" +
       "<label>Payment date *<input type=\"date\" id=\"fsspDate\" value=\"" + e(safe(todayStr, new Date().toISOString().slice(0, 10))) + "\"></label>" +
       "<label>Cheque / transfer no.<input id=\"fsspRef\" placeholder=\"Cheque or online transfer reference\"></label></div>" +
+      "<div class=\"fssp-amts\"><div class=\"fssp-q\">Amount to pay: <button type=\"button\" class=\"btn sm\" data-fsspq=\"1\">Full balance</button><button type=\"button\" class=\"btn sm\" data-fsspq=\"0.5\">Half</button><span class=\"muted\">or type the amount for each person</span></div><table><tbody id=\"fsspAmts\"></tbody><tfoot><tr><td>Total paid now</td><td class=\"num\" id=\"fsspAmtT\"></td><td></td></tr></tfoot></table></div>" +
       "<div class=\"fssp-dlgb\"><button type=\"button\" class=\"btn pri\" id=\"fsspGo\">Make bank payment</button><button type=\"button\" class=\"btn\" id=\"fsspX\">Cancel</button><span id=\"fsspErr\" class=\"fssp-err\"></span></div></div></div>" +
       "<div class=\"tw\"><table class=\"fssp-t\"><thead><tr><th></th><th>Code</th><th>Employee</th><th>Department</th><th>Bank account</th><th class=\"num\">Net salary</th><th class=\"num\">Paid</th><th class=\"num\">In approval</th><th class=\"num\">Still to pay</th><th>Status</th><th></th></tr></thead><tbody>" +
       L.map(function (r) {
@@ -88,7 +89,13 @@
     chosen = list; var d = document.getElementById("fsspDlg"); if (!d || !list.length) return;
     var run = runs().find(function (r) { return r.id === pick; }), names = list.map(function (x) { var s = (run.slips || []).find(function (y) { return y.emp === x.emp; }) || {}; return s.name; });
     document.getElementById("fsspDlgT").textContent = "Pay " + (list.length === 1 ? names[0] : list.length + " employees") + ": " + money(list.reduce(function (a, x) { return a + x.amt; }, 0)) + " (" + monthName(run.month) + ", " + co(run.entity) + ")";
+    document.getElementById("fsspAmts").innerHTML = list.map(function (x, i) { return "<tr><td>" + e(names[i]) + "</td><td class=\"num\"><input type=\"number\" min=\"1\" step=\"1\" class=\"fsspAmt\" data-emp=\"" + e(x.emp) + "\" data-max=\"" + x.amt + "\" value=\"" + x.amt + "\"></td><td class=\"muted small\">of " + money(x.amt) + " still to pay</td></tr>"; }).join("");
+    amtTot();
     document.getElementById("fsspErr").textContent = ""; d.hidden = false; d.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  function amtTot() {
+    var t = [].slice.call(document.querySelectorAll(".fsspAmt")).reduce(function (a, x) { return a + Math.round(num(x.value)); }, 0), c = document.getElementById("fsspAmtT"); if (c) c.textContent = money(t);
+    var h = document.getElementById("fsspDlgT"); if (h && h.getAttribute("data-t0") === null) h.setAttribute("data-t0", h.textContent);
   }
   async function pay() {
     var er = document.getElementById("fsspErr"), go = document.getElementById("fsspGo"), bank = document.getElementById("fsspBank").value, date = document.getElementById("fsspDate").value, ref = document.getElementById("fsspRef").value.trim();
@@ -96,15 +103,18 @@
     if (!bank) { er.textContent = "Choose the bank the salary is paid from."; return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { er.textContent = "Enter the payment date."; return; }
     var left = {}; rows(run).forEach(function (r) { left[r.emp] = r.left; });
-    var list = chosen.map(function (x) { return { emp: x.emp, amt: Math.min(x.amt, left[x.emp] || 0) }; }).filter(function (x) { return x.amt > 0; });
-    if (!list.length) { er.textContent = "Nothing left to pay for the selected employees."; return; }
+    var typed = {}, bad = "";
+    document.querySelectorAll(".fsspAmt").forEach(function (x) { var v = Math.round(num(x.value)), id = x.getAttribute("data-emp"); typed[id] = v; if (v < 0 || v > (left[id] || 0)) bad = bad || ((((run.slips || []).find(function (s) { return s.emp === id; }) || {}).name || "") + ": at most " + money(left[id] || 0) + " is still to pay"); });
+    if (bad) { er.textContent = bad + "."; return; }
+    var list = chosen.map(function (x) { return { emp: x.emp, amt: Math.min(typed[x.emp] != null ? typed[x.emp] : x.amt, left[x.emp] || 0) }; }).filter(function (x) { return x.amt > 0; });
+    if (!list.length) { er.textContent = "Enter the amount to pay."; return; }
     var acc = safe(function () { return ppId("netSalary"); }, ""); if (!acc) { er.textContent = "Set \"Net salaries payable\" in Setup › Posting profiles first."; return; }
     var nm = function (id) { return ((run.slips || []).find(function (s) { return s.emp === id; }) || {}).name || ""; }, tot = list.reduce(function (a, x) { return a + x.amt; }, 0);
     var who = list.length === 1 ? nm(list[0].emp) : list.length + " employees", user = safe(approverName, "") || "ERP user", now = new Date().toISOString();
     var j = { vtype: "Bank payment voucher", entity: run.entity, date: date, dept: "Human resources", opening: "No", payee: list.length === 1 ? nm(list[0].emp) : "Salaries " + monthName(run.month), chequeNo: ref,
-      narration: "Salary " + monthName(run.month) + " paid to " + who + (list.length > 1 ? ": " + list.map(function (x) { return nm(x.emp); }).join(", ") : "") + (ref ? ". Cheque / transfer " + ref : ""),
+      narration: "Salary " + monthName(run.month) + " paid to " + who + (list.length > 1 ? ": " + list.map(function (x) { return nm(x.emp) + (x.amt < (left[x.emp] || 0) ? " (part, " + money(x.amt) + ")" : ""); }).join(", ") : (list[0].amt < (left[list[0].emp] || 0) ? " (part payment " + money(list[0].amt) + " of " + money(left[list[0].emp]) + ")" : "")) + (ref ? ". Cheque / transfer " + ref : ""),
       status: "Pending approval", maker: { name: user, at: now }, approvals: [], source: { c: SRC, id: run.id, ev: "pay", key: "pay-" + Date.now() }, fsSal: list,
-      lines: list.map(function (x) { return { account: acc, debit: x.amt, credit: 0, desc: "Net salary " + monthName(run.month) + " – " + nm(x.emp) }; }).concat([{ account: bank, debit: 0, credit: tot, desc: ref ? "Cheque / transfer " + ref : "" }]) };
+      lines: list.map(function (x) { return { account: acc, debit: x.amt, credit: 0, desc: (x.amt < (left[x.emp] || 0) ? "Part net salary " : "Net salary ") + monthName(run.month) + " – " + nm(x.emp) }; }).concat([{ account: bank, debit: 0, credit: tot, desc: ref ? "Cheque / transfer " + ref : "" }]) };
     if (safe(function () { return isLocked(j); }, false)) { er.textContent = co(run.entity) + " " + safe(function () { return lockTxt(run.entity); }, "is closed for that date") + ". Use a later date."; return; }
     if (!safe(function () { return jvTot(j).ok; }, true)) { er.textContent = "The voucher would not balance."; return; }
     go.disabled = true; er.textContent = "Saving…";
@@ -120,9 +130,11 @@
     if (t.id === "fsspAll") { document.querySelectorAll(".fsspTick").forEach(function (x) { x.checked = t.checked; }); selTot(); return; }
     if (t.classList && t.classList.contains("fsspTick")) selTot();
   });
+  document.addEventListener("input", function (ev) { if (ev.target && ev.target.classList && ev.target.classList.contains("fsspAmt")) amtTot(); });
   document.addEventListener("click", function (ev) {
-    var t = ev.target && ev.target.closest ? ev.target.closest("#fsspPaySel, [data-fsspone], #fsspGo, #fsspX") : null; if (!t) return;
+    var t = ev.target && ev.target.closest ? ev.target.closest("#fsspPaySel, [data-fsspone], #fsspGo, #fsspX, [data-fsspq]") : null; if (!t) return;
     ev.preventDefault();
+    if (t.hasAttribute("data-fsspq")) { var f = num(t.getAttribute("data-fsspq")); document.querySelectorAll(".fsspAmt").forEach(function (x) { x.value = Math.round(num(x.getAttribute("data-max")) * f); }); amtTot(); return; }
     if (t.id === "fsspPaySel") ask([].slice.call(document.querySelectorAll(".fsspTick:checked")).map(function (x) { return { emp: x.getAttribute("data-emp"), amt: num(x.getAttribute("data-amt")) }; }));
     else if (t.hasAttribute("data-fsspone")) { var b = document.querySelector(".fsspTick[data-emp=\"" + t.getAttribute("data-fsspone").replace(/"/g, "") + "\"]"); ask(b ? [{ emp: b.getAttribute("data-emp"), amt: num(b.getAttribute("data-amt")) }] : []); }
     else if (t.id === "fsspGo") pay();
@@ -152,6 +164,7 @@
     ".fssp-dlg{border:1px solid #cfe0f1;background:#eef5fc;border-radius:10px;padding:14px 16px;margin:0 0 12px}.fssp-dlg>b{display:block;margin-bottom:10px;color:#13304f}" +
     ".fssp-f{display:flex;flex-wrap:wrap;gap:12px}.fssp-f label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;min-width:220px}.fssp-dlgb{display:flex;gap:10px;align-items:center;margin-top:12px}.fssp-err{color:#b91c1c;font-size:13px}" +
     ".fssp-pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}.fssp-pill.ok{background:#dcfce7;color:#166534}.fssp-pill.warn{background:#fef3c7;color:#92400e}.fssp-pill.part{background:#dbeafe;color:#1e40af}.fssp-pill.no{background:#fee2e2;color:#991b1b}" +
+    ".fssp-amts{margin-top:12px}.fssp-q{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;font-weight:600;margin-bottom:6px}.fssp-amts table{width:auto;min-width:420px}.fssp-amts td{padding:4px 10px 4px 0}.fssp-amts input{width:140px;text-align:right}.fssp-amts tfoot td{font-weight:700}" +
     ".fssp .small{font-size:12px}.fssp-t tfoot td{font-weight:700}";
   (document.head || document.documentElement).appendChild(css);
   (function wait(t) { if (hook()) return; if (t < 600) setTimeout(function () { wait(t + 1); }, 100); })(0);
