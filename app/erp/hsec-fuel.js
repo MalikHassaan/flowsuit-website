@@ -43,6 +43,45 @@
     return made;
   }
 
+  // Employee form helper (hassan, 2026-11-26: type the agreement's total as gross; choosing tax-free fuel should take the
+  // fuel out of it). On a record that did not have tax-free fuel when opened, choosing Yes and entering the amount takes it
+  // off Gross salary on screen (and puts it back if changed or set to No), with a note. Records already on tax-free fuel
+  // are left alone. When salary components are typed, nothing is changed and the note says which to reduce.
+  var ST = typeof WeakMap === "function" ? new WeakMap() : null;
+  var amt = function (v) { return num(String(v == null ? "" : v).replace(/[^0-9.\-]/g, "")); };
+  var fmt = function (x) { return Math.round(x).toLocaleString("en-US"); };
+  function note(msg, bad) {
+    var lim = document.getElementById("f_fuelLimit"); if (!lim) return;
+    var box = lim.closest(".f") || lim.parentNode, el = document.getElementById("fsFuelNote");
+    if (!el) { el = document.createElement("div"); el.id = "fsFuelNote"; box.appendChild(el); }
+    el.style.cssText = "margin-top:6px;padding:8px 10px;border-radius:8px;font-size:13px;line-height:1.4;" + (bad ? "background:#fef2f2;color:#991b1b;border:1px solid #fecaca" : "background:#eef5fc;color:#13304f;border:1px solid #cfe0f1");
+    el.textContent = msg;
+  }
+  function onFuel(ev) {
+    var id = ev.target && ev.target.id;
+    if (id !== "f_fuelTaxFree" && id !== "f_fuelLimit") return;
+    var F0 = safe(function () { return F; }, null); // eslint-disable-line no-undef
+    if (!F0 || F0.c !== "employees" || !F0.rec || !ST) return;
+    var saved = F0.rec.id && (Store.data.employees || []).find(function (x) { return x.id === F0.rec.id; });
+    var st = ST.get(F0.rec); if (!st) { st = { initYes: !!(saved && saved.fuelTaxFree === "Yes"), sub: 0 }; ST.set(F0.rec, st); }
+    var sel = document.getElementById("f_fuelTaxFree"), lim = document.getElementById("f_fuelLimit"), g = document.getElementById("f_grossSalary");
+    if (!sel || !lim || !g) return;
+    var fuel = sel.value === "Yes" ? amt(lim.value) : 0;
+    if (st.initYes) { if (fuel) note("Gross salary not changed: this employee was already on tax-free fuel. Gross salary must not include the fuel."); return; }
+    if (fuel === st.sub) return;
+    var comps = ["basic", "hra", "utilities", "medical", "conveyance", "otherAllow"].filter(function (k) { var x = document.getElementById("f_" + k); return x && amt(x.value); });
+    if (comps.length) { note("Salary components are typed, so take " + fmt(fuel - st.sub) + " off the Basic salary yourself. Fuel is paid separately, tax-free.", true); return; }
+    var was = amt(g.value), now = was + st.sub - fuel;
+    if (now < 0) { note("The fuel amount is more than the gross salary. Check both figures.", true); return; }
+    g.value = now ? fmt(now) : "";
+    F0.rec.grossSalary = now || "";
+    safe(function () { g.dispatchEvent(new Event("input", { bubbles: true })); });
+    st.sub = fuel;
+    note(fuel ? "Gross salary changed from " + fmt(was) + " to " + fmt(now) + ". The " + fmt(fuel) + " fuel is paid on top, tax-free, so the total stays " + fmt(now + fuel) + "."
+      : "Gross salary put back to " + fmt(now) + ".");
+  }
+  document.addEventListener("change", function (ev) { safe(function () { onFuel(ev); }); });
+
   function hook() {
     if (typeof S === "undefined" || !S.employees || typeof payAuto !== "function" || typeof Store === "undefined" || !Store.data) return false;
     addFields();
