@@ -5,7 +5,7 @@
 // already there. Change the input's amount to match the month's fuel bills and press Recalculate. An input you delete
 // is not made again for that run. It is added to gross and net pay but left out of the salary tax.
 (function () {
-  /* global S, Store, payAuto, curMonth, EARN_TYPES, toast, calcPanel, empPay, F */
+  /* global S, Store, payAuto, curMonth, EARN_TYPES, toast, calcPanel, empPay, F, payslipHtml */
   var num = function (x) { return +x || 0; };
   var safe = function (f, d) { try { return f(); } catch (e) { return d; } };
   var TYPE = function () { return safe(function () { return EARN_TYPES.indexOf("Fuel allowance") >= 0 ? "Fuel allowance" : "Other allowance"; }, "Other allowance"); };
@@ -113,6 +113,19 @@
       var oldP = calcPanel; // eslint-disable-line no-undef
       calcPanel = function () { var h = oldP.apply(this, arguments); return safe(function () { return panelAdd(h); }, h); }; // eslint-disable-line no-global-assign, no-undef
       calcPanel.fsFuel = 1; // eslint-disable-line no-undef
+    }
+    // payslip: no signature boxes, says it needs no signature (hassan, 2026-11-26: "just say it's computer generated,
+    // no signature is required")
+    if (typeof payslipHtml === "function" && !payslipHtml.fsNoSig) { // eslint-disable-line no-undef
+      var oldS = payslipHtml; // eslint-disable-line no-undef
+      payslipHtml = function () { // eslint-disable-line no-global-assign, no-undef
+        var h = oldS.apply(this, arguments);
+        return safe(function () {
+          return String(h).replace(/<table class="sig">[\s\S]*?<\/table>/, "")
+            .replace(/Computer-generated payslip\./, "This is a computer-generated payslip and does not require a signature.");
+        }, h);
+      };
+      payslipHtml.fsNoSig = 1; // eslint-disable-line no-undef
     }
     window.FS_FUEL = { ensure: ensure };
     return true;
