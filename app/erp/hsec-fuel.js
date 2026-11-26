@@ -127,6 +127,23 @@
       };
       payslipHtml.fsNoSig = 1; // eslint-disable-line no-undef
     }
+    // gross split by HR setup percentages: whole rupees that add up to the gross exactly (hassan, 2026-11-26: 90.91 / 9.09
+    // of 175,000 gave 159,093 + 15,908 = 175,001). The rounding difference goes to Other allowances when there is one,
+    // else Medical, else Basic. Salaries with typed components are not touched.
+    if (typeof empPay === "function" && !empPay.fsRound) { // eslint-disable-line no-undef
+      var oldE = empPay, KS = ["basic", "hra", "utilities", "medical", "conveyance", "otherAllow"]; // eslint-disable-line no-undef
+      empPay = function (e) { // eslint-disable-line no-global-assign, no-undef
+        var o = oldE.apply(this, arguments);
+        return safe(function () {
+          if (!o || !e || KS.some(function (k) { return num(e[k]); })) return o;
+          var g = Math.round(num(o.gross)), t = 0;
+          KS.forEach(function (k) { o[k] = Math.round(num(o[k])); t += o[k]; });
+          if (t !== g) { var k = o.otherAllow > 0 ? "otherAllow" : o.medical > 0 ? "medical" : "basic"; o[k] += g - t; }
+          o.gross = g; return o;
+        }, o);
+      };
+      empPay.fsRound = 1; // eslint-disable-line no-undef
+    }
     window.FS_FUEL = { ensure: ensure };
     return true;
   }
