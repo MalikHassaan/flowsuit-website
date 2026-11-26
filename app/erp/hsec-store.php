@@ -60,6 +60,36 @@ function hsec_amc_scope(array $me): int
     }
     return array_intersect(['e_ar', 'r_party', 'rpt', 'mgmt'], $mods) ? 1 : 2;
 }
+// Which kinds of records a person's browser is sent (hassan, 2026-11-26: a sales user saw cheques due on Home; "yes" to
+// sending each person only the records their ticked areas need). Only areas listed here narrow it: anyone with an area
+// not listed (finance, projects, HR, Home...) still gets everything, so no screen of theirs comes up empty.
+const HSEC_AREA_COLLS = [
+    // Quotations: quotes and customers (customers are projects). Not its Invoices tab: without the vouchers every
+    // invoice would read "Not posted" and fully outstanding, so that tab stays empty for a sales-only person.
+    'sales' => ['quotes', 'projects', 'fscustomers'],
+    'dashboard' => [],                                    // Home: shows figures only from the records the other areas bring
+];
+// Always sent: settings (companies, letterheads), names and look-up lists, no amounts.
+const HSEC_BASE_COLLS = ['settings', 'secusers', 'accounts', 'items', 'liftprods', 'factcontacts', 'fsbranches', 'fsstaff'];
+function hsec_coll_scope(array $me): ?array
+{
+    if (!empty($me['is_admin'])) {
+        return null;
+    }
+    $mods = array_values(array_filter(explode(',', (string) ($me['hsec_mods'] ?? ''))));
+    if (!$mods) {
+        return null;
+    }
+    $colls = HSEC_BASE_COLLS;
+    foreach ($mods as $m) {
+        if (!isset(HSEC_AREA_COLLS[$m])) {
+            return null;
+        }
+        $colls = array_merge($colls, HSEC_AREA_COLLS[$m]);
+    }
+    return array_fill_keys($colls, true);
+}
+
 function hsec_amc_ids(): array
 {
     static $ids = null;
@@ -260,8 +290,12 @@ function hsec_sync(int $since): void
     $st->execute([$since]);
     $allowed = hsec_allowed(erp_user());
     $amc = hsec_amc_scope(erp_user());
+    $scope = hsec_coll_scope(erp_user());
     $docs = [];
     foreach ($st->fetchAll() as $row) {
+        if ($scope !== null && !isset($scope[$row['coll']])) {
+            continue;   // not needed by any area of theirs: never sent
+        }
         $data = $row['data'] === null ? null : json_decode($row['data'], true);
         if (!hsec_visible($allowed, $data) || hsec_amc_hidden($amc, $row['coll'], $data)) {
             // Another company's record: never sent. If it moved out of reach, the browser drops its copy.
@@ -582,6 +616,12 @@ function hsec_write(array $me): void
         $new = $json === null ? null : json_decode($json, true);
         $renumbered = false;
         $why = hsec_refusal($me, $coll, $old, $new);
+        if ($why === null && $coll !== 'audit') {   // the app writes an audit row with every save
+            $sc = hsec_coll_scope($me);
+            if ($sc !== null && !isset($sc[$coll])) {
+                $why = 'Your areas in Users and access do not include these records.';   // they are not sent to this person either
+            }
+        }
         if ($why === null && $coll === 'paydemands' && $new !== null) {
             // The GM's decision on a payment demand: only the GM (or an admin) sets it, under their own name and time.
             $before = $new;
