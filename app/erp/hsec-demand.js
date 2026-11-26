@@ -524,14 +524,36 @@
     return { cur: cur, r: r };
   }
   var advKeys = ["advPart", "vendor", "reqNo", "date", "entity", "payeeType", "payee", "purpose", "amount", "advanceAmount", "payRef", "issueDate", "voucherNo", "advAcc", "status"];
+  // A supplier advance from a demand is also listed under Payables › Prepayments (advances), the list a supplier's bill
+  // checks before it lets "Less: advance already paid to this vendor" through (hassan, 2026-11-26: supplier advances are
+  // adjusted on the bill). The record points at the demand's posted JV, so it adds no voucher of its own.
+  async function vadvMirror(d, jv, bp) {
+    var VA = Store.data.vadvances; if (!Array.isArray(VA) || !d || !d.id) return;
+    var id = "pd-" + d.id, cur = VA.find(function (x) { return x.id === id; }) || null, vx = isSupAdv(d) && vendorOf(d.payee);
+    if (!vx || !jv || jv.status !== "Posted") {
+      if (cur && cur.status !== "Void" && !(isSupAdv(d) && jv)) await Store.save("vadvances", Object.assign({}, cur, { status: "Void", notes: "Payment demand " + (d.demandNo || "") + " is no longer a supplier advance." }));
+      return;
+    }
+    var w = Math.round(n(d.wht) || 0), amt = Math.round(n(d.amount));
+    var r = Object.assign({}, cur || {}, { id: id, vendor: vx.id, entity: d.entity, amount: amt, wht: w || "", net: amt - w, date: d.payDate || d.date, bank: d.bank || (cur && cur.bank) || "",
+      ref: d.chequeNo || "", basis: "Advance from payment demand " + d.demandNo, isAdv: true, payType: "Advance under PO terms", jvId: jv.id, demandId: d.id, demandNo: d.demandNo,
+      notes: "Booked through payment demand " + d.demandNo + " (" + [jv.ref, bp && bp.ref].filter(Boolean).join(" / ") + "). Adjust it on the supplier's bill." });
+    delete r.status;
+    var ks = ["vendor", "entity", "amount", "wht", "date", "bank", "ref", "jvId", "notes"];
+    if (cur && cur.status !== "Void" && ks.every(function (k) { return String(cur[k] == null ? "" : cur[k]) === String(r[k] == null ? "" : r[k]); })) return;
+    if (cur && cur.status === "Void") r.status = "";
+    await Store.save("vadvances", r);
+  }
   async function syncAdv(d, jv, bp) {
     if (!d || !d.id || !Array.isArray(Store.data[ADV])) return;
     var cur = byId(ADV, advId(d));
     if (d.kind !== "advance") { // the demand was changed to an expense: drop the open advance
+      try { await vadvMirror(d, null, null); } catch (e) { /* no access to Prepayments */ }
       if (cur && cur.status === "Advance issued" && !n(cur.actualSpent)) await Store.save(ADV, Object.assign({}, cur, { status: "Cancelled", settleRemarks: "Demand " + d.demandNo + " changed to an expense." }));
       return;
     }
     jv = jv || live(d.id, "accrue"); bp = bp || live(d.id, "pay");
+    try { await vadvMirror(d, jv, bp); } catch (e) { /* no access to Prepayments */ }
     if (!jv || jv.status !== "Posted") return; // journals not loaded yet, or not posted: leave as is
     if (cur && cur.status === "Settled") return;
     var x = advRec(d, jv, bp);
