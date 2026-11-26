@@ -185,7 +185,10 @@
 
     // Home: the cheques falling due, before the rest of the page
     if (typeof dashboard === "function") dashboard = (function (old) { // eslint-disable-line no-global-assign
-      return function () { var h = old.apply(this, arguments); try { return typeof h === "string" ? alertHtml(true) + h : h; } catch (e) { return h; } };
+      // only for people who handle payments or banks (hassan, 2026-11-26: "remove these cheque details from Umaiza's
+      // ID as she is in sales"): everyone else's areas leave out Payables, Bank and Cash reports
+      var M = window.FS_MODS, mayPay = !Array.isArray(M) || ["e_ap", "e_bank", "r_cash"].some(function (k) { return M.indexOf(k) >= 0; });
+      return function () { var h = old.apply(this, arguments); try { return typeof h === "string" && mayPay ? alertHtml(true) + h : h; } catch (e) { return h; } };
     })(dashboard);
     // the register: the same alert above the list
     new MutationObserver(function () {
