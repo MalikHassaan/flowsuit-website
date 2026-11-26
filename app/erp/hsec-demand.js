@@ -54,6 +54,18 @@
     sel.value = L.some(function (a) { return a.id === cur; }) ? cur : "";
     sel.setAttribute("data-fsco", co);
   }
+  // ---- withholding at payment: the app's tax-rate table (Setup › Tax rates) when it is there, else the same defaults
+  var WHT0 = [{ k: "153a", l: "153(1)(a) Sale of goods", co: 5.5, oth: 5.5 }, { k: "153b", l: "153(1)(b) Rendering of services", co: 11, oth: 16 },
+    { k: "153c", l: "153(1)(c) Execution of contracts", co: 7.5, oth: 7.5 }, { k: "155", l: "155 Rent of immovable property", co: 15, oth: 15 }, { k: "none", l: "Not subject to withholding / exempt", co: 0, oth: 0 }];
+  var whtTab = function () { try { var t = whtRates(); if (Array.isArray(t) && t.length) return t; } catch (e) { /* older app */ } return WHT0; }; // eslint-disable-line no-undef
+  var whtLabel = function (k) { var x = whtTab().find(function (s) { return s.k === k; }); return x ? String(x.l).split(" ")[0] : k || ""; };
+  var nfx = function () { try { return n(nonFilerX()) || 2; } catch (e) { return 2; } }; // eslint-disable-line no-undef
+  function whtRate(sec, type, filer) {
+    var x = whtTab().find(function (s) { return s.k === sec; }); if (!x) return "";
+    return Math.round((type === "Individual or AOP" ? n(x.oth) : n(x.co)) * (filer === "No" ? nfx() : 1) * 100) / 100;
+  }
+  var whtAccId = function () { try { return ppId("whtPayable"); } catch (e) { var a = (Store.data.accounts || []).find(function (x) { return /withh?eld from (vendors|suppliers)/i.test(x.name || ""); }); return a ? a.id : ""; } }; // eslint-disable-line no-undef
+  var whtOf = function (r) { return r && r.whtSec && r.whtSec !== "none" && !isEmpAdv(r) ? Math.round(n(r.wht)) : 0; };
   var lineTot = function (it) { return Math.round((it || []).reduce(function (s, l) { return s + n(l.amount); }, 0) * 100) / 100; };
 
   // where a demand stands
@@ -213,6 +225,15 @@
       { k: "advTotal", l: "Total cost of the work (PKR)", t: "money", hint: "The full amount agreed or expected. The lines below are the part paid now as advance; the balance is paid later against the bill." },
       { k: "payAcc", l: "Payable account (credit in the demand JV)", t: "acc", af: "payable", req: 1, hint: "Usually 220204 Other accrued expenses, or the creditors account for a supplier." },
       { k: "items", l: "Lines", t: "pdlines" },
+      // Income tax withheld at payment (hassan, 2026-11-26: "upon payment the withholding detail should show: is it services,
+      // on services it is that %, and on that make the JV and BPV accordingly, including the advances"). The rate comes
+      // from Setup › Tax rates (the app's own table) by section, payee type and active-taxpayer status; the BPV credits the
+      // bank with the net and "Income tax withheld from vendors" with the tax. Not shown on employee advances.
+      { k: "whtSec", l: "Income tax to withhold at payment", t: "select", o: [], hint: "What is being paid for: goods, services, a contract or rent. Filled from the vendor list when the payee is a supplier there." },
+      { k: "whtType", l: "Payee is a", t: "select", o: ["Company", "Individual or AOP"] },
+      { k: "whtFiler", l: "Payee on the Active Taxpayer List (ATL)?", t: "select", o: [["Yes", "Yes: normal rate"], ["No", "No: rate × " + 2 + " (non-filer)"]] },
+      { k: "whtPct", l: "Withholding rate %", t: "number", hint: "Worked out from the three boxes above; change it if the certificate or exemption says otherwise." },
+      { k: "wht", l: "Income tax withheld (PKR)", t: "money", hint: "Amount × rate. The bank pays the rest." },
       { k: "payCo", l: "Paid by company", t: "select", o: [], hint: "Leave as is when this company pays from its own bank. When another group company pays (e.g. from JPL's bank), pick it: the bank payment voucher is made in its books, and the matching entry in this company's books." },
       { k: "bank", l: "Pay from bank", t: "acc", af: "bank", hint: "Choose when it is to be paid. Saving with a bank creates the bank payment voucher and sends it for approval." },
       { k: "chequeNo", l: "Cheque / transfer no." }, { k: "payDate", l: "Payment date", t: "date" },
@@ -232,6 +253,10 @@
       var E = []; try { E = typeof ENTS === "function" ? ENTS() : []; } catch (x) { E = []; } // eslint-disable-line no-undef
       var own = (document.getElementById("f_entity") || {}).value || (typeof F !== "undefined" && F && F.rec && F.rec.entity) || "";
       return [["", "This company (its own bank)"]].concat(E.filter(function (e) { return !/^ENT\d$/.test(e) && e !== own; }).map(function (e) { return [e, coName(e) + " pays on its behalf"]; }));
+    } });
+    var wsf = S[DEM].fields.find(function (f) { return f.k === "whtSec"; });
+    if (wsf) Object.defineProperty(wsf, "o", { configurable: true, get: function () {
+      return [["", "Choose… (what is being paid for)"]].concat(whtTab().map(function (x) { return [x.k, x.k === "none" ? x.l : x.l + " – company " + n(x.co) + "%, others " + n(x.oth) + "%"]; }));
     } });
     POSTERS[DEM] = {
       accrue: { label: "demand journal voucher", keys: ["items", "amount", "payAcc", "date", "entity", "kind", "advAcc"],
@@ -255,10 +280,11 @@
           return { vtype: "Journal voucher", date: r.date, entity: r.entity, payee: r.payee || "", dept: ((r.items || [])[0] || {}).dept || "",
             narration: "Payment demand " + r.demandNo + " from " + (r.branch || "") + " for " + (r.payee || "") + ": " + (r.description || ""), lines: lines };
         } },
-      pay: { label: "bank payment voucher", keys: ["bank", "amount", "payAcc", "payCo"],
+      pay: { label: "bank payment voucher", keys: ["bank", "amount", "payAcc", "payCo", "wht", "whtSec", "whtPct"],
         ready: function (r) {
           if (!live(r.id, "accrue")) return "save the demand so its JV is made first";
           if (!r.bank) return "choose the bank it is paid from";
+          if (whtOf(r) && !whtAccId()) return "set \"Income tax withheld from vendors at payment\" in Setup › Posting profiles";
           var co = payer(r); if (!co) return true;
           if (!window.FS_IC) return "the intercompany part of the system has not loaded; reload the page";
           if (!window.FS_IC.icAcc("1207", r.entity, co)) return "there is no \"Due from " + coName(r.entity) + "\" account in " + coName(co) + "'s books. Add one under 1207 Due from group companies, marked Intercompany";
@@ -266,7 +292,8 @@
           return true;
         },
         build: function (r) {
-          var a = Math.round(n(r.amount)), co = payer(r);
+          var a = Math.round(n(r.amount)), co = payer(r), w = whtOf(r), wl = w ? [{ account: whtAccId(), debit: 0, credit: w, desc: "Income tax withheld u/s " + whtLabel(r.whtSec) + " @ " + n(r.whtPct) + "% – " + (r.payee || "") }] : [];
+          var wn = w ? ", tax withheld " + fmt(w) + " (" + whtLabel(r.whtSec) + " @ " + n(r.whtPct) + "%), net paid " + fmt(a - w) : "";
           // another group company pays from its bank (hassan, 2026-11-18: "demand is for HSEC and payment is going from
           // JPL's account"): the voucher is in the payer's books, Dr Due from <demand company> / Cr its bank, on behalf of
           // the demand's company; hsec-ic.js makes the matching JV there: Dr the demand's payable / Cr Due to the payer.
@@ -274,12 +301,12 @@
             var due = window.FS_IC.icAcc("1207", r.entity, co);
             return { vtype: "Bank payment voucher", date: r.payDate || todayStr(), entity: co, payee: r.payee || "", chequeNo: r.chequeNo || "", dept: ((r.items || [])[0] || {}).dept || "",
               icFor: r.entity, icCharge: r.payAcc,
-              narration: "Payment of " + coName(r.entity) + " demand " + r.demandNo + " (" + (r.branch || "") + ") to " + (r.payee || "") + " on behalf of " + coName(r.entity) + ": " + (r.description || ""),
-              lines: [{ account: due.id, debit: a, credit: 0, desc: "Paid for " + coName(r.entity) + ", demand " + r.demandNo + " – " + (r.payee || "") }, { account: r.bank, debit: 0, credit: a, desc: r.chequeNo ? "Cheque / transfer " + r.chequeNo : "" }] };
+              narration: "Payment of " + coName(r.entity) + " demand " + r.demandNo + " (" + (r.branch || "") + ") to " + (r.payee || "") + " on behalf of " + coName(r.entity) + ": " + (r.description || "") + wn,
+              lines: [{ account: due.id, debit: a, credit: 0, desc: "Paid for " + coName(r.entity) + ", demand " + r.demandNo + " – " + (r.payee || "") }, { account: r.bank, debit: 0, credit: a - w, desc: r.chequeNo ? "Cheque / transfer " + r.chequeNo : "" }].concat(wl) };
           }
           return { vtype: "Bank payment voucher", date: r.payDate || todayStr(), entity: r.entity, payee: r.payee || "", chequeNo: r.chequeNo || "", dept: ((r.items || [])[0] || {}).dept || "",
-            narration: "Payment of demand " + r.demandNo + " (" + (r.branch || "") + ") to " + (r.payee || "") + ": " + (r.description || ""),
-            lines: [{ account: r.payAcc, debit: a, credit: 0, desc: "Demand " + r.demandNo + " – " + (r.payee || "") }, { account: r.bank, debit: 0, credit: a, desc: r.chequeNo ? "Cheque / transfer " + r.chequeNo : "" }] };
+            narration: "Payment of demand " + r.demandNo + " (" + (r.branch || "") + ") to " + (r.payee || "") + ": " + (r.description || "") + wn,
+            lines: [{ account: r.payAcc, debit: a, credit: 0, desc: "Demand " + r.demandNo + " – " + (r.payee || "") }, { account: r.bank, debit: 0, credit: a - w, desc: r.chequeNo ? "Cheque / transfer " + r.chequeNo : "" }].concat(wl) };
         } } };
     if (typeof DOCNAME !== "undefined") DOCNAME[DEM] = "payment demand";
     if (typeof LABEL !== "undefined") LABEL[DEM] = "demandNo";
@@ -552,6 +579,12 @@
       if (vx) r.payee = String(vx.name).trim();
     }
     if (isEmpAdv(r) && (!String(r.payee || "").trim() || GENERIC.test(r.payee))) return err("Pay to: choose the staff member who gets the advance from the list, or type their full name (not \"" + (r.payee || "Employee") + "\").");
+    if (isEmpAdv(r) || !r.whtSec || r.whtSec === "none") { r.wht = ""; r.whtPct = ""; if (isEmpAdv(r)) r.whtSec = ""; }
+    else {
+      r.wht = Math.round(n(r.wht));
+      if (r.wht >= r.amount) return err("Income tax withheld (" + fmt(r.wht) + ") cannot be the whole amount (" + fmt(r.amount) + ").");
+      var pj = r.id && live(r.id, "pay"); if (pj && pj.status === "Posted" && was && Math.round(n(was.wht)) !== r.wht) return err("The bank payment " + (pj.ref || "") + " is posted, so the tax withheld cannot change. Use Reverse and correct.");
+    }
     r.description = r.items.map(function (l) { return l.desc; }).join("; ").slice(0, 200);
     if (r.bank && !r.payDate) r.payDate = todayStr();
     if (r.payCo === r.entity) r.payCo = "";
@@ -785,6 +818,49 @@
         if (hint) { hint.textContent = hint.getAttribute("data-fs0") || ""; hint.classList.remove("fs-pdwarn"); }
       }
     };
+    // withholding boxes: hidden on an employee advance; filled from the vendor list; rate and tax worked out unless typed over
+    var whtSync = function () {
+      var sec = document.getElementById("f_whtSec"); if (!sec) return;
+      var g = function (id) { return document.getElementById(id); }, box = function (el) { return el && (el.closest(".f") || el.parentNode); };
+      var shw = function (el, on) { var x = box(el); if (x && x.style.display !== (on ? "" : "none")) x.style.display = on ? "" : "none"; };
+      var k = g("f_kind"), a = g("f_advAcc"), emp = !!(k && k.value === "advance" && isEmpAdv({ kind: "advance", advAcc: a ? a.value : "" }));
+      var ty = g("f_whtType"), fl = g("f_whtFiler"), pc = g("f_whtPct"), wt = g("f_wht"), py = g("f_payee");
+      var vx = py && vendorOf(py.value);
+      if (vx && !emp && py.getAttribute("data-fswv") !== vx.name) { // a new supplier picked: take its tax details
+        py.setAttribute("data-fswv", vx.name);
+        if (vx.whtSec && !sec.value) sec.value = vx.whtSec;
+        if (ty && vx.vtype) ty.value = vx.vtype;
+        if (fl && (vx.filer === "Yes" || vx.filer === "No")) fl.value = vx.filer;
+        if (pc) pc.removeAttribute("data-man"); if (wt) wt.removeAttribute("data-man");
+      }
+      shw(sec, !emp);
+      var on = !emp && sec.value && sec.value !== "none";
+      [ty, fl, pc, wt].forEach(function (el) { shw(el, on); });
+      var info = g("fsPdWht");
+      if (!on) { if (info) info.remove(); return; }
+      if (ty && !ty.value) ty.value = "Company"; if (fl && !fl.value) fl.value = "Yes";
+      var pct = pc && pc.hasAttribute("data-man") ? n(pc.value) : whtRate(sec.value, ty ? ty.value : "Company", fl ? fl.value : "Yes");
+      if (pc && !pc.hasAttribute("data-man") && String(pc.value) !== String(pct)) pc.value = pct;
+      var gross = lineTot(readLines()), tax = Math.round(gross * n(pct) / 100);
+      if (wt && !wt.hasAttribute("data-man") && String(wt.value) !== String(tax)) wt.value = tax;
+      var w = wt ? Math.round(n(wt.value)) : tax;
+      if (!info) { var bx = box(wt) || box(sec); if (!bx) return; bx.insertAdjacentHTML("afterend", "<div id=\"fsPdWht\" class=\"hint\" style=\"grid-column:1/-1;background:#eef5fc;border:1px solid #cfe0f1;border-radius:6px;padding:8px 10px;color:#13304f\"></div>"); info = g("fsPdWht"); }
+      var t = "Gross " + fmt(gross) + " − income tax " + fmt(w) + " (" + whtLabel(sec.value) + " @ " + n(pct) + "%) = net paid from bank " + fmt(gross - w) +
+        ". The demand JV books the full " + fmt(gross) + "; the bank payment voucher credits the bank " + fmt(gross - w) + " and \"Income tax withheld from vendors\" " + fmt(w) +
+        ". The deposit is due in Tax calendar (Withholding income tax deducted)." + (fl && fl.value === "No" ? " Not on the ATL, so the rate is doubled." : "");
+      if (info.textContent !== t) info.textContent = t;
+    };
+    document.addEventListener("input", function (e) {
+      var id = e.target && e.target.id;
+      if (id === "f_whtPct" || id === "f_wht") { e.target.setAttribute("data-man", "1"); if (id === "f_whtPct") { var w0 = document.getElementById("f_wht"); if (w0) w0.removeAttribute("data-man"); } }
+      if (id === "f_payee" || id === "f_whtPct" || id === "f_wht" || (e.target && e.target.closest && e.target.closest("#pdBox"))) safe0(whtSync);
+    });
+    document.addEventListener("change", function (e) {
+      var id = e.target && e.target.id;
+      if (/^f_(whtSec|whtType|whtFiler)$/.test(id || "")) { ["f_whtPct", "f_wht"].forEach(function (x) { var el = document.getElementById(x); if (el) el.removeAttribute("data-man"); }); }
+      if (/^f_(whtSec|whtType|whtFiler|kind|advAcc|payee)$/.test(id || "") || (e.target && e.target.closest && e.target.closest("#pdBox"))) safe0(whtSync);
+    });
+    new MutationObserver(function () { if (document.getElementById("f_whtSec") && !document.getElementById("f_whtSec").hasAttribute("data-fsw")) { document.getElementById("f_whtSec").setAttribute("data-fsw", "1"); var py0 = document.getElementById("f_payee"); if (py0 && F && F.rec && F.rec.id) py0.setAttribute("data-fswv", (vendorOf(py0.value) || {}).name || ""); if (F && F.rec && F.rec.id && n(F.rec.wht)) { ["f_whtPct", "f_wht"].forEach(function (x) { var el = document.getElementById(x); if (el) el.setAttribute("data-man", "1"); }); } safe0(whtSync); } }).observe(document.body, { childList: true, subtree: true });
     document.addEventListener("change", function (e) { if (e.target && /^f_(kind|advAcc|entity|advPart)$/.test(e.target.id)) kindSync(); });
     document.addEventListener("input", function (e) { if (e.target && e.target.id === "f_payee") kindSync(); });
     new MutationObserver(function () { if (document.getElementById("f_kind")) kindSync(); }).observe(document.body, { childList: true, subtree: true });
