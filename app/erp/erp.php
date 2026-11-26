@@ -724,6 +724,10 @@ function erp_handle(string $path): void
     }
 
     $sub = substr($path, strlen('/erp')) ?: '/';
+    if ($sub === '/addons/hsec.js') {
+        hsec_addons_send();   // code only, the same for everyone: no session needed
+        return;
+    }
     erp_start_session(!in_array($sub, ['/m/receivables/api/sync', '/m/hsec/api/sync', '/chat/api/poll', '/chat/api/sig', '/attendance/api/state', '/resume'], true));
     $post = $_SERVER['REQUEST_METHOD'] === 'POST';
     if ($post) {

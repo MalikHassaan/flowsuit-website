@@ -6,6 +6,7 @@
 (function () {
   var C = window.FS_BRIDGE || window.FS_TAJ; if (!C) return;
   var docs = {};          // "coll/id" -> data object
+  var idx = null;         // coll -> paths, rebuilt once after a change (was: every listener scanned every record)
   var listeners = [];     // { kind: "doc"|"query", path|coll, order, dir, max, cb }
   var version = 0, loaded = false, names = {}, members = null, synced = null, ended = false;
 
@@ -19,12 +20,17 @@
     var d = docs[path];
     return { id: idOf(path), exists: d !== undefined, data: function () { return clone(d); } };
   }
+  function pathsOf(coll) {
+    if (!idx) { idx = {}; Object.keys(docs).forEach(function (p) { var c = collOf(p); (idx[c] = idx[c] || []).push(p); }); }
+    return idx[coll] || [];
+  }
   function querySnap(l) {
-    var list = Object.keys(docs).filter(function (p) { return collOf(p) === l.coll; }).map(docSnap);
-    if (l.order) list.sort(function (a, b) {
-      var x = a.data()[l.order], y = b.data()[l.order], c = x < y ? -1 : x > y ? 1 : 0;
+    var paths = pathsOf(l.coll).slice();
+    if (l.order) paths.sort(function (a, b) {   // compare the stored values, not a copy of each record per comparison
+      var x = (docs[a] || {})[l.order], y = (docs[b] || {})[l.order], c = x < y ? -1 : x > y ? 1 : 0;
       return l.dir === "desc" ? -c : c;
     });
+    var list = paths.map(docSnap);
     if (l.max) list = list.slice(0, l.max);
     return { docs: list, size: list.length, empty: !list.length, forEach: function (f) { list.forEach(f); } };
   }
@@ -56,6 +62,7 @@
       var changed = [];
       (j.docs || []).forEach(function (d) {
         if (d.data === null) delete docs[d.path]; else docs[d.path] = d.data;
+        idx = null;
         changed.push(d.path);
       });
       version = j.v;
@@ -68,6 +75,7 @@
 
   function write(op, path, data) {
     var before = docs[path];
+    idx = null;
     if (op === "update") {
       if (before === undefined) return Promise.reject(err("invalid_argument", "No document to update"));
       docs[path] = Object.assign({}, before, clone(data));
@@ -79,6 +87,7 @@
       if (j.data && op !== "delete") { docs[path] = j.data; fire([path]); }   // the server changed it (e.g. a renumbered voucher)
     }, function (e) {
       if (before === undefined) delete docs[path]; else docs[path] = before;
+      idx = null;
       fire([path]); throw e;
     });
   }

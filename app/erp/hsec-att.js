@@ -2,7 +2,7 @@
 // on each voucher there should be an eye option where we can see the voucher along with the supporting documents, on
 // all vouchers in the system").
 // * Every form (vouchers, bills, petty cash slips, advances, any record) gets "Supporting documents": attach photos or
-//   PDFs. Photos are shrunk here before they are sent (longest side 1600 px, JPEG), so a receipt is about 100-300 KB.
+//   PDFs. Photos are shrunk here before they are sent (longest side 1400 px, JPEG), so a receipt is under 150 KB; big PDFs are rebuilt smaller.
 //   Files picked on a new record wait and go up when it is saved.
 // * Next to every voucher number on screen (hsec-vlink.js links) there is an eye; it opens the printable voucher with
 //   the documents of the voucher and of the bill, slip or invoice it came from shown under it (photos inline, PDFs in
@@ -29,32 +29,81 @@
   }
   function forget(key) { delete cache[key]; }
 
-  // Photos: drawn again at most 1600 px on the long side as JPEG, a little smaller if still over 300 KB. PDFs as they are.
-  function shrink(file) {
-    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
-      if (file.size > 2 * 1048576) return Promise.reject(new Error(file.name + " is " + kb(file.size) + ". PDFs can be up to 2 MB; scan it at a lower quality (150 dpi, black and white) or take a photo instead."));
-      return Promise.resolve({ blob: file, name: file.name });
-    }
-    if (!/^image\//.test(file.type)) return Promise.reject(new Error(file.name + ": only photos and PDF files can be attached."));
+  // Kept small on the server (hassan, 2026-11-26: "save attachments on the server in KBs, not MBs").
+  // Photos: drawn again at most 1400 px on the long side as JPEG, smaller until under 150 KB (a receipt stays readable).
+  // PDFs over 300 KB: each page drawn as a picture (about 150 dpi) and put into a new, much smaller PDF; the original is
+  // kept only if that does not make it smaller. Up to 10 MB can be picked; what is stored is at most 2 MB.
+  var PHOTO_KB = 150, PDF_KB = 300;
+  function jpeg(cv, q) { return new Promise(function (ok) { cv.toBlob(ok, "image/jpeg", q); }); }
+  function shrinkPhoto(file) {
     return new Promise(function (ok, bad) {
       var img = new Image(), u = URL.createObjectURL(file);
       img.onload = function () {
         URL.revokeObjectURL(u);
-        var tries = [[1600, 0.72], [1400, 0.6], [1200, 0.5]], i = 0;
+        var tries = [[1400, 0.62], [1200, 0.55], [1100, 0.5], [1000, 0.45], [900, 0.4]], i = 0;
         (function next() {
           var max = tries[i][0], s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
           var cv = document.createElement("canvas"); cv.width = Math.round(img.naturalWidth * s); cv.height = Math.round(img.naturalHeight * s);
           var g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
-          cv.toBlob(function (b) {
+          jpeg(cv, tries[i][1]).then(function (b) {
             if (!b) { bad(new Error(file.name + " could not be read.")); return; }
-            if (b.size > 300 * 1024 && ++i < tries.length) { next(); return; }
+            if (b.size > PHOTO_KB * 1024 && ++i < tries.length) { next(); return; }
             ok({ blob: b.size < file.size || file.type !== "image/jpeg" ? b : file, name: file.name.replace(/\.[^.]+$/, "") + ".jpg" });
-          }, "image/jpeg", tries[i][1]);
+          });
         })();
       };
       img.onerror = function () { URL.revokeObjectURL(u); bad(new Error(file.name + " is not a photo this browser can open (HEIC photos: set the phone camera to 'Most compatible').")); };
       img.src = u;
     });
+  }
+  var jsPdfLib = null;
+  function loadJsPdf() {
+    if (!jsPdfLib) jsPdfLib = new Promise(function (ok, bad) {
+      if (window.jspdf && window.jspdf.jsPDF) { ok(window.jspdf.jsPDF); return; }
+      var sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      sc.onload = function () { if (window.jspdf && window.jspdf.jsPDF) ok(window.jspdf.jsPDF); else { jsPdfLib = null; bad(new Error("jsPDF")); } };
+      sc.onerror = function () { jsPdfLib = null; bad(new Error("jsPDF")); };
+      document.head.appendChild(sc);
+    });
+    return jsPdfLib;
+  }
+  function shrinkPdf(file) {
+    return Promise.all([loadPdfJs(), loadJsPdf(), file.arrayBuffer()]).then(function (r) {
+      var lib = r[0], JsPDF = r[1];
+      return lib.getDocument({ data: r[2] }).promise.then(function (pdf) {
+        if (pdf.numPages > 40) throw new Error("too many pages");
+        var out = null, n = 0;
+        return (function page() {
+          if (++n > pdf.numPages) return out.output("blob");
+          return pdf.getPage(n).then(function (pg) {
+            var v1 = pg.getViewport({ scale: 1 }), sc = Math.min(2.5, 1400 / Math.max(v1.width, v1.height)), v = pg.getViewport({ scale: sc }); // about 120 dpi on A4
+            var cv = document.createElement("canvas"); cv.width = Math.round(v.width); cv.height = Math.round(v.height);
+            var g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height);
+            return pg.render({ canvasContext: g, viewport: v }).promise.then(function () {
+              var w = v1.width, h = v1.height, o = w > h ? "l" : "p";
+              if (!out) out = new JsPDF({ unit: "pt", format: [w, h], orientation: o, compress: true }); else out.addPage([w, h], o);
+              out.addImage(cv.toDataURL("image/jpeg", 0.5), "JPEG", 0, 0, w, h, undefined, "FAST");
+              return page();
+            });
+          });
+        })();
+      });
+    });
+  }
+  function shrink(file) {
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      if (file.size > 10 * 1048576) return Promise.reject(new Error(file.name + " is " + kb(file.size) + ". PDFs can be up to 10 MB; scan it at a lower quality (150 dpi) or take a photo instead."));
+      var keep = function () {
+        if (file.size > 2 * 1048576) throw new Error(file.name + " is " + kb(file.size) + " and could not be made smaller here. Scan it at a lower quality (150 dpi, black and white) or take a photo instead.");
+        return { blob: file, name: file.name };
+      };
+      if (file.size <= PDF_KB * 1024) return Promise.resolve({ blob: file, name: file.name });
+      return shrinkPdf(file).then(function (b) {
+        return b && b.size < file.size * 0.8 && b.size <= 2 * 1048576 ? { blob: b, name: file.name.replace(/\.pdf$/i, "") + ".pdf" } : keep();
+      }, keep);
+    }
+    if (!/^image\//.test(file.type)) return Promise.reject(new Error(file.name + ": only photos and PDF files can be attached."));
+    return shrinkPhoto(file);
   }
   function upload(key, list, say) {
     var done = 0, errs = [];
