@@ -355,12 +355,44 @@
     e.preventDefault(); e.stopImmediatePropagation(); savePdf(b);
   }, true);
 
+  // ---- "Export PDF" beside every Excel / CSV export (hassan, 2026-11-26: "where there is excel export there should be
+  // pdf export as well with the templates"): what is on screen, in the report template, downloaded as a PDF ----
+  var XRE = /\b(csv|excel)\b/i, XNOT = /import|template|sample|pdf/i;
+  function pdfButtons() {
+    var root = document.getElementById("main") || document.getElementById("view"); if (!root) return;
+    [].slice.call(root.querySelectorAll("button, a.btn")).forEach(function (b) {
+      if (b.classList.contains("fs-rtxpdf") || b.closest("#printLayer, .fs-rtxpdf-skip")) return;
+      var t = txt(b);
+      if (!XRE.test(t) || XNOT.test(t) || !/export|download|excel \(csv\)|^excel|^csv/i.test(t)) return;
+      var n = b.nextElementSibling; if (n && n.classList.contains("fs-rtxpdf")) return;
+      var x = document.createElement("button"); x.type = "button"; x.className = "btn fs-rtxpdf"; x.textContent = "Export PDF";
+      x.title = "Download what is on screen as a PDF in the report template";
+      b.insertAdjacentElement("afterend", x);
+    });
+  }
+  function exportPdf(btn) {
+    var was = btn.textContent; btn.disabled = true; btn.textContent = "Making PDF…";
+    var end = function () { btn.disabled = false; btn.textContent = was; };
+    printScreen();
+    var n = 0;
+    (function wait() {
+      var pb = document.querySelector("#printLayer .sheet .fs-rtpdf");
+      if (pb) { end(); pb.click(); return; }
+      if (++n > 40) { end(); alert0("Could not make the PDF here. Use Print report, then Print › Save as PDF."); return; }
+      setTimeout(wait, 100);
+    })();
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("button.fs-rtxpdf"); if (!b) return;
+    e.preventDefault(); e.stopImmediatePropagation(); exportPdf(b);
+  }, true);
+
   var busy = false;
   function start() {
     if (!document.body) return setTimeout(start, 300);
     new MutationObserver(function () {
       if (busy) return; busy = true;
-      try { safe(dress, null); safe(addButtons, null); } finally { busy = false; }
+      try { safe(dress, null); safe(addButtons, null); safe(pdfButtons, null); } finally { busy = false; }
     }).observe(document.body, { childList: true, subtree: true });
   }
   var N = "#1f3a5f", L2 = "#e9eef5";
@@ -386,7 +418,7 @@
     ".sheet.fs-rt table.sig,.sheet.fs-rt table.sig td{border:0;background:none!important}.sheet.fs-rt a{color:inherit;text-decoration:none}" +
     ".fs-rt-sign{display:flex;justify-content:space-around;gap:40px;margin:56px 0 24px;font-size:11px;text-align:center;break-inside:avoid}.fs-rt-sign>div{flex:1;max-width:300px}.fs-rt-sign i{display:block;border-top:1px solid #333;margin:44px 0 6px}" +
     ".fs-rt-foot{display:flex;justify-content:space-between;font-size:9.5px;color:#666;border-top:1px solid #ccc;padding-top:6px;margin-top:20px}" +
-    ".fs-rtpdf{margin-left:8px}.fs-rtpdf[hidden]{display:none}.sheet.fs-rt.fs-rt-pdf{max-width:none;width:1030px;padding:0!important;box-shadow:none!important}.sheet.fs-rt-pdf:not(.fs-rt){max-width:none!important;width:1030px!important;padding:0!important;box-shadow:none!important;margin:0!important}.sheet.fs-rt.fs-rt-pdf .fs-rt-band{margin:0 0 14px}" +
+    ".fs-rtxpdf{margin-left:8px}@media print{.fs-rtxpdf{display:none!important}}.fs-rtpdf{margin-left:8px}.fs-rtpdf[hidden]{display:none}.sheet.fs-rt.fs-rt-pdf{max-width:none;width:1030px;padding:0!important;box-shadow:none!important}.sheet.fs-rt-pdf:not(.fs-rt){max-width:none!important;width:1030px!important;padding:0!important;box-shadow:none!important;margin:0!important}.sheet.fs-rt.fs-rt-pdf .fs-rt-band{margin:0 0 14px}" +
     "@media print{.fs-rtpdf{display:none!important}.sheet.fs-rt{max-width:none!important;width:auto!important;margin:0!important}.fs-rlh-pick,.fs-rtp{display:none!important}.fs-rt-band{margin:0 0 14px}.fs-rt-foot{display:none!important}}";
   (document.head || document.documentElement).appendChild(css);
   start();
