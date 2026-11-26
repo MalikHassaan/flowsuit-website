@@ -5,7 +5,7 @@
 // already there. Change the input's amount to match the month's fuel bills and press Recalculate. An input you delete
 // is not made again for that run. It is added to gross and net pay but left out of the salary tax.
 (function () {
-  /* global S, Store, payAuto, curMonth, EARN_TYPES, toast */
+  /* global S, Store, payAuto, curMonth, EARN_TYPES, toast, calcPanel, empPay, F */
   var num = function (x) { return +x || 0; };
   var safe = function (f, d) { try { return f(); } catch (e) { return d; } };
   var TYPE = function () { return safe(function () { return EARN_TYPES.indexOf("Fuel allowance") >= 0 ? "Fuel allowance" : "Other allowance"; }, "Other allowance"); };
@@ -82,6 +82,25 @@
   }
   document.addEventListener("change", function (ev) { safe(function () { onFuel(ev); }); });
 
+  // Employee form "Monthly pay at current rates" box: show the tax-free fuel and the pay including it (hassan, 2026-11-26),
+  // and warn when the HR setup split makes a component negative (percentages over 100).
+  function panelAdd(html) {
+    var F0 = safe(function () { return F; }, null); // eslint-disable-line no-undef
+    if (!F0 || F0.c !== "employees" || !F0.rec || typeof html !== "string" || html.indexOf("calc") < 0) return html;
+    var r = F0.rec, add = "", fuel = r.fuelTaxFree === "Yes" ? amt(r.fuelLimit) : 0;
+    if (fuel > 0) {
+      var m = /Net before loans and absences<\/dt><dd>(?:<b>)?([\-0-9,.]+)/.exec(html), c = /Cost to company<\/dt><dd>(?:<b>)?([\-0-9,.]+)/.exec(html);
+      add += "<dt>Fuel reimbursement (tax-free, not taxed)</dt><dd>" + fmt(fuel) + "</dd>";
+      if (m) add += "<dt>Net salary payable incl. fuel</dt><dd><b>" + fmt(amt(m[1]) + fuel) + "</b></dd>";
+      if (c) add += "<dt>Cost to company incl. fuel</dt><dd>" + fmt(amt(c[1]) + fuel) + "</dd>";
+    }
+    var neg = safe(function () { var p = empPay(r); return ["basic", "hra", "utilities", "medical", "conveyance", "otherAllow"].filter(function (k) { return num(p[k]) < 0; }); }, []); // eslint-disable-line no-undef
+    var warn = neg.length ? "<p class=\"err\" style=\"margin:8px 0 0\">A salary component is negative. The percentages in HR setup › Salary structure add up to more than 100. Make Basic + House rent + Utilities + Medical = 100 (for example Basic 90.91, Medical 9.09, the rest 0).</p>" : "";
+    if (!add && !warn) return html;
+    var at = html.lastIndexOf("</dl>");
+    return at < 0 ? html + warn : html.slice(0, at) + add + "</dl>" + warn + html.slice(at + 5);
+  }
+
   function hook() {
     if (typeof S === "undefined" || !S.employees || typeof payAuto !== "function" || typeof Store === "undefined" || !Store.data) return false;
     addFields();
@@ -89,6 +108,11 @@
       var old = payAuto;
       payAuto = function (r) { safe(function () { ensure(r); }); return old.apply(this, arguments); }; // eslint-disable-line no-global-assign
       payAuto.fsFuel = 1;
+    }
+    if (typeof calcPanel === "function" && !calcPanel.fsFuel) { // eslint-disable-line no-undef
+      var oldP = calcPanel; // eslint-disable-line no-undef
+      calcPanel = function () { var h = oldP.apply(this, arguments); return safe(function () { return panelAdd(h); }, h); }; // eslint-disable-line no-global-assign, no-undef
+      calcPanel.fsFuel = 1; // eslint-disable-line no-undef
     }
     window.FS_FUEL = { ensure: ensure };
     return true;
