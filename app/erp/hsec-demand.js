@@ -796,6 +796,17 @@
       var th = [].slice.call(document.querySelectorAll("#pdBox th, .bitab th")).find(function (x) { return /^(Account \(debit\)|Planned expense head)/.test(x.textContent); });
       var lbl = adv ? "Planned expense head (for settlement, optional)" : "Account (debit) *";
       if (th && th.textContent !== lbl) th.textContent = lbl;
+      // hassan, 2026-11-26: "if advance is being booked this line [the account] is not to be shown; it is for when an
+      // expense is incurred and needs to be reimbursed". On an advance the account column is hidden: the JV debits the
+      // Advance account above, and the expense account is chosen at settlement (or on the supplier's bill).
+      if (!document.getElementById("fsPdAdvCss")) document.head.insertAdjacentHTML("beforeend", "<style id=\"fsPdAdvCss\">#pdBox.fs-pdadv .bitab tr>:nth-child(2){display:none}</style>");
+      var pbx = document.getElementById("pdBox");
+      if (pbx) {
+        if (pbx.classList.contains("fs-pdadv") !== adv) pbx.classList.toggle("fs-pdadv", adv);
+        var hb = pbx.querySelector(".jhead b"), ht = adv ? "What the advance is for" : "What the payment is for";
+        if (hb && hb.textContent !== ht) hb.textContent = ht;
+        pbx.querySelectorAll("input[data-dk=desc]").forEach(function (x) { var ph = adv ? "For example: advance to Ali for site visit, fuel and stay" : "For example: office rent October"; if (x.placeholder !== ph) x.placeholder = ph; });
+      }
       // Pay to becomes a staff pick on an employee advance
       var py = document.getElementById("f_payee"); if (!py) return;
       var emp = adv && isEmpAdv({ kind: "advance", advAcc: a.value }), sup = adv && !emp && isSupAdv({ kind: "advance", advAcc: a.value }), ent = (document.getElementById("f_entity") || {}).value || "";
