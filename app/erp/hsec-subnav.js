@@ -8,6 +8,11 @@
 // tab bar.
 (function () {
   var KEY = "fs-subnav-off", W = 224, last = "";
+  // hassan, 2026-11-26: "the blue window is still appearing while opening the tab, it should also hide automatically".
+  // Picking a page folds the column away for now (not remembered), and it stays away while a form is open; the small
+  // "›" tab, or picking another work area in the side menu, brings it back.
+  var away = false;
+  var formOpen = function () { var f = document.getElementById("frm"); return !!(f && f.offsetParent !== null) || !!document.querySelector(".overlay.on, .overlay.open, .modal.open"); };
   var mem = null; // used when the browser keeps no storage (private window)
   var off = function () { if (mem !== null) return mem; try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; } };
   var setOff = function (v) { mem = v; try { localStorage.setItem(KEY, v ? "1" : "0"); } catch (e) { /* private window */ } };
@@ -29,13 +34,13 @@
     if (rail && document.documentElement.classList.contains("fs-subnav-on") && rail.matches(":hover")) return;
     var r = rail ? rail.getBoundingClientRect() : null;
     var phone = window.innerWidth < 900, narrow = r && r.width > 0 && r.width < 140;
-    var want = !!(tb && rail && !phone && narrow && !off());
+    var want = !!(tb && rail && !phone && narrow && !off() && !away && !formOpen());
     document.documentElement.classList.toggle("fs-subnav-on", want);
     document.documentElement.classList.toggle("fs-subnav-wide", !!(tb && rail && !phone && !narrow && rail.querySelector(".ntabs")));
     if (!want) {
       if (nav) nav.remove();
       if (main && main.getAttribute("data-fssub")) { main.style.marginLeft = ""; main.removeAttribute("data-fssub"); }
-      showOpen(!!(tb && !phone && narrow && off()));
+      showOpen(!!(tb && !phone && narrow && (off() || away || formOpen())));
       last = ""; return;
     }
     showOpen(false);
@@ -62,17 +67,20 @@
     if (!on || !rail) { if (b) b.remove(); return; }
     var r = rail.getBoundingClientRect();
     if (!b) { b = document.createElement("button"); b.type = "button"; b.id = "fsSubOpen"; b.title = "Show the pages in the side menu"; b.setAttribute("aria-label", "Show page list"); b.textContent = "›"; document.body.appendChild(b); }
-    b.style.left = Math.round(r.right) + "px"; b.style.top = Math.round(Math.max(0, r.top) + 12) + "px";
+    var L = Math.round(r.right) + "px", T = Math.round(Math.max(0, r.top) + 12) + "px";
+    if (b.style.left !== L) b.style.left = L; if (b.style.top !== T) b.style.top = T;
   }
   document.addEventListener("click", function (e) {
+    if (e.target && e.target.closest && e.target.closest("#rail") && !e.target.closest(".ntabs")) { away = false; soon(); return; } // another work area: show its pages
     var t = e.target && e.target.closest ? e.target.closest("[data-fssn], #fsSubX, #fsSubOpen") : null; if (!t) return;
     e.preventDefault(); e.stopPropagation();
     if (t.id === "fsSubX") { setOff(true); sync(); return; }
-    if (t.id === "fsSubOpen") { setOff(false); sync(); return; }
+    if (t.id === "fsSubOpen") { setOff(false); away = false; sync(); return; }
     var tb = bar(), b = tb && tb.querySelector("button[data-tab=\"" + (window.CSS && CSS.escape ? CSS.escape(t.getAttribute("data-fssn")) : t.getAttribute("data-fssn")) + "\"]");
     if (b) b.click();
     var nav = document.getElementById("fsSubNav");
     if (nav) nav.querySelectorAll(".fs-sni").forEach(function (x) { x.classList.toggle("on", x === t); });
+    away = true; soon(); // the page is picked: fold the column away so it does not cover the page
   }, true);
 
   var queued = false;
@@ -98,7 +106,7 @@
       "#fsSubOpen{position:fixed;z-index:30;width:20px;height:44px;border:0;border-radius:0 8px 8px 0;background:#1B3A5C;color:#fff;font-size:16px;cursor:pointer;box-shadow:2px 0 8px rgba(15,23,42,.2)}" +
       "@media print{#fsSubNav,#fsSubOpen{display:none!important}}";
     document.head.appendChild(css);
-    new MutationObserver(soon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+    new MutationObserver(soon).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
     document.addEventListener("mouseleave", function (e) { if (e.target && e.target.id === "rail") setTimeout(soon, 400); }, true); // menu closed again
     window.addEventListener("resize", soon); window.addEventListener("scroll", soon, { passive: true });
     soon();
