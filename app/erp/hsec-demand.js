@@ -54,14 +54,27 @@
     sel.value = L.some(function (a) { return a.id === cur; }) ? cur : "";
     sel.setAttribute("data-fsco", co);
   }
-  // ---- withholding at payment: the app's tax-rate table (Setup › Tax rates) when it is there, else the same defaults
-  var WHT0 = [{ k: "153a", l: "153(1)(a) Sale of goods", co: 5.5, oth: 5.5 }, { k: "153b", l: "153(1)(b) Rendering of services", co: 11, oth: 16 },
-    { k: "153c", l: "153(1)(c) Execution of contracts", co: 7.5, oth: 7.5 }, { k: "155", l: "155 Rent of immovable property", co: 15, oth: 15 }, { k: "none", l: "Not subject to withholding / exempt", co: 0, oth: 0 }];
-  var whtTab = function () { try { var t = whtRates(); if (Array.isArray(t) && t.length) return t; } catch (e) { /* older app */ } return WHT0; }; // eslint-disable-line no-undef
+  // ---- withholding at payment: FBR rates for tax year 2026 (1 Jul 2025 – 30 Jun 2026, Finance Act 2025; hassan,
+  // 2026-11-26: "just check it from FBR and fix it accordingly"). FBR Circular 01 of 2025-26: other services now a flat
+  // 15% (was 9% / 17%), specified services 6% (was 4%), IT and IT-enabled services stay 4%. Goods 5% company / 5.5%
+  // others, contracts 7.5% company / 8% others, rent 15% company (individuals and AOPs pay by annual slab, so the rate
+  // is typed). Not on the Active Taxpayer List: double. The demand uses this table, not the app's own Setup › Tax rates,
+  // which may still carry last year's figures.
+  var WHT0 = [
+    { k: "153a", l: "153(1)(a) Sale / supply of goods", co: 5, oth: 5.5 },
+    { k: "153bs", l: "153(1)(b) Specified services (transport, courier, security, manpower, AMC, maintenance, engineering, warehousing, car rental, training, testing, travel…)", co: 6, oth: 6 },
+    { k: "153bit", l: "153(1)(b) IT and IT-enabled services", co: 4, oth: 4 },
+    { k: "153bad", l: "153(1)(b) Advertising in print or electronic media", co: 1.5, oth: 1.5 },
+    { k: "153b", l: "153(1)(b) Other services", co: 15, oth: 15 },
+    { k: "153c", l: "153(1)(c) Execution of contracts", co: 7.5, oth: 8 },
+    { k: "155", l: "155 Rent of immovable property", co: 15, oth: "slab" },
+    { k: "none", l: "Not subject to withholding / exempt", co: 0, oth: 0 }];
+  var whtTab = function () { return WHT0; };
   var whtLabel = function (k) { var x = whtTab().find(function (s) { return s.k === k; }); return x ? String(x.l).split(" ")[0] : k || ""; };
-  var nfx = function () { try { return n(nonFilerX()) || 2; } catch (e) { return 2; } }; // eslint-disable-line no-undef
+  var whtSlab = function (sec, type) { return sec === "155" && type === "Individual or AOP"; };
+  var nfx = function () { return 2; }; // FBR: rates +100% for persons not on the ATL
   function whtRate(sec, type, filer) {
-    var x = whtTab().find(function (s) { return s.k === sec; }); if (!x) return "";
+    var x = whtTab().find(function (s) { return s.k === sec; }); if (!x || whtSlab(sec, type)) return "";
     return Math.round((type === "Individual or AOP" ? n(x.oth) : n(x.co)) * (filer === "No" ? nfx() : 1) * 100) / 100;
   }
   var whtAccId = function () { try { return ppId("whtPayable"); } catch (e) { var a = (Store.data.accounts || []).find(function (x) { return /withh?eld from (vendors|suppliers)/i.test(x.name || ""); }); return a ? a.id : ""; } }; // eslint-disable-line no-undef
@@ -231,7 +244,7 @@
       // bank with the net and "Income tax withheld from vendors" with the tax. Not shown on employee advances.
       { k: "whtSec", l: "Income tax to withhold at payment", t: "select", o: [], hint: "What is being paid for: goods, services, a contract or rent. Filled from the vendor list when the payee is a supplier there." },
       { k: "whtType", l: "Payee is a", t: "select", o: ["Company", "Individual or AOP"] },
-      { k: "whtFiler", l: "Payee on the Active Taxpayer List (ATL)?", t: "select", o: [["Yes", "Yes: normal rate"], ["No", "No: rate × " + 2 + " (non-filer)"]] },
+      { k: "whtFiler", l: "Payee on the Active Taxpayer List (ATL)?", t: "select", o: [["Yes", "Yes: normal rate"], ["No", "No: rate doubled (non-filer)"]] },
       { k: "whtPct", l: "Withholding rate %", t: "number", hint: "Worked out from the three boxes above; change it if the certificate or exemption says otherwise." },
       { k: "wht", l: "Income tax withheld (PKR)", t: "money", hint: "Amount × rate. The bank pays the rest." },
       { k: "payCo", l: "Paid by company", t: "select", o: [], hint: "Leave as is when this company pays from its own bank. When another group company pays (e.g. from JPL's bank), pick it: the bank payment voucher is made in its books, and the matching entry in this company's books." },
@@ -256,7 +269,7 @@
     } });
     var wsf = S[DEM].fields.find(function (f) { return f.k === "whtSec"; });
     if (wsf) Object.defineProperty(wsf, "o", { configurable: true, get: function () {
-      return [["", "Choose… (what is being paid for)"]].concat(whtTab().map(function (x) { return [x.k, x.k === "none" ? x.l : x.l + " – company " + n(x.co) + "%, others " + n(x.oth) + "%"]; }));
+      return [["", "Choose… (what is being paid for)"]].concat(whtTab().map(function (x) { return [x.k, x.k === "none" ? x.l : x.co === x.oth ? x.l + " – " + n(x.co) + "%" : x.l + " – company " + n(x.co) + "%, others " + (x.oth === "slab" ? "by annual slab" : n(x.oth) + "%")]; }));
     } });
     POSTERS[DEM] = {
       accrue: { label: "demand journal voucher", keys: ["items", "amount", "payAcc", "date", "entity", "kind", "advAcc"],
@@ -839,7 +852,9 @@
       var info = g("fsPdWht");
       if (!on) { if (info) info.remove(); return; }
       if (ty && !ty.value) ty.value = "Company"; if (fl && !fl.value) fl.value = "Yes";
-      var pct = pc && pc.hasAttribute("data-man") ? n(pc.value) : whtRate(sec.value, ty ? ty.value : "Company", fl ? fl.value : "Yes");
+      var slab = whtSlab(sec.value, ty ? ty.value : "Company");
+      if (slab && pc && !pc.hasAttribute("data-man") && pc.value !== "") pc.value = "";
+      var pct = pc && (pc.hasAttribute("data-man") || slab) ? n(pc.value) : whtRate(sec.value, ty ? ty.value : "Company", fl ? fl.value : "Yes");
       if (pc && !pc.hasAttribute("data-man") && String(pc.value) !== String(pct)) pc.value = pct;
       var gross = lineTot(readLines()), tax = Math.round(gross * n(pct) / 100);
       if (wt && !wt.hasAttribute("data-man") && String(wt.value) !== String(tax)) wt.value = tax;
@@ -847,7 +862,8 @@
       if (!info) { var bx = box(wt) || box(sec); if (!bx) return; bx.insertAdjacentHTML("afterend", "<div id=\"fsPdWht\" class=\"hint\" style=\"grid-column:1/-1;background:#eef5fc;border:1px solid #cfe0f1;border-radius:6px;padding:8px 10px;color:#13304f\"></div>"); info = g("fsPdWht"); }
       var t = "Gross " + fmt(gross) + " − income tax " + fmt(w) + " (" + whtLabel(sec.value) + " @ " + n(pct) + "%) = net paid from bank " + fmt(gross - w) +
         ". The demand JV books the full " + fmt(gross) + "; the bank payment voucher credits the bank " + fmt(gross - w) + " and \"Income tax withheld from vendors\" " + fmt(w) +
-        ". The deposit is due in Tax calendar (Withholding income tax deducted)." + (fl && fl.value === "No" ? " Not on the ATL, so the rate is doubled." : "");
+        ". The deposit is due in Tax calendar (Withholding income tax deducted)." + (fl && fl.value === "No" ? " Not on the ATL, so the rate is doubled." : "") +
+        (slab ? " Rent paid to an individual or AOP is taxed by annual rent slab (up to 300,000 nil; 300,001–600,000: 5% above 300,000; 600,001–2,000,000: 15,000 + 10% above 600,000; above 2,000,000: 155,000 + 25% above 2,000,000), so type the rate %." : "") + " Rates: FBR tax year 2026.";
       if (info.textContent !== t) info.textContent = t;
     };
     document.addEventListener("input", function (e) {
