@@ -473,6 +473,7 @@ function hsec_access_inject(array $me): string
         . '<script>' . file_get_contents(__DIR__ . '/hsec-demand.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-salpay.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-fuel.js') . '</script>'
+        . '<script>' . file_get_contents(__DIR__ . '/hsec-hraauto.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-pdimport.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-advrpt.js') . '</script>'
         . '<script>' . file_get_contents(__DIR__ . '/hsec-chq.js') . '</script>'
