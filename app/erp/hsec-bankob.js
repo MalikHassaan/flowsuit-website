@@ -2,8 +2,10 @@
 // option also"). Bank account / facility form gets "Opening balance in books", "Opening balance date" and "Other side of
 // the opening entry". On save the bank's ledger account is opened as before, then one opening balances voucher is made:
 // Dr the bank's ledger account, Cr the other side (reversed when overdrawn), marked as an opening balances voucher and
-// sent through the normal approval like any voucher. Editing the bank later updates that voucher while it is not yet
-// approved; once approved or posted it is left alone and a toast says to correct it with a reversing voucher.
+// sent through the normal approval like any voucher. Entered once (hassan, 2026-11-27: "just for once, once the bank is
+// created that amount is fixed"): after the voucher exists the three boxes are read-only and a changed value is put back.
+// Bank reconciliation counts the posted opening line as already on the statement (it is the brought-forward balance),
+// so it never shows as an uncleared receipt.
 (function () {
   /* global S, Store, toast, accByCode, isLocked, lockTxt, nextVoucherNo, approverName, todayStr, autoMode, PAPER, jvTot */
   var num = function (x) { return +String(x == null ? "" : x).replace(/,/g, "") || 0; };
@@ -31,17 +33,9 @@
   async function sync(b) {
     var amt = Math.round(num(b.obAmt) * 100) / 100, old = ourJv(b.id);
     if (!b.glAcc || (!amt && !old)) return;
-    if (old && ["Approved", "Posted"].indexOf(old.status) >= 0) {
-      var same = Math.abs(jvTot(old).dr - Math.abs(amt)) < 0.5;
-      if (!same) toast("Opening balance voucher " + (old.ref || "") + " is already " + old.status.toLowerCase() + ". Correct the balance with a reversing voucher.");
-      return;
-    }
+    if (old) return; // entered once: the voucher is never changed from the bank form
     var codes = accByCode(), contra = b.obContra || (codes[DEF] && codes[DEF].id) || "";
     if (!contra) { toast("Choose the other side of the opening entry, then save the bank again."); return; }
-    if (old && !amt) { // balance removed before approval: take the voucher out of approval
-      await Store.save("journals", Object.assign({}, old, { status: "Rejected", narration: (old.narration || "") + " (opening balance removed from the bank form)" }));
-      return;
-    }
     var date = b.obDate || (old && old.date) || dayBefore(todayStr()), a = Math.abs(amt), dr = amt > 0;
     var name = safe(approverName, "") || "ERP user", now = new Date().toISOString();
     var j = Object.assign({}, old || {}, {
@@ -64,6 +58,10 @@
     Store.__fsBankOb = true;
     var save = Store.save;
     Store.save = async function (c, rec) {
+      if (c === "banks" && rec && rec.id && ourJv(rec.id)) { // fixed once made: keep the values the voucher was made from
+        var prev = (Store.data.banks || []).find(function (x) { return x.id === rec.id; }) || {};
+        ["obAmt", "obDate", "obContra"].forEach(function (k) { if (prev[k] !== undefined) rec[k] = prev[k]; else delete rec[k]; });
+      }
       var id = await save.apply(this, arguments);
       if (c === "banks" && rec && (rec.obAmt || rec.obContra || rec.obDate) && !rec.sample) {
         var b = Object.assign({}, rec, { id: id || rec.id });
@@ -73,9 +71,48 @@
     };
   }
 
+  // read-only boxes on a bank whose opening voucher exists
+  function lockForm() {
+    var f = safe(function () { return F; }, null);
+    if (!f || f.c !== "banks" || !f.rec || !f.rec.id) return;
+    var j = ourJv(f.rec.id); if (!j) return;
+    ["obAmt", "obDate", "obContra"].forEach(function (k) {
+      var el = document.getElementById("f_" + k); if (!el || el.dataset.fsObLock) return;
+      el.dataset.fsObLock = "1"; el.disabled = true; el.title = "Fixed: entered once, in voucher " + (j.ref || "");
+    });
+    var a = document.getElementById("f_obAmt");
+    if (a && !document.getElementById("fsObNote")) {
+      var d = document.createElement("div"); d.id = "fsObNote"; d.className = "hint";
+      d.textContent = "Fixed. Entered once as voucher " + (j.ref || "") + " (" + j.status + "). A correction needs a separate journal voucher.";
+      (a.closest(".field") || a.parentNode).appendChild(d);
+    }
+  }
+
+  // bank reconciliation: the posted opening line is the brought-forward balance, so it counts as already cleared
+  function wrapRec() {
+    if (typeof brState !== "function" || brState.__fsOb) return;
+    var old = brState;
+    brState = function (ent) {
+      var R = old.apply(this, arguments);
+      safe(function () {
+        var B = V.br, acc = B && B.acc; if (!B || !B.set || !acc) return;
+        var add = 0;
+        (Store.data.journals || []).forEach(function (j) {
+          if (j.status !== "Posted" || j.entity !== ent || j.date > B.date || !(j.source && j.source.c === "banks" && j.source.ev === "ob")) return;
+          (j.lines || []).forEach(function (l, i) { var k = j.id + ":" + i; if (l.account === acc && !B.set.has(k)) { B.set.add(k); add++; } });
+        });
+        if (add) R = old.apply(this, [ent]);
+      }, null);
+      return R;
+    };
+    brState.__fsOb = true;
+  }
+
   function init() {
     if (typeof S === "undefined" || typeof Store === "undefined") return false;
-    addFields(); wrap(); return true;
+    addFields(); wrap(); wrapRec();
+    new MutationObserver(function () { safe(lockForm, null); }).observe(document.body, { childList: true, subtree: true });
+    return true;
   }
   if (!init()) { var n = 0, t = setInterval(function () { if (init() || ++n > 100) clearInterval(t); }, 200); }
 })();
