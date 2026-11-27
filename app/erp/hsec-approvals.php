@@ -484,6 +484,7 @@ const HSEC_ADDONS = [
     'hsec-salpay.js',
     'hsec-fuel.js',
     'hsec-bankob.js',
+    'hsec-bankreg.js',
     'hsec-hraauto.js',
     'hsec-pdimport.js',
     'hsec-advrpt.js',
